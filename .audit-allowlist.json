@@ -1,0 +1,15 @@
+{
+  "$schema": {
+    "description": "Known audit exceptions with documented risk acceptance.",
+    "fields": {
+      "id": "Advisory ID (e.g., GHSA-xxxx-xxxx-xxxx)",
+      "package": "Affected package name",
+      "severity": "Advisory severity (low, moderate, high, critical)",
+      "reason": "Why this exception is accepted",
+      "owner": "Person or team responsible for review",
+      "expires": "YYYY-MM-DD date when this exception must be re-evaluated"
+    },
+    "docs": "See project documentation for the dependency audit policy."
+  },
+  "allowlist": []
+}

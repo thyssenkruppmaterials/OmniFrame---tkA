@@ -1,0 +1,40 @@
+{
+    "recommendations": [
+        // WSL Integration
+        "ms-vscode-remote.remote-wsl",
+        "ms-vscode-remote.remote-containers",
+        // Development Tools
+        "ms-vscode.vscode-typescript-next",
+        "ms-python.python",
+        "ms-python.black-formatter",
+        "ms-python.flake8",
+        "ms-python.isort",
+        // Web Development
+        "esbenp.prettier-vscode",
+        "dbaeumer.vscode-eslint",
+        "bradlc.vscode-tailwindcss",
+        "ms-vscode.vscode-json",
+        // Git and Version Control
+        "ms-vscode.vscode-git-graph",
+        "ms-vscode.vscode-gitlens",
+        // Docker (if needed)
+        "ms-azuretools.vscode-docker",
+        // Database Tools
+        "ms-vscode.vscode-postgresql",
+        // Testing
+        "ms-vscode.test-adapter-converter",
+        "hbenl.vscode-test-explorer",
+        // Productivity
+        "ms-vscode.vscode-todo-highlight",
+        "gruntfuggly.todo-tree",
+        "ms-vscode.vscode-terminal-here",
+        // Shell and Terminal
+        "foxgis.vscode-shell",
+        "ms-vscode.powershell"
+    ],
+    "unwantedRecommendations": [
+        "ms-vscode.vscode-typescript",
+        "ms-vscode-remote.remote-ssh"
+    ]
+}
+

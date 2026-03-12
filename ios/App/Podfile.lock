@@ -1,0 +1,39 @@
+PODS:
+  - Capacitor (7.4.4):
+    - CapacitorCordova
+  - CapacitorCordova (7.4.4)
+  - CapacitorDevice (7.0.3):
+    - Capacitor
+  - DJI-SDK-iOS (4.16.2)
+  - DJIWidget (1.6.8)
+
+DEPENDENCIES:
+  - "Capacitor (from `../../node_modules/.pnpm/@capacitor+ios@7.4.4_@capacitor+core@7.4.4/node_modules/@capacitor/ios`)"
+  - "CapacitorCordova (from `../../node_modules/.pnpm/@capacitor+ios@7.4.4_@capacitor+core@7.4.4/node_modules/@capacitor/ios`)"
+  - "CapacitorDevice (from `../../node_modules/.pnpm/@capacitor+device@7.0.3_@capacitor+core@7.4.4/node_modules/@capacitor/device`)"
+  - DJI-SDK-iOS (~> 4.16)
+  - DJIWidget (~> 1.6)
+
+SPEC REPOS:
+  trunk:
+    - DJI-SDK-iOS
+    - DJIWidget
+
+EXTERNAL SOURCES:
+  Capacitor:
+    :path: "../../node_modules/.pnpm/@capacitor+ios@7.4.4_@capacitor+core@7.4.4/node_modules/@capacitor/ios"
+  CapacitorCordova:
+    :path: "../../node_modules/.pnpm/@capacitor+ios@7.4.4_@capacitor+core@7.4.4/node_modules/@capacitor/ios"
+  CapacitorDevice:
+    :path: "../../node_modules/.pnpm/@capacitor+device@7.0.3_@capacitor+core@7.4.4/node_modules/@capacitor/device"
+
+SPEC CHECKSUMS:
+  Capacitor: 358dd1c3fdd71d969547b17e159fd8a7736cb45f
+  CapacitorCordova: bf648a636f3c153f652d312ae145fb508b6ffced
+  CapacitorDevice: b64654eb4d404373e733c01d835055ba59286e5c
+  DJI-SDK-iOS: 44308a021c3b95a912be52c4e7a8e0a27e5434f5
+  DJIWidget: 9d92abb52888cd6296717c93feacd8a703bf678a
+
+PODFILE CHECKSUM: 70e4b54cdcc339b5bc554b68b2a4b99ee9667a2f
+
+COCOAPODS: 1.16.2

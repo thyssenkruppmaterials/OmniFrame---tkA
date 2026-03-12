@@ -1,0 +1,19 @@
+[build]
+builder = "DOCKERFILE"
+# Railway automatically passes environment variables as build args
+# when they are declared as ARG in the Dockerfile
+watchPatterns = ["src/**", "api/**", "package.json", "pnpm-lock.yaml", "Dockerfile"]
+
+[deploy]
+# CRITICAL: Force Python execution instead of static file serving
+startCommand = "python start.py"
+# Ensure Railway doesn't override with auto-detected commands
+restartPolicyType = "ON_FAILURE"
+restartPolicyMaxRetries = 10
+healthcheckPath = "/health"
+healthcheckTimeout = 300
+
+[[services]]
+name = "omniframe-logistics"
+port = 8000
+

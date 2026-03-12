@@ -1,0 +1,6 @@
+# SAP NW RFC SDK Placeholder
+# This file ensures the folder exists in git.
+# The actual SDK files (lib/, include/) are proprietary and must not be committed.
+# If you have access to the SAP NW RFC SDK, place it here with:
+#   - lib/     (shared libraries)
+#   - include/ (header files)

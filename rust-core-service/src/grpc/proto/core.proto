@@ -1,0 +1,146 @@
+syntax = "proto3";
+
+package omniframe.core;
+
+// Authentication Service
+service AuthService {
+  rpc ValidateToken(ValidateTokenRequest) returns (ValidateTokenResponse);
+  rpc GetUserPermissions(GetPermissionsRequest) returns (GetPermissionsResponse);
+  rpc InvalidateSession(InvalidateSessionRequest) returns (InvalidateSessionResponse);
+}
+
+message ValidateTokenRequest {
+  string token = 1;
+}
+
+message ValidateTokenResponse {
+  bool valid = 1;
+  string user_id = 2;
+  string email = 3;
+  string role = 4;
+  repeated string permissions = 5;
+  string error = 6;
+}
+
+message GetPermissionsRequest {
+  string user_id = 1;
+}
+
+message GetPermissionsResponse {
+  repeated string permissions = 1;
+}
+
+message InvalidateSessionRequest {
+  string user_id = 1;
+}
+
+message InvalidateSessionResponse {
+  bool success = 1;
+}
+
+// Query Service
+service QueryService {
+  rpc ExecuteQuery(QueryRequest) returns (QueryResponse);
+  rpc GetInboundScans(GetInboundScansRequest) returns (GetInboundScansResponse);
+  rpc GetTransferOrders(GetTransferOrdersRequest) returns (GetTransferOrdersResponse);
+  rpc GetWarehouseStats(Empty) returns (WarehouseStatsResponse);
+}
+
+message Empty {}
+
+message QueryRequest {
+  string query_name = 1;
+  map<string, string> parameters = 2;
+}
+
+message QueryResponse {
+  bytes json_data = 1;
+  int64 row_count = 2;
+  int64 execution_time_ms = 3;
+}
+
+message GetInboundScansRequest {
+  int64 limit = 1;
+  int64 offset = 2;
+  optional string user_id = 3;
+}
+
+message GetInboundScansResponse {
+  repeated InboundScan scans = 1;
+}
+
+message InboundScan {
+  string id = 1;
+  string barcode = 2;
+  optional string material_number = 3;
+  optional string location = 4;
+  string created_at = 5;
+}
+
+message GetTransferOrdersRequest {
+  optional string status = 1;
+  int64 limit = 2;
+  int64 offset = 3;
+}
+
+message GetTransferOrdersResponse {
+  repeated TransferOrder orders = 1;
+}
+
+message TransferOrder {
+  string id = 1;
+  string to_number = 2;
+  string material_number = 3;
+  int32 requested_quantity = 4;
+  string status = 5;
+}
+
+message WarehouseStatsResponse {
+  int64 inbound_today = 1;
+  int64 pending_tos = 2;
+  int64 completed_today = 3;
+  int64 pending_scans = 4;
+}
+
+// Cache Service
+service CacheService {
+  rpc Get(CacheGetRequest) returns (CacheGetResponse);
+  rpc Set(CacheSetRequest) returns (CacheSetResponse);
+  rpc Delete(CacheDeleteRequest) returns (CacheDeleteResponse);
+  rpc BatchGet(CacheBatchGetRequest) returns (CacheBatchGetResponse);
+}
+
+message CacheGetRequest {
+  string key = 1;
+}
+
+message CacheGetResponse {
+  bool found = 1;
+  bytes value = 2;
+}
+
+message CacheSetRequest {
+  string key = 1;
+  bytes value = 2;
+  int64 ttl_seconds = 3;
+}
+
+message CacheSetResponse {
+  bool success = 1;
+}
+
+message CacheDeleteRequest {
+  string key = 1;
+}
+
+message CacheDeleteResponse {
+  bool deleted = 1;
+}
+
+message CacheBatchGetRequest {
+  repeated string keys = 1;
+}
+
+message CacheBatchGetResponse {
+  map<string, bytes> values = 1;
+}

@@ -1,0 +1,40 @@
+require_relative '../../node_modules/.pnpm/@capacitor+ios@7.4.4_@capacitor+core@7.4.4/node_modules/@capacitor/ios/scripts/pods_helpers'
+
+platform :ios, '14.0'
+use_frameworks!
+
+# workaround to avoid Xcode caching of Pods that requires
+# Product -> Clean Build Folder after new Cordova plugins installed
+# Requires CocoaPods 1.6 or newer
+install! 'cocoapods', :disable_input_output_paths => true
+
+def capacitor_pods
+  pod 'Capacitor', :path => '../../node_modules/.pnpm/@capacitor+ios@7.4.4_@capacitor+core@7.4.4/node_modules/@capacitor/ios'
+  pod 'CapacitorCordova', :path => '../../node_modules/.pnpm/@capacitor+ios@7.4.4_@capacitor+core@7.4.4/node_modules/@capacitor/ios'
+  pod 'CapacitorDevice', :path => '../../node_modules/.pnpm/@capacitor+device@7.0.3_@capacitor+core@7.4.4/node_modules/@capacitor/device'
+end
+
+target 'App' do
+  capacitor_pods
+  
+  # DJI Mobile SDK for drone integration
+  # App Key configured in Info.plist under 'DJISDKAppKey'
+  pod 'DJI-SDK-iOS', '~> 4.16'
+  pod 'DJIWidget', '~> 1.6'
+end
+
+post_install do |installer|
+  assertDeploymentTarget(installer)
+  
+  # Disable User Script Sandboxing to fix sandbox permission errors
+  installer.pods_project.targets.each do |target|
+    target.build_configurations.each do |config|
+      config.build_settings['ENABLE_USER_SCRIPT_SANDBOXING'] = 'NO'
+    end
+  end
+  
+  # Also set it for the main project
+  installer.pods_project.build_configurations.each do |config|
+    config.build_settings['ENABLE_USER_SCRIPT_SANDBOXING'] = 'NO'
+  end
+end

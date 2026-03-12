@@ -1,0 +1,88 @@
+# Railway deployment ignore file
+# Reduces upload size by excluding unnecessary files
+
+# IMPORTANT: Include SAP NW RFC SDK (excluded in .gitignore but needed for deployment)
+!api/nwrfcsdk/
+!api/nwrfcsdk/**
+
+# Dependencies (will be installed via package.json)
+node_modules/
+node_modules_old/
+.pnpm-store/
+
+# Rust build artifacts (LARGE - 8+ GB total)
+rust-core-service/target/
+rust-ai-service/target/
+rust-dashboard-service/target/
+rust-work-service/target/
+rust-streaming-service/target/
+**/target/
+
+# Playwright MCP cache
+.playwright-mcp/
+
+# iOS/Mobile (not needed for Railway deployment)
+ios/
+android/
+*.xcodeproj/
+*.xcworkspace/
+
+# Build outputs (will be built on Railway)
+dist/
+dist-ssr/
+dev-dist/
+build/
+.next/
+out/
+
+# Git directory
+.git/
+
+# Environment files (set via Railway env vars)
+.env
+.env.*
+!.env.example
+
+# Editor/IDE
+.vscode/
+.cursor/
+.idea/
+*.swp
+*.swo
+*~
+
+# IDE config files
+.claude/
+.notes/
+.mdnotes/
+
+# OS files
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Documentation (not needed for deployment)
+*.md
+docs/
+
+# Logs
+logs/
+*.log
+load_test_logs/
+
+# Test files
+**/*.test.ts
+**/*.test.tsx
+**/*.spec.ts
+**/*.spec.tsx
+__tests__/
+coverage/
+
+# Cache and generated
+.cache/
+.turbo/
+.eslintcache
+.tsbuildinfo
+.tanstack/
+__pycache__/
+

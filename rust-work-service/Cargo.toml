@@ -1,0 +1,58 @@
+[package]
+name = "rust-work-service"
+version = "0.1.0"
+edition = "2021"
+description = "Work Management Service for OmniFrame - handles work queues, task assignment, worker sessions"
+authors = ["Jai Singh"]
+
+[dependencies]
+# Web framework
+axum = { version = "0.7", features = ["ws", "macros"] }
+tokio = { version = "1", features = ["full"] }
+tower = "0.4"
+tower-http = { version = "0.5", features = ["cors", "trace"] }
+
+# Database
+sqlx = { version = "0.7", features = ["postgres", "runtime-tokio", "tls-rustls", "uuid", "chrono", "json"] }
+
+# Redis connection pooling
+bb8 = "0.8"
+bb8-redis = "0.16"
+
+# HTTP client
+reqwest = { version = "0.11", features = ["json"] }
+
+# Serialization
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+
+# Logging and tracing
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+
+# WebSocket
+tokio-tungstenite = "0.24"
+
+# Cron scheduling
+tokio-cron-scheduler = "0.10"
+
+# Async utilities
+futures-util = "0.3"
+
+# Error handling
+thiserror = "1.0"
+anyhow = "1.0"
+
+# Environment variables
+dotenvy = "0.15"
+
+# UUID
+uuid = { version = "1", features = ["v4", "serde"] }
+
+# DateTime
+chrono = { version = "0.4", features = ["serde"] }
+
+[profile.release]
+opt-level = 3
+lto = true
+codegen-units = 1

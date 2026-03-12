@@ -1,0 +1,15 @@
+[build]
+builder = "DOCKERFILE"
+dockerfilePath = "Dockerfile"
+watchPatterns = ["src/**", "Cargo.toml", "Cargo.lock", "Dockerfile"]
+
+[deploy]
+# CRITICAL: Let Railway use the Dockerfile CMD
+restartPolicyType = "ON_FAILURE"
+restartPolicyMaxRetries = 10
+healthcheckPath = "/health"
+healthcheckTimeout = 300
+
+[[services]]
+name = "rust-work-service"
+port = 8030

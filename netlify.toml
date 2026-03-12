@@ -1,0 +1,75 @@
+[build]
+  command = "npm run build"
+  publish = "dist"
+
+# =============================================================================
+# Cache Headers - Enterprise Cache Control Strategy
+# =============================================================================
+
+# HTML files - NEVER cache (always revalidate to pick up new deployments)
+[[headers]]
+  for = "/"
+  [headers.values]
+    Cache-Control = "public, no-cache, must-revalidate"
+    X-Content-Type-Options = "nosniff"
+
+[[headers]]
+  for = "/*.html"
+  [headers.values]
+    Cache-Control = "public, no-cache, must-revalidate"
+    X-Content-Type-Options = "nosniff"
+
+# Service worker - NEVER cache (must always check for new version)
+[[headers]]
+  for = "/sw.js"
+  [headers.values]
+    Cache-Control = "public, no-cache, must-revalidate"
+    X-Content-Type-Options = "nosniff"
+
+# Build info - NEVER cache (version polling endpoint)
+[[headers]]
+  for = "/build-info.json"
+  [headers.values]
+    Cache-Control = "public, no-cache, must-revalidate"
+    X-Content-Type-Options = "nosniff"
+    Access-Control-Allow-Origin = "*"
+
+# Manifest - short cache (changes on PWA config updates)
+[[headers]]
+  for = "/manifest.webmanifest"
+  [headers.values]
+    Cache-Control = "public, no-cache, must-revalidate"
+
+# Vite hashed assets - cache forever (filenames contain content hashes)
+[[headers]]
+  for = "/assets/*"
+  [headers.values]
+    Cache-Control = "public, max-age=31536000, immutable"
+
+# Static images - cache for 24 hours
+[[headers]]
+  for = "/images/*"
+  [headers.values]
+    Cache-Control = "public, max-age=86400"
+
+[[headers]]
+  for = "/avatars/*"
+  [headers.values]
+    Cache-Control = "public, max-age=86400"
+
+# Workbox files - short cache
+[[headers]]
+  for = "/workbox-*.js"
+  [headers.values]
+    Cache-Control = "public, no-cache, must-revalidate"
+
+# =============================================================================
+# Redirects - Order matters! Specific rules BEFORE wildcard.
+# =============================================================================
+
+# SPA fallback - must be LAST (Netlify rewrites without force=true serve
+# existing files first, but explicit passthrough ensures build-info.json works)
+[[redirects]]
+  from = "/*"
+  to = "/index.html"
+  status = 200

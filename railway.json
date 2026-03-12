@@ -1,0 +1,21 @@
+{
+  "$schema": "https://railway.app/railway.schema.json",
+  "build": {
+    "builder": "DOCKERFILE",
+    "dockerfilePath": "Dockerfile",
+    "buildArgs": {
+      "VITE_SUPABASE_URL": "${{VITE_SUPABASE_URL}}",
+      "VITE_SUPABASE_ANON_KEY": "${{VITE_SUPABASE_ANON_KEY}}",
+      "VITE_API_URL": "${{VITE_API_URL}}",
+      "RAILWAY_PUBLIC_DOMAIN": "${{RAILWAY_PUBLIC_DOMAIN}}",
+      "VITE_WORK_SERVICE_URL": "${{VITE_WORK_SERVICE_URL}}",
+      "VITE_WORK_SERVICE_WS_URL": "${{VITE_WORK_SERVICE_WS_URL}}",
+      "VITE_STREAMING_SERVICE_URL": "${{VITE_STREAMING_SERVICE_URL}}"
+    }
+  },
+  "deploy": {
+    "numReplicas": 1,
+    "restartPolicyType": "ON_FAILURE",
+    "restartPolicyMaxRetries": 10
+  }
+}

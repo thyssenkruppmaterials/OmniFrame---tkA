@@ -1,0 +1,527 @@
+@import 'tailwindcss';
+@import 'tw-animate-css';
+
+@custom-variant dark (&:is(.dark *));
+
+:root {
+  --radius: 0.625rem;
+  --background: oklch(1 0 0);
+  --foreground: oklch(0.129 0.042 264.695);
+  --card: oklch(1 0 0);
+  --card-foreground: oklch(0.129 0.042 264.695);
+  --popover: oklch(1 0 0);
+  --popover-foreground: oklch(0.129 0.042 264.695);
+  --primary: oklch(0.208 0.042 265.755);
+  --primary-foreground: oklch(0.984 0.003 247.858);
+  --secondary: oklch(0.968 0.007 247.896);
+  --secondary-foreground: oklch(0.208 0.042 265.755);
+  --muted: oklch(0.968 0.007 247.896);
+  --muted-foreground: oklch(0.554 0.046 257.417);
+  --accent: oklch(0.968 0.007 247.896);
+  --accent-foreground: oklch(0.208 0.042 265.755);
+  --destructive: oklch(0.577 0.245 27.325);
+  --border: oklch(0.929 0.013 255.508);
+  --input: oklch(0.929 0.013 255.508);
+  --ring: oklch(0.704 0.04 256.788);
+  --chart-1: oklch(0.646 0.222 41.116);
+  --chart-2: oklch(0.6 0.118 184.704);
+  --chart-3: oklch(0.398 0.07 227.392);
+  --chart-4: oklch(0.828 0.189 84.429);
+  --chart-5: oklch(0.769 0.188 70.08);
+
+  /* Glassmorphic Variables */
+  --glass-background: oklch(1 0 0 / 0.1);
+  --glass-background-strong: oklch(1 0 0 / 0.15);
+  --glass-border: oklch(1 0 0 / 0.2);
+  --glass-blur-light: 8px;
+  --glass-blur-medium: 12px;
+  --glass-blur-heavy: 20px;
+  --glass-shadow-light: 0 4px 24px -1px oklch(0.129 0.042 264.695 / 0.1);
+  --glass-shadow-medium: 0 8px 32px -4px oklch(0.129 0.042 264.695 / 0.15);
+  --glass-shadow-heavy: 0 20px 48px -12px oklch(0.129 0.042 264.695 / 0.25);
+
+  --sidebar: var(--glass-background);
+  --sidebar-foreground: var(--foreground);
+  --sidebar-primary: var(--primary);
+  --sidebar-primary-foreground: var(--primary-foreground);
+  --sidebar-accent: var(--glass-background-strong);
+  --sidebar-accent-foreground: var(--accent-foreground);
+  --sidebar-border: var(--glass-border);
+  --sidebar-ring: var(--ring);
+}
+
+.dark {
+  --background: oklch(0.205 0 0);
+  --foreground: oklch(0.985 0 0);
+  --card: oklch(0.205 0 0);
+  --card-foreground: oklch(0.985 0 0);
+  --popover: oklch(0.205 0 0);
+  --popover-foreground: oklch(0.985 0 0);
+  --primary: oklch(0.985 0 0);
+  --primary-foreground: oklch(0.205 0 0);
+  --secondary: oklch(0.269 0 0);
+  --secondary-foreground: oklch(0.985 0 0);
+  --muted: oklch(0.269 0 0);
+  --muted-foreground: oklch(0.78 0 0);
+  --accent: oklch(0.269 0 0);
+  --accent-foreground: oklch(0.985 0 0);
+  --destructive: oklch(0.704 0.191 22.216);
+  --border: oklch(0.371 0 0);
+  --input: oklch(0.371 0 0);
+  --ring: oklch(0.708 0 0);
+  --chart-1: oklch(0.488 0.243 264.376);
+  --chart-2: oklch(0.696 0.17 162.48);
+  --chart-3: oklch(0.769 0.188 70.08);
+  --chart-4: oklch(0.627 0.265 303.9);
+  --chart-5: oklch(0.645 0.246 16.439);
+
+  /* Glassmorphic Variables - Dark Mode */
+  --glass-background: oklch(0.985 0 0 / 0.08);
+  --glass-background-strong: oklch(0.985 0 0 / 0.12);
+  --glass-border: oklch(0.985 0 0 / 0.15);
+  --glass-shadow-light: 0 4px 24px -1px oklch(0.205 0 0 / 0.3);
+  --glass-shadow-medium: 0 8px 32px -4px oklch(0.205 0 0 / 0.4);
+  --glass-shadow-heavy: 0 20px 48px -12px oklch(0.205 0 0 / 0.5);
+
+  --sidebar: var(--glass-background);
+  --sidebar-foreground: oklch(0.985 0 0);
+  --sidebar-primary: oklch(0.488 0.243 264.376);
+  --sidebar-primary-foreground: oklch(0.985 0 0);
+  --sidebar-accent: var(--glass-background-strong);
+  --sidebar-accent-foreground: oklch(0.985 0 0);
+  --sidebar-border: var(--glass-border);
+  --sidebar-ring: oklch(0.708 0 0);
+}
+
+@theme inline {
+  --font-inter: 'Inter', 'sans-serif';
+  --font-manrope: 'Manrope', 'sans-serif';
+  --font-geist: 'Geist', 'sans-serif';
+  --font-plus-jakarta-sans: 'Plus Jakarta Sans', 'sans-serif';
+  --font-dm-sans: 'DM Sans', 'sans-serif';
+
+  --radius-sm: calc(var(--radius) - 4px);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) + 4px);
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  --color-chart-1: var(--chart-1);
+  --color-chart-2: var(--chart-2);
+  --color-chart-3: var(--chart-3);
+  --color-chart-4: var(--chart-4);
+  --color-chart-5: var(--chart-5);
+  --color-sidebar: var(--sidebar);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar-primary: var(--sidebar-primary);
+  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-ring: var(--sidebar-ring);
+
+  /* Glassmorphic Colors and Effects */
+  --color-glass: var(--glass-background);
+  --color-glass-strong: var(--glass-background-strong);
+  --color-glass-border: var(--glass-border);
+  --blur-glass-light: var(--glass-blur-light);
+  --blur-glass-medium: var(--glass-blur-medium);
+  --blur-glass-heavy: var(--glass-blur-heavy);
+  --shadow-glass-light: var(--glass-shadow-light);
+  --shadow-glass-medium: var(--glass-shadow-medium);
+  --shadow-glass-heavy: var(--glass-shadow-heavy);
+}
+
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+    scrollbar-width: thin;
+    scrollbar-color: var(--border) transparent;
+  }
+  html {
+    @apply overflow-x-hidden;
+  }
+  body {
+    @apply text-foreground min-h-svh w-full;
+    background: linear-gradient(
+      135deg,
+      oklch(from var(--background) l c h / 0.95) 0%,
+      oklch(from var(--background) calc(l * 0.98) c h / 0.98) 50%,
+      oklch(from var(--background) calc(l * 0.95) c h / 0.95) 100%
+    );
+    background-attachment: fixed;
+  }
+
+  /* iOS Safe Area Environment Variables */
+  :root {
+    --safe-area-inset-top: env(safe-area-inset-top, 0px);
+    --safe-area-inset-right: env(safe-area-inset-right, 0px);
+    --safe-area-inset-bottom: env(safe-area-inset-bottom, 0px);
+    --safe-area-inset-left: env(safe-area-inset-left, 0px);
+  }
+
+  button:not(:disabled),
+  [role='button']:not(:disabled) {
+    cursor: pointer;
+  }
+
+  /* Prevent focus zoom on mobile devices */
+  @media screen and (max-width: 767px) {
+    input,
+    select,
+    textarea {
+      font-size: 16px !important;
+    }
+  }
+}
+
+@utility container {
+  margin-inline: auto;
+  padding-inline: 2rem;
+}
+
+@utility no-scrollbar {
+  /* Hide scrollbar for Chrome, Safari and Opera */
+  &::-webkit-scrollbar {
+    display: none;
+  }
+  /* Hide scrollbar for IE, Edge and Firefox */
+  -ms-overflow-style: none; /* IE and Edge */
+  scrollbar-width: none; /* Firefox */
+}
+
+@utility faded-bottom {
+  @apply after:pointer-events-none after:absolute after:bottom-0 after:left-0 after:hidden after:h-32 after:w-full after:bg-[linear-gradient(180deg,_transparent_10%,_var(--background)_70%)] md:after:block;
+}
+
+/* iOS Safe Area Utilities */
+@utility safe-area-top {
+  padding-top: env(safe-area-inset-top, 0px);
+}
+
+@utility safe-area-bottom {
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+}
+
+@utility safe-area-left {
+  padding-left: env(safe-area-inset-left, 0px);
+}
+
+@utility safe-area-right {
+  padding-right: env(safe-area-inset-right, 0px);
+}
+
+@utility safe-area-all {
+  padding-top: env(safe-area-inset-top, 0px);
+  padding-right: env(safe-area-inset-right, 0px);
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+  padding-left: env(safe-area-inset-left, 0px);
+}
+
+@utility safe-area-x {
+  padding-left: env(safe-area-inset-left, 0px);
+  padding-right: env(safe-area-inset-right, 0px);
+}
+
+@utility safe-area-y {
+  padding-top: env(safe-area-inset-top, 0px);
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+}
+
+/* Glassmorphic Utility Classes */
+@utility glass {
+  background-color: var(--glass-background);
+  backdrop-filter: blur(var(--glass-blur-medium));
+  border: 1px solid var(--glass-border);
+  box-shadow: var(--shadow-glass-medium);
+}
+
+@utility glass-light {
+  background-color: var(--glass-background);
+  backdrop-filter: blur(var(--glass-blur-light));
+  border: 1px solid var(--glass-border);
+  box-shadow: var(--shadow-glass-light);
+}
+
+@utility glass-strong {
+  background-color: var(--glass-background-strong);
+  backdrop-filter: blur(var(--glass-blur-heavy));
+  border: 1px solid var(--glass-border);
+  box-shadow: var(--shadow-glass-heavy);
+}
+
+@utility glass-card {
+  background-color: var(--glass-background);
+  backdrop-filter: blur(var(--glass-blur-medium));
+  border: 1px solid var(--glass-border);
+  box-shadow: var(--shadow-glass-medium);
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+
+  &:hover {
+    background-color: var(--glass-background-strong);
+    box-shadow: var(--shadow-glass-heavy);
+    transform: translateY(-2px);
+  }
+}
+
+@utility glass-sidebar {
+  background-color: var(--glass-background);
+  backdrop-filter: blur(var(--glass-blur-medium));
+  border-right: 1px solid var(--glass-border);
+  box-shadow: var(--shadow-glass-light);
+}
+
+/* Collapsible/Accordion Animation Styles */
+/* Using grid-based animation for reliable height transitions */
+.CollapsibleContent,
+[data-slot='collapsible-content'] {
+  overflow: hidden;
+  display: grid;
+  grid-template-rows: 0fr;
+  transition:
+    grid-template-rows 300ms cubic-bezier(0.32, 0.72, 0, 1),
+    opacity 250ms cubic-bezier(0.4, 0, 0.2, 1);
+  opacity: 0;
+}
+
+.CollapsibleContent[data-state='open'],
+[data-slot='collapsible-content'][data-state='open'] {
+  grid-template-rows: 1fr;
+  opacity: 1;
+}
+
+.CollapsibleContent[data-state='closed'],
+[data-slot='collapsible-content'][data-state='closed'] {
+  grid-template-rows: 0fr;
+  opacity: 0;
+}
+
+/* Inner wrapper needs min-height: 0 for grid animation to work */
+.CollapsibleContent > *,
+[data-slot='collapsible-content'] > * {
+  min-height: 0;
+  overflow: hidden;
+}
+
+/* Tailwind animation utilities for accordion - using grid approach */
+@utility animate-accordion-down {
+  grid-template-rows: 1fr;
+  opacity: 1;
+}
+
+@utility animate-accordion-up {
+  grid-template-rows: 0fr;
+  opacity: 0;
+}
+
+@keyframes ripple {
+  0% {
+    transform: scale(1);
+    opacity: 1;
+  }
+  100% {
+    transform: scale(2);
+    opacity: 0;
+  }
+}
+
+/* iOS PWA Keyboard Toolbar Suppression for Scanner Inputs */
+/* These styles specifically target RF interface scanner inputs to prevent
+   the iOS keyboard accessory bar (Previous/Next/Done buttons) from appearing
+   when using Bluetooth barcode scanners in PWA mode */
+.scanner-input-ios-fix {
+  /* Prevent iOS from showing virtual keyboard toolbar */
+  -webkit-appearance: none;
+  -webkit-user-select: text; /* Allow text selection for scanner input */
+  -webkit-touch-callout: none; /* Disable iOS callout menu */
+  -webkit-tap-highlight-color: transparent; /* Remove tap highlight */
+
+  /* Ensure font size prevents zoom on iOS (which can trigger toolbar) */
+  font-size: 16px !important;
+
+  /* Remove any default iOS input styling */
+  background-clip: padding-box;
+}
+
+/* Focus state fixes for iOS PWA */
+.scanner-input-ios-fix:focus {
+  -webkit-appearance: none;
+  outline: none; /* Handled by Tailwind focus-visible classes instead */
+
+  /* Prevent iOS keyboard suggestions and autocorrect */
+  -webkit-autocorrect: off;
+  -webkit-autocapitalize: off;
+  -webkit-spellcheck: false;
+}
+
+/* Additional iOS Safari PWA specific fixes */
+@supports (-webkit-touch-callout: none) {
+  /* Target iOS Safari specifically */
+  .scanner-input-ios-fix[inputmode='none'] {
+    /* Force no virtual keyboard or toolbar */
+    pointer-events: auto;
+    cursor: text;
+
+    /* Ensure iOS doesn't override our inputmode setting */
+    -webkit-user-modify: read-write;
+  }
+}
+::view-transition-old(root),
+::view-transition-new(root) {
+  animation: none;
+  mix-blend-mode: normal;
+}
+
+/* Print Styles for Kit Build Sheet */
+@media print {
+  /* Hide non-printable elements */
+  .print\:hidden {
+    display: none !important;
+  }
+
+  /* Show print-only elements */
+  .hidden.print\:block {
+    display: block !important;
+  }
+
+  /* Reset page margins and background */
+  @page {
+    size: A4;
+    margin: 0.5cm;
+  }
+
+  /* Hide EVERYTHING by default when printing */
+  body > * {
+    display: none !important;
+  }
+
+  /* But show the portal container where dialogs are rendered */
+  body > [data-radix-portal] {
+    display: block !important;
+  }
+
+  body {
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+    background: white !important;
+    margin: 0 !important;
+    padding: 0 !important;
+  }
+
+  /* Remove dialog overlay */
+  [data-radix-dialog-overlay] {
+    display: none !important;
+    background: transparent !important;
+  }
+
+  /* Style the dialog content portal for printing */
+  [data-radix-portal] {
+    position: static !important;
+    display: block !important;
+  }
+
+  /* Ensure dialogs print correctly */
+  [role='dialog'] {
+    position: static !important;
+    transform: none !important;
+    max-width: none !important;
+    max-height: none !important;
+    width: 100% !important;
+    height: auto !important;
+    overflow: visible !important;
+    background: white !important;
+    border: none !important;
+    box-shadow: none !important;
+    margin: 0 !important;
+    padding: 0 !important;
+  }
+
+  /* Hide dialog header and footer for cleaner print */
+  [role='dialog'] > div:first-child > h2,
+  [role='dialog'] > div:first-child > p,
+  [role='dialog'] button[type='button'] {
+    display: none !important;
+  }
+
+  /* Show only the kit build sheet content area */
+  .kit-build-sheet-print-area {
+    display: block !important;
+    width: 100% !important;
+    height: auto !important;
+    overflow: visible !important;
+    background: white !important;
+  }
+
+  /* Kit Build Sheet specific print styles */
+  .print\:bg-white {
+    background-color: white !important;
+  }
+
+  .print\:text-black {
+    color: black !important;
+  }
+
+  .print\:border-black {
+    border-color: black !important;
+  }
+
+  .print\:border-gray-300 {
+    border-color: #d1d5db !important;
+  }
+
+  .print\:border-gray-400 {
+    border-color: #9ca3af !important;
+  }
+
+  .print\:border-gray-600 {
+    border-color: #4b5563 !important;
+  }
+
+  .print\:bg-gray-100 {
+    background-color: #f3f4f6 !important;
+  }
+
+  .print\:text-gray-600 {
+    color: #4b5563 !important;
+  }
+
+  .print\:text-gray-500 {
+    color: #6b7280 !important;
+  }
+
+  .print\:text-gray-400 {
+    color: #9ca3af !important;
+  }
+
+  /* Ensure colors print correctly */
+  * {
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+  }
+
+  /* Table styles for print */
+  table {
+    border-collapse: collapse;
+  }
+
+  th,
+  td {
+    border: 1px solid #000;
+  }
+}

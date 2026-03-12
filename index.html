@@ -1,0 +1,86 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="author" content="Jai Singh">
+    <link
+      rel="icon"
+      type="image/svg+xml"
+      href="/images/favicon.svg"
+    />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+
+    <!-- Route-aware PWA manifest injection (must run before any JS bundle) -->
+    <script>
+      (function(){
+        var p = location.pathname;
+        if (p.indexOf('/timeclockapp') === 0) {
+          document.write('<link rel="manifest" href="/timeclock-manifest.webmanifest">');
+          document.write('<meta name="mobile-web-app-capable" content="yes">');
+          document.write('<meta name="apple-mobile-web-app-capable" content="yes">');
+          document.write('<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">');
+          document.write('<meta name="apple-mobile-web-app-title" content="Time Clock">');
+          document.write('<meta name="theme-color" content="#09090b">');
+          document.write('<link rel="apple-touch-icon" href="/images/favicon.svg">');
+        } else if (p.indexOf('/rf-interface') === 0 || p.indexOf('/rf-signin') === 0) {
+          document.write('<link rel="manifest" href="/manifest.webmanifest">');
+          document.write('<meta name="mobile-web-app-capable" content="yes">');
+          document.write('<meta name="apple-mobile-web-app-capable" content="yes">');
+          document.write('<meta name="apple-mobile-web-app-status-bar-style" content="default">');
+          document.write('<meta name="apple-mobile-web-app-title" content="OmniFrame RF">');
+          document.write('<meta name="theme-color" content="#ffffff">');
+          document.write('<link rel="apple-touch-icon" href="/images/favicon.svg">');
+        }
+      })();
+    </script>
+
+    <!-- Primary Meta Tags -->
+    <title>OmniFrame</title>
+    <meta name="title" content="OmniFrame" />
+    <meta
+      name="description"
+      content="Intelligent Logistics Management Platform powered by AI."
+    />
+
+    <!-- Open Graph / Facebook -->
+    <meta property="og:type" content="website" />
+    <meta property="og:url" content="https://omniframe.example.com" />
+    <meta property="og:title" content="OmniFrame" />
+    <meta
+      property="og:description"
+      content="Intelligent Logistics Management Platform powered by AI."
+    />
+    <meta
+      property="og:image"
+      content="https://omniframe.example.com/images/favicon.svg"
+    />
+
+    <!-- Twitter -->
+    <meta property="twitter:card" content="summary_large_image" />
+    <meta property="twitter:url" content="https://omniframe.example.com" />
+    <meta property="twitter:title" content="OmniFrame" />
+    <meta
+      property="twitter:description"
+      content="Intelligent Logistics Management Platform powered by AI."
+    />
+    <meta
+      property="twitter:image"
+      content="https://omniframe.example.com/images/favicon.svg"
+    />
+
+    <!-- font family -->
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,100..1000;1,9..40,100..1000&family=Geist:wght@100..900&family=Inter:ital,opsz,wght@0,14..32,100..900;1,14..32,100..900&family=Manrope:wght@200..800&family=Plus+Jakarta+Sans:ital,wght@0,200..800;1,200..800&display=swap"
+      rel="stylesheet"
+    />
+
+
+  </head>
+
+  <body class="group/body">
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>
