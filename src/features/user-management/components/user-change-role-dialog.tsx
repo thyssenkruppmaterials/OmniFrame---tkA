@@ -1,3 +1,4 @@
+// Created and developed by Jai Singh
 'use client'
 
 import { useState, useEffect } from 'react'
@@ -186,7 +187,7 @@ export function UserChangeRoleDialog({ user, open, onOpenChange }: Props) {
   }
 
   const form = useForm<ChangeRoleForm>({
-    resolver: zodResolver(changeRoleSchema),
+    resolver: zodResolver(changeRoleSchema) as never,
     defaultValues: {
       newRole: 'viewer' as UserRole,
       reason: '',
@@ -542,3 +543,5 @@ export function UserChangeRoleDialog({ user, open, onOpenChange }: Props) {
     </Dialog>
   )
 }
+
+// Created and developed by Jai Singh

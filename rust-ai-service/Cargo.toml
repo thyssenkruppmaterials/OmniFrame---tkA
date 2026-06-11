@@ -2,8 +2,8 @@
 name = "drone-ai-service"
 version = "0.1.0"
 edition = "2021"
-description = "AI-powered drone scan analysis service for OmniFrame warehouse scanning"
-authors = ["Jai Singh"]
+description = "AI-powered drone scan analysis service for OneBox warehouse scanning"
+authors = ["OneBox AI Team"]
 
 [dependencies]
 # Web framework
@@ -24,7 +24,7 @@ base64 = "0.21"
 image = "0.24"
 
 # Database
-sqlx = { version = "0.7", features = ["postgres", "runtime-tokio", "tls-rustls", "uuid", "chrono", "json"] }
+sqlx = { version = "=0.8.6", features = ["postgres", "runtime-tokio", "tls-rustls", "uuid", "chrono", "json"] }
 
 # Supabase Storage - use reqwest directly instead of AWS SDK
 # (AWS SDK requires very recent Rust versions)

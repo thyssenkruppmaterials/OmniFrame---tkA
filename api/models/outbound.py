@@ -1,3 +1,4 @@
+# Created and developed by Jai Singh
 """
 Pydantic models for outbound operations.
 Mirrors the existing database schema while adding API-specific validations.
@@ -105,3 +106,4 @@ class OutboundAnalytics(BaseModel):
     top_materials: List[dict] = Field(default_factory=list)
     daily_throughput: List[dict] = Field(default_factory=list)
 
+# Created and developed by Jai Singh

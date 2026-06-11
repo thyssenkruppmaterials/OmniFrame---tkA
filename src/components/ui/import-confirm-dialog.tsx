@@ -1,3 +1,4 @@
+// Created and developed by Jai Singh
 import React from 'react'
 import { AlertTriangle, Loader2 } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
@@ -127,3 +128,5 @@ export const ImportConfirmDialog = React.memo(
 )
 
 ImportConfirmDialog.displayName = 'ImportConfirmDialog'
+
+// Created and developed by Jai Singh

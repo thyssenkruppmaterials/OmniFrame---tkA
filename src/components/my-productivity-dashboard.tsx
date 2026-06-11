@@ -1,3 +1,4 @@
+// Created and developed by Jai Singh
 /**
  * My Productivity Dashboard Component
  * Personal productivity view matching the Associate Performance tab design
@@ -805,6 +806,19 @@ function MyTaskBreakdown({ associate }: MyTaskBreakdownProps) {
       { label: 'Final Pack', value: associate.final_packed, color: 'amber' },
       { label: 'Putback', value: associate.putbacks, color: 'rose' },
       { label: 'Counts', value: associate.cycle_counts, color: 'indigo' },
+      // Kit workflow stages — migration 310
+      { label: 'Kit Pick', value: associate.kit_picking ?? 0, color: 'lime' },
+      { label: 'Kit Build', value: associate.kit_building ?? 0, color: 'cyan' },
+      {
+        label: 'Kit Inspect',
+        value: associate.kit_inspection ?? 0,
+        color: 'fuchsia',
+      },
+      {
+        label: 'Dock Stage',
+        value: associate.kit_dock_staging ?? 0,
+        color: 'sky',
+      },
     ].filter((m) => m.value > 0)
   }, [associate])
 
@@ -877,6 +891,27 @@ function TaskBreakdownCard({ breakdown }: TaskBreakdownCardProps) {
       { label: 'Final', value: breakdown.final_packed, color: 'bg-amber-500' },
       { label: 'Putback', value: breakdown.putbacks, color: 'bg-rose-500' },
       { label: 'Count', value: breakdown.cycle_counts, color: 'bg-indigo-500' },
+      // Kit workflow stages — migration 310
+      {
+        label: 'Kit Pick',
+        value: breakdown.kit_picking,
+        color: 'bg-lime-500',
+      },
+      {
+        label: 'Kit Build',
+        value: breakdown.kit_building,
+        color: 'bg-cyan-500',
+      },
+      {
+        label: 'Kit Insp',
+        value: breakdown.kit_inspection,
+        color: 'bg-fuchsia-500',
+      },
+      {
+        label: 'Dock',
+        value: breakdown.kit_dock_staging,
+        color: 'bg-sky-500',
+      },
     ].filter((t) => t.value > 0)
   }, [breakdown])
 
@@ -908,6 +943,11 @@ function TaskBreakdownCard({ breakdown }: TaskBreakdownCardProps) {
 }
 
 // Task Type Badge Component
+// NOTE: Tailwind v4 only emits CSS for class strings it can statically see.
+// Keep this map exhaustive against every colour key produced by `MyTaskBreakdown`
+// (Kit Pick → lime, Kit Build → cyan, Kit Inspect → fuchsia, Dock Stage → sky
+// shipped with migration 310). Missing keys silently fall through to an
+// unstyled badge — see Debug/Fix-My-Productivity-Kit-Chip-Colors.md.
 const TASK_COLORS: Record<string, string> = {
   blue: 'border-blue-500/50 bg-blue-50 text-blue-700 dark:bg-blue-950/30 dark:text-blue-300',
   purple:
@@ -922,6 +962,12 @@ const TASK_COLORS: Record<string, string> = {
   rose: 'border-rose-500/50 bg-rose-50 text-rose-700 dark:bg-rose-950/30 dark:text-rose-300',
   indigo:
     'border-indigo-500/50 bg-indigo-50 text-indigo-700 dark:bg-indigo-950/30 dark:text-indigo-300',
+  // Kit workflow stages — migration 310 (Productivity-Wiring-Kit-Workflow-Stages)
+  lime: 'border-lime-500/50 bg-lime-50 text-lime-700 dark:bg-lime-950/30 dark:text-lime-300',
+  cyan: 'border-cyan-500/50 bg-cyan-50 text-cyan-700 dark:bg-cyan-950/30 dark:text-cyan-300',
+  fuchsia:
+    'border-fuchsia-500/50 bg-fuchsia-50 text-fuchsia-700 dark:bg-fuchsia-950/30 dark:text-fuchsia-300',
+  sky: 'border-sky-500/50 bg-sky-50 text-sky-700 dark:bg-sky-950/30 dark:text-sky-300',
 }
 
 function TaskTypeBadge({
@@ -997,3 +1043,5 @@ function MyProductivitySkeleton() {
     </div>
   )
 }
+
+// Created and developed by Jai Singh

@@ -1,3 +1,4 @@
+// Created and developed by Jai Singh
 /**
  * Hook for managing camera stream connections
  *
@@ -16,7 +17,7 @@ const RECONNECT_DELAY_MS = 2000
 // Rust streaming service URL - in production this comes from env
 const STREAMING_SERVICE_URL =
   import.meta.env.VITE_STREAMING_SERVICE_URL ||
-  'https://your-rust-streaming-service.up.railway.app'
+  'https://rust-streaming-service-production.up.railway.app'
 
 // Convert quality string to numeric value for ExacqVision (1-10, higher is better)
 const QUALITY_MAP: Record<StreamQuality, number> = {
@@ -206,3 +207,5 @@ export function useCameraStream({
     disconnect,
   }
 }
+
+// Created and developed by Jai Singh

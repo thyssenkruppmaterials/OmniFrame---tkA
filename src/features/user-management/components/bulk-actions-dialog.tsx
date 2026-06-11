@@ -1,4 +1,5 @@
-import { useState } from 'react'
+// Created and developed by Jai Singh
+import { useEffect, useState } from 'react'
 import { z } from 'zod'
 import { format } from 'date-fns'
 import { useForm } from 'react-hook-form'
@@ -16,7 +17,9 @@ import {
   Download,
   Trash2,
   AlertTriangle,
+  ArrowRight,
 } from 'lucide-react'
+import { toast } from 'sonner'
 import { cn } from '@/lib/utils'
 import { logger } from '@/lib/utils/logger'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
@@ -55,8 +58,12 @@ import {
 } from '@/components/ui/select'
 import { Separator } from '@/components/ui/separator'
 import { PermissionGuard } from '@/components/auth/PermissionGuard'
+import {
+  getRoles,
+  type RoleData,
+} from '../../admin/roles/services/role.service'
 import { useUserManagement } from '../hooks/use-user-management'
-import { SYSTEM_ROLES, type BulkAction, type UserProfile } from '../types'
+import { type BulkAction, type UserProfile } from '../types'
 
 // Form schema for bulk actions
 const bulkActionFormSchema = z.object({
@@ -201,14 +208,6 @@ const ACTION_OPTIONS: {
   },
 ]
 
-const ROLE_OPTIONS = SYSTEM_ROLES.map((role) => ({
-  value: role,
-  label: role
-    .split('_')
-    .map((w) => w.charAt(0).toUpperCase() + w.slice(1))
-    .join(' '),
-}))
-
 export function BulkActionsDialog({
   selectedUsers = [],
   selectedUserIds = [],
@@ -219,6 +218,8 @@ export function BulkActionsDialog({
     useUserManagement()
   const [selectedAction, setSelectedAction] = useState<BulkAction | null>(null)
   const [step, setStep] = useState<'select' | 'confirm'>('select')
+  const [availableRoles, setAvailableRoles] = useState<RoleData[]>([])
+  const [isLoadingRoles, setIsLoadingRoles] = useState(false)
 
   const form = useForm<BulkActionFormData>({
     resolver: zodResolver(bulkActionFormSchema),
@@ -229,12 +230,78 @@ export function BulkActionsDialog({
     },
   })
 
+  // Load roles from DB once when the dialog opens. Mirrors
+  // UserChangeRoleDialog so the bulk picker stays in lockstep with the
+  // single-user picker — including custom roles created in role manager.
+  useEffect(() => {
+    if (!open) return
+    let cancelled = false
+    const load = async () => {
+      try {
+        setIsLoadingRoles(true)
+        const roles = await getRoles()
+        if (cancelled) return
+        setAvailableRoles(roles.filter((r) => r.isActive))
+      } catch (error) {
+        logger.error('Failed to load roles for bulk actions dialog:', error)
+        if (!cancelled) {
+          toast.error('Failed to load roles')
+          setAvailableRoles([])
+        }
+      } finally {
+        if (!cancelled) setIsLoadingRoles(false)
+      }
+    }
+    load()
+    return () => {
+      cancelled = true
+    }
+  }, [open])
+
   // Get the actual user IDs to work with
   const userIds =
     selectedUserIds.length > 0
       ? selectedUserIds
       : selectedUsers.map((u) => u.id)
   const userCount = userIds.length
+
+  // Resolve the selected users so we can show their current roles in the
+  // confirm step. selectedUsers may be empty if the caller only passed IDs,
+  // so fall back to the cached `users` list from the hook.
+  const resolvedSelectedUsers: UserProfile[] =
+    selectedUsers.length > 0
+      ? selectedUsers
+      : users.filter((u) => userIds.includes(u.id))
+
+  // Group selected users by current role so the admin can see what they're
+  // about to overwrite (e.g. "5 Viewer, 2 TKA Associate → Manager").
+  const currentRoleDistribution = resolvedSelectedUsers.reduce<
+    Record<string, { displayName: string; count: number }>
+  >((acc, user) => {
+    const roleKey = user.role || 'unknown'
+    const displayName =
+      user.role_display_name ||
+      availableRoles.find((r) => r.name === roleKey)?.displayName ||
+      roleKey
+        .split('_')
+        .map((w) => w.charAt(0).toUpperCase() + w.slice(1))
+        .join(' ')
+    if (!acc[roleKey]) {
+      acc[roleKey] = { displayName, count: 0 }
+    }
+    acc[roleKey].count += 1
+    return acc
+  }, {})
+
+  const getRoleDisplayName = (roleName: string | undefined): string => {
+    if (!roleName) return 'Unknown'
+    const role = availableRoles.find((r) => r.name === roleName)
+    if (role) return role.displayName
+    return roleName
+      .split('_')
+      .map((w) => w.charAt(0).toUpperCase() + w.slice(1))
+      .join(' ')
+  }
 
   // Reset when dialog opens/closes
   const handleOpenChange = (isOpen: boolean) => {
@@ -474,38 +541,140 @@ export function BulkActionsDialog({
 
               {/* Role Selection (for change_role action) */}
               {selectedActionOption?.requiresRole && (
-                <FormField
-                  control={form.control}
-                  name='role'
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>
-                        New Role <span className='text-destructive'>*</span>
-                      </FormLabel>
-                      <Select
-                        onValueChange={field.onChange}
-                        value={field.value}
-                      >
-                        <FormControl>
-                          <SelectTrigger>
-                            <SelectValue placeholder='Select a role' />
-                          </SelectTrigger>
-                        </FormControl>
-                        <SelectContent>
-                          {ROLE_OPTIONS.map((option) => (
-                            <SelectItem key={option.value} value={option.value}>
-                              {option.label}
-                            </SelectItem>
+                <div className='space-y-3'>
+                  {/* Current role distribution among selected users — gives
+                      admins context before they overwrite multiple roles. */}
+                  {Object.keys(currentRoleDistribution).length > 0 && (
+                    <div className='bg-muted/40 space-y-2 rounded-lg border p-3'>
+                      <p className='text-muted-foreground text-xs font-medium uppercase'>
+                        Current Roles
+                      </p>
+                      <div className='flex flex-wrap items-center gap-2'>
+                        {Object.entries(currentRoleDistribution)
+                          .sort((a, b) => b[1].count - a[1].count)
+                          .map(([roleKey, info]) => (
+                            <Badge
+                              key={roleKey}
+                              variant='secondary'
+                              className='font-normal'
+                            >
+                              {info.count} × {info.displayName}
+                            </Badge>
                           ))}
-                        </SelectContent>
-                      </Select>
-                      <FormDescription>
-                        All selected users will be assigned this role
-                      </FormDescription>
-                      <FormMessage />
-                    </FormItem>
+                        {form.watch('role') && (
+                          <>
+                            <ArrowRight className='text-muted-foreground h-4 w-4' />
+                            <Badge className='bg-blue-100 text-blue-800 dark:bg-blue-900/20 dark:text-blue-300'>
+                              {getRoleDisplayName(form.watch('role'))}
+                            </Badge>
+                          </>
+                        )}
+                      </div>
+                    </div>
                   )}
-                />
+
+                  <FormField
+                    control={form.control}
+                    name='role'
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>
+                          New Role <span className='text-destructive'>*</span>
+                        </FormLabel>
+                        <Select
+                          onValueChange={field.onChange}
+                          value={field.value}
+                          disabled={isLoadingRoles}
+                        >
+                          <FormControl>
+                            <SelectTrigger>
+                              <SelectValue
+                                placeholder={
+                                  isLoadingRoles
+                                    ? 'Loading roles...'
+                                    : 'Select a role'
+                                }
+                              />
+                            </SelectTrigger>
+                          </FormControl>
+                          <SelectContent>
+                            {isLoadingRoles ? (
+                              <div className='flex items-center justify-center p-3'>
+                                <Loader2 className='h-4 w-4 animate-spin' />
+                                <span className='text-muted-foreground ml-2 text-sm'>
+                                  Loading roles...
+                                </span>
+                              </div>
+                            ) : availableRoles.length === 0 ? (
+                              <div className='text-muted-foreground p-3 text-center text-sm'>
+                                No roles available
+                              </div>
+                            ) : (
+                              availableRoles
+                                .slice()
+                                .sort((a, b) => {
+                                  if (a.isSystem && !b.isSystem) return -1
+                                  if (!a.isSystem && b.isSystem) return 1
+                                  return a.displayName.localeCompare(
+                                    b.displayName
+                                  )
+                                })
+                                .map((role) => (
+                                  <SelectItem key={role.name} value={role.name}>
+                                    <div className='flex w-full items-center justify-between gap-3'>
+                                      <div className='flex flex-col'>
+                                        <span className='font-medium'>
+                                          {role.displayName}
+                                        </span>
+                                        {role.description && (
+                                          <span className='text-muted-foreground max-w-[260px] truncate text-xs'>
+                                            {role.description}
+                                          </span>
+                                        )}
+                                      </div>
+                                      {role.isSystem && (
+                                        <Badge
+                                          variant='outline'
+                                          className='ml-2 shrink-0 text-xs'
+                                        >
+                                          System
+                                        </Badge>
+                                      )}
+                                    </div>
+                                  </SelectItem>
+                                ))
+                            )}
+                          </SelectContent>
+                        </Select>
+                        <FormDescription>
+                          All {userCount} selected user
+                          {userCount !== 1 ? 's' : ''} will be reassigned to
+                          this role. Existing role assignments will be
+                          overwritten.
+                        </FormDescription>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+
+                  {/* Warn when the new role differs from at least one current
+                      role — mirrors the single-user dialog's elevation/demotion
+                      callout but generalised for a heterogeneous selection. */}
+                  {form.watch('role') &&
+                    Object.keys(currentRoleDistribution).some(
+                      (k) => k !== form.watch('role')
+                    ) && (
+                      <Alert>
+                        <AlertTriangle className='h-4 w-4' />
+                        <AlertTitle>Permissions will change</AlertTitle>
+                        <AlertDescription>
+                          Affected users will gain or lose permissions based on
+                          their new role. Their cached permissions will be
+                          invalidated automatically.
+                        </AlertDescription>
+                      </Alert>
+                    )}
+                </div>
               )}
 
               {/* Return Date for On Leave */}
@@ -603,3 +772,5 @@ export function BulkActionsDialog({
     </Dialog>
   )
 }
+
+// Created and developed by Jai Singh

@@ -1,3 +1,4 @@
+// Created and developed by Jai Singh
 import { createFileRoute } from '@tanstack/react-router'
 import { createProtectedRouteBeforeLoad } from '@/lib/auth/route-protection'
 import RoleManagement from '@/features/admin/roles'
@@ -11,4 +12,5 @@ export const Route = createFileRoute('/_authenticated/admin/roles/')({
   }),
   component: RoleManagement,
 })
-// Developer and Creator: Jai Singh
+
+// Created and developed by Jai Singh

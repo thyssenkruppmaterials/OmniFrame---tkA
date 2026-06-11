@@ -1,3 +1,4 @@
+// Created and developed by Jai Singh
 /**
  * useAppUpdater - React Hook for Application Update State
  *
@@ -111,3 +112,5 @@ export function useAppUpdater(): UseAppUpdaterReturn {
     dismiss,
   }
 }
+
+// Created and developed by Jai Singh

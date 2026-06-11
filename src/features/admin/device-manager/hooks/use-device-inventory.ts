@@ -1,3 +1,4 @@
+// Created and developed by Jai Singh
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { DeviceManagerService } from '@/lib/supabase/device-manager.service'
 import type { MdmDevice } from '../types/device-manager.types'
@@ -75,3 +76,5 @@ export function useUpdateDevice() {
     },
   })
 }
+
+// Created and developed by Jai Singh

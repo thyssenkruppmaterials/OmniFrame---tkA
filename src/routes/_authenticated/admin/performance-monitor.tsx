@@ -1,3 +1,4 @@
+// Created and developed by Jai Singh
 import { createFileRoute } from '@tanstack/react-router'
 import { createProtectedRouteBeforeLoad } from '@/lib/auth/route-protection'
 import { PerformanceMonitorPage } from '@/features/admin/performance-monitor'
@@ -13,4 +14,5 @@ export const Route = createFileRoute(
   }),
   component: PerformanceMonitorPage,
 })
-// Developer and Creator: Jai Singh
+
+// Created and developed by Jai Singh

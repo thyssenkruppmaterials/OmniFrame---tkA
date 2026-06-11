@@ -1,8 +1,11 @@
 [build]
 builder = "DOCKERFILE"
 # Railway automatically passes environment variables as build args
-# when they are declared as ARG in the Dockerfile
-watchPatterns = ["src/**", "api/**", "package.json", "pnpm-lock.yaml", "Dockerfile"]
+# when they are declared as ARG in the Dockerfile.
+# `start.py` is the runtime entrypoint (`python start.py`); without it in
+# this list, Railway silently SKIPS deploys when the only change is the
+# entrypoint (see d3981825 "No changes to watched files").
+watchPatterns = ["src/**", "api/**", "package.json", "pnpm-lock.yaml", "Dockerfile", "start.py"]
 
 [deploy]
 # CRITICAL: Force Python execution instead of static file serving
@@ -14,6 +17,6 @@ healthcheckPath = "/health"
 healthcheckTimeout = 300
 
 [[services]]
-name = "omniframe-logistics"
+name = "onebox-ai-logistics"
 port = 8000
 

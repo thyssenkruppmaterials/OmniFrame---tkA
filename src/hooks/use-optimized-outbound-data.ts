@@ -1,3 +1,4 @@
+// Created and developed by Jai Singh
 import { useEffect, useRef, useCallback } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
@@ -336,3 +337,5 @@ export function useOptimizedOutboundTOData(
     },
   }
 }
+
+// Created and developed by Jai Singh

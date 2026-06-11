@@ -1,3 +1,4 @@
+// Created and developed by Jai Singh
 import { IconPlanet } from '@tabler/icons-react'
 
 export default function ComingSoon() {
@@ -14,3 +15,5 @@ export default function ComingSoon() {
     </div>
   )
 }
+
+// Created and developed by Jai Singh

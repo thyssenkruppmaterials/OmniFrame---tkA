@@ -1,0 +1,4 @@
+pywebview>=4.0
+pywin32>=306
+requests>=2.31
+pyinstaller>=6.0

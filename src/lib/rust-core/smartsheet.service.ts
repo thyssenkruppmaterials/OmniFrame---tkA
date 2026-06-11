@@ -1,3 +1,4 @@
+// Created and developed by Jai Singh
 /**
  * Rust Core SmartSheet Service
  *
@@ -843,4 +844,5 @@ export class HybridSmartsheetService {
 export const hybridSmartsheetService = new HybridSmartsheetService()
 
 export default rustSmartsheetService
-// Developer and Creator: Jai Singh
+
+// Created and developed by Jai Singh

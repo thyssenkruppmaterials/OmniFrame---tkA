@@ -1,3 +1,4 @@
+// Created and developed by Jai Singh
 //! Authentication configuration
 
 use serde::Deserialize;
@@ -82,3 +83,5 @@ impl AuthConfig {
         Duration::from_secs(self.session_cache_ttl_secs)
     }
 }
+
+// Created and developed by Jai Singh

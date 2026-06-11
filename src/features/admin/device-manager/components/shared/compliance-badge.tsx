@@ -1,3 +1,4 @@
+// Created and developed by Jai Singh
 import { cn } from '@/lib/utils'
 
 interface ComplianceBadgeProps {
@@ -26,3 +27,5 @@ export function ComplianceBadge({ compliant }: ComplianceBadgeProps) {
     </span>
   )
 }
+
+// Created and developed by Jai Singh

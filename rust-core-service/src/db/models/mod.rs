@@ -1,4 +1,5 @@
-//! Database models for OmniFrame
+// Created and developed by Jai Singh
+//! Database models for OneBox AI
 //!
 //! These models are generated from the TypeScript database.types.ts
 //! to ensure consistency with the frontend.
@@ -14,3 +15,5 @@ pub use auth::*;
 pub use productivity::*;
 pub use smartsheet::*;
 pub use lx03::*;
+
+// Created and developed by Jai Singh

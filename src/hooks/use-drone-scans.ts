@@ -1,3 +1,4 @@
+// Created and developed by Jai Singh
 /**
  * Hook for managing drone scan data with Supabase Realtime subscriptions
  *
@@ -412,3 +413,5 @@ export function useDroneScans({
       updateMissionMutation.mutateAsync({ missionId, status }),
   }
 }
+
+// Created and developed by Jai Singh

@@ -1,3 +1,4 @@
+// Created and developed by Jai Singh
 //! Authentication middleware for Axum
 
 use axum::{
@@ -13,7 +14,7 @@ use uuid::Uuid;
 
 use crate::AppState;
 use crate::auth::{jwt::{JwtValidator, extract_bearer_token, hash_token}, rbac::RbacService};
-use crate::cache::session::{SessionService, CachedSession};
+use crate::cache::session::SessionService;
 
 /// Shared authentication state
 #[derive(Clone)]
@@ -100,28 +101,12 @@ pub async fn auth_middleware(
             StatusCode::INTERNAL_SERVER_ERROR
         })?;
 
-    // Cache the session (if session service is available)
-    // Note: Profile fields are not populated here - use validate_with_profile endpoint
-    // for full profile data caching
-    if let Some(ref session_service) = state.session_service {
-        let cached = CachedSession {
-            user_id: claims.sub.clone(),
-            email: claims.email.clone().unwrap_or_default(),
-            role: claims.role.clone(),
-            organization_id: None,
-            permissions: permissions.iter().cloned().collect(),
-            created_at: claims.iat,
-            last_activity: chrono::Utc::now().timestamp(),
-            // Profile fields not available in middleware - use validate_with_profile
-            full_name: None,
-            avatar_url: None,
-            department: None,
-            job_title: None,
-            status: None,
-        };
-        
-        let _ = session_service.set_session(&token_hash, &cached).await;
-    }
+    // Intentionally do NOT write to the session cache from middleware:
+    // we don't have `organization_id` here, and `validate_with_profile` treats
+    // any cached session without organization_id as a cache miss, causing a
+    // re-fetch storm. Let `validate_with_profile` own all cache writes.
+    // See: memorybank/OmniFrame/Debug/Performance-Review-2026-05-19-Production-Slowness.md
+    let _ = token_hash; // keep variable in scope for future cache reads
 
     let user = AuthenticatedUser {
         user_id: claims.sub,
@@ -161,10 +146,16 @@ pub async fn require_auth(
 ) -> Response {
     let headers = request.headers();
 
-    // 1. Check for service API key (internal service-to-service calls)
+    // 1. Check for service API key (internal service-to-service calls).
+    //    Short-circuit if the value is JWT-shaped (starts with "eyJ"): some
+    //    callers were sending the user JWT in BOTH `Authorization: Bearer` AND
+    //    `X-Service-Key`, which produced ~50 doomed DB lookups per second
+    //    against the 2-row `service_api_keys` table. See:
+    //    memorybank/OmniFrame/Debug/Performance-Review-2026-05-19-Production-Slowness.md
     if let Some(service_key) = headers
         .get("X-Service-Key")
         .and_then(|v| v.to_str().ok())
+        .filter(|v| !v.starts_with("eyJ"))
     {
         match state.api_key_validator.validate(service_key).await {
             Ok(validated_service) => {
@@ -280,24 +271,10 @@ pub async fn require_auth(
         }
     };
 
-    // Cache the session (if Redis is available)
-    if let Some(ref session_service) = state.session_service {
-        let cached = CachedSession {
-            user_id: claims.sub.clone(),
-            email: claims.email.clone().unwrap_or_default(),
-            role: claims.role.clone(),
-            organization_id: None,
-            permissions: permissions.iter().cloned().collect(),
-            created_at: claims.iat,
-            last_activity: chrono::Utc::now().timestamp(),
-            full_name: None,
-            avatar_url: None,
-            department: None,
-            job_title: None,
-            status: None,
-        };
-        let _ = session_service.set_session(&token_hash, &cached).await;
-    }
+    // Same rationale as `auth_middleware` above: do NOT cache from this path
+    // because organization_id is unavailable. `validate_with_profile` is the
+    // canonical cache writer.
+    let _ = token_hash;
 
     metrics::counter!("auth.middleware.jwt_success").increment(1);
 
@@ -419,3 +396,5 @@ fn has_permission(permissions: &HashSet<String>, required: &str) -> bool {
 
     false
 }
+
+// Created and developed by Jai Singh

@@ -1,8 +1,9 @@
+// Created and developed by Jai Singh
 /**
  * Query Result Caching Utilities
  * Implements client-side caching for Supabase queries
  *
- * Author: Jai Singh
+ * Author: OmniFrame Team
  * Date: October 29, 2025
  * Version: 1.0.0 - Phase 2 Optimization
  */
@@ -234,4 +235,5 @@ export function cachedQueryDecorator(keyPrefix: string, ttl?: number) {
 
 // Export cache instance for advanced usage
 export { queryCache }
-// Developer and Creator: Jai Singh
+
+// Created and developed by Jai Singh

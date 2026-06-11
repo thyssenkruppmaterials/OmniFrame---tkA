@@ -1,3 +1,4 @@
+// Created and developed by Jai Singh
 /**
  * Kit Definitions Service
  * CRUD operations for kit_definitions (BOM master data).
@@ -6,16 +7,46 @@
 import { logger } from '@/lib/utils/logger'
 import { supabase } from './client'
 
-const db = supabase as ReturnType<(typeof supabase)['from']> & {
+const db = supabase as unknown as ReturnType<(typeof supabase)['from']> & {
   from: (table: string) => ReturnType<(typeof supabase)['from']>
 }
 
-// Normalized BOM component shape stored in required_components JSONB
+const HEX_COLOR_REGEX = /^#[0-9A-F]{6}$/i
+
+export type BomComponentType =
+  | 'material'
+  | 'incora_sub_kit'
+  | 'incora_component'
+export type BomCoverageMode = 'required' | 'informational'
+
+export interface PartDeviation {
+  substituteMaterialNumber: string
+  substituteMaterialDescription: string
+  notes?: string
+}
+
 export interface BomComponent {
+  componentType?: BomComponentType
+  coverageMode?: BomCoverageMode
   materialNumber: string
   materialDescription: string
   requiredQuantity: number
+  incoraReference?: string
+  partContainerType?: string
+  deviations?: PartDeviation[]
 }
+
+export const KIT_CART_COLORS = [
+  { value: '#22c55e', label: 'Green' },
+  { value: '#3b82f6', label: 'Blue' },
+  { value: '#f97316', label: 'Orange' },
+  { value: '#a855f7', label: 'Purple' },
+  { value: '#ef4444', label: 'Red' },
+  { value: '#eab308', label: 'Yellow' },
+  { value: '#6b7280', label: 'Gray' },
+  { value: '#ec4899', label: 'Pink' },
+  { value: '#14b8a6', label: 'Teal' },
+] as const
 
 export interface KitDefinitionRecord {
   id: string
@@ -32,6 +63,11 @@ export interface KitDefinitionRecord {
   assembly_instructions: string | null
   work_instructions_url: string | null
   estimated_assembly_time_minutes: number | null
+  default_kit_cart_color: string | null
+  kit_container_type: string | null
+  charge_code: string | null
+  chain_id: string | null
+  chain_sequence_order: number | null
   status: string | null
   effective_date: string | null
   obsolete_date: string | null
@@ -50,6 +86,11 @@ export interface CreateKitDefinitionInput {
   requiredComponents: BomComponent[]
   assemblyInstructions?: string
   estimatedAssemblyTimeMinutes?: number
+  defaultKitCartColor?: string
+  kitContainerType?: string
+  chargeCode?: string
+  chainId?: string | null
+  chainSequenceOrder?: number | null
 }
 
 export interface UpdateKitDefinitionInput extends Partial<CreateKitDefinitionInput> {
@@ -57,18 +98,80 @@ export interface UpdateKitDefinitionInput extends Partial<CreateKitDefinitionInp
 }
 
 function validateBom(components: BomComponent[]): string | null {
-  for (const c of components) {
+  const materialRows = components.filter(
+    (c) => !c.componentType || c.componentType === 'material'
+  )
+  const incoraSubKitRows = components.filter(
+    (c) => c.componentType === 'incora_sub_kit'
+  )
+  const incoraComponentRows = components.filter(
+    (c) => c.componentType === 'incora_component'
+  )
+
+  for (const c of materialRows) {
     if (!c.materialNumber.trim()) return 'Material number cannot be blank'
     if (c.requiredQuantity <= 0)
       return `Quantity for ${c.materialNumber} must be positive`
   }
-  const materialNumbers = components.map((c) =>
-    c.materialNumber.trim().toUpperCase()
-  )
-  const dupes = materialNumbers.filter(
-    (m, i) => materialNumbers.indexOf(m) !== i
-  )
-  if (dupes.length > 0) return `Duplicate material number: ${dupes[0]}`
+
+  for (const c of incoraSubKitRows) {
+    if (!c.incoraReference?.trim())
+      return 'INCORA reference cannot be blank for sub-kit rows'
+    if (c.requiredQuantity <= 0)
+      return `Quantity for INCORA ref ${c.incoraReference} must be positive`
+  }
+
+  for (const c of incoraComponentRows) {
+    if (!c.materialNumber.trim() && !c.incoraReference?.trim()) {
+      return 'INCORA component must have a material number or INCORA reference'
+    }
+    if (c.requiredQuantity <= 0) {
+      const id = c.materialNumber.trim() || c.incoraReference?.trim() || 'row'
+      return `Quantity for INCORA component ${id} must be positive`
+    }
+  }
+
+  const matKeys = [
+    ...materialRows.map((c) => c.materialNumber.trim().toUpperCase()),
+    ...incoraComponentRows
+      .filter((c) => c.materialNumber.trim())
+      .map((c) => c.materialNumber.trim().toUpperCase()),
+  ]
+  const matDupes = matKeys.filter((m, i) => matKeys.indexOf(m) !== i)
+  if (matDupes.length > 0) return `Duplicate material number: ${matDupes[0]}`
+
+  const incoraRefs = [
+    ...incoraSubKitRows.map((c) =>
+      (c.incoraReference ?? '').trim().toUpperCase()
+    ),
+    ...incoraComponentRows
+      .filter((c) => c.incoraReference?.trim())
+      .map((c) => (c.incoraReference ?? '').trim().toUpperCase()),
+  ]
+  const incoraDupes = incoraRefs.filter((r, i) => incoraRefs.indexOf(r) !== i)
+  if (incoraDupes.length > 0)
+    return `Duplicate INCORA reference: ${incoraDupes[0]}`
+
+  for (const c of [...materialRows, ...incoraComponentRows]) {
+    if (c.deviations && c.deviations.length > 0) {
+      const primary = c.materialNumber.trim().toUpperCase()
+      if (!primary) continue
+      for (const d of c.deviations) {
+        if (d.substituteMaterialNumber.trim().toUpperCase() === primary) {
+          return `Deviation substitute cannot be the same as primary material ${c.materialNumber}`
+        }
+      }
+    }
+  }
+
+  return null
+}
+
+function validateOptionalHexColor(color?: string) {
+  if (!color) return null
+  if (!HEX_COLOR_REGEX.test(color)) {
+    return 'Color must be a valid 6-digit hex value like #22C55E'
+  }
   return null
 }
 
@@ -154,6 +257,8 @@ export class KitDefinitionsService {
     try {
       const validationError = validateBom(input.requiredComponents)
       if (validationError) return { success: false, error: validationError }
+      const colorError = validateOptionalHexColor(input.defaultKitCartColor)
+      if (colorError) return { success: false, error: colorError }
 
       const orgId = await this.getOrganizationId()
       if (!orgId)
@@ -164,7 +269,7 @@ export class KitDefinitionsService {
       } = await supabase.auth.getUser()
 
       const { data, error } = await (
-        db.from(this.TABLE) as ReturnType<(typeof supabase)['from']>
+        db.from(this.TABLE) as unknown as ReturnType<(typeof supabase)['from']>
       )
         .insert({
           organization_id: orgId,
@@ -178,10 +283,18 @@ export class KitDefinitionsService {
           assembly_instructions: input.assemblyInstructions?.trim() || null,
           estimated_assembly_time_minutes:
             input.estimatedAssemblyTimeMinutes || null,
+          default_kit_cart_color: input.defaultKitCartColor || null,
+          kit_container_type: input.kitContainerType || null,
+          charge_code: input.chargeCode || null,
+          chain_id: input.chainId || null,
+          chain_sequence_order:
+            input.chainId && input.chainSequenceOrder != null
+              ? input.chainSequenceOrder
+              : null,
           status: 'active',
           created_by: user?.id || null,
           updated_by: user?.id || null,
-        } as unknown)
+        } as never)
         .select('id')
         .single()
 
@@ -196,7 +309,7 @@ export class KitDefinitionsService {
         return { success: false, error: error.message }
       }
 
-      return { success: true, id: (data as { id: string }).id }
+      return { success: true, id: (data as unknown as { id: string }).id }
     } catch (err) {
       logger.error('[KitDefinitionsService] create error:', err)
       return {
@@ -213,6 +326,8 @@ export class KitDefinitionsService {
       const updates: Record<string, unknown> = {
         updated_at: new Date().toISOString(),
       }
+      const colorError = validateOptionalHexColor(input.defaultKitCartColor)
+      if (colorError) return { success: false, error: colorError }
 
       const {
         data: { user },
@@ -233,6 +348,22 @@ export class KitDefinitionsService {
       if (input.estimatedAssemblyTimeMinutes !== undefined)
         updates.estimated_assembly_time_minutes =
           input.estimatedAssemblyTimeMinutes || null
+      if (input.defaultKitCartColor !== undefined)
+        updates.default_kit_cart_color = input.defaultKitCartColor || null
+      if (input.kitContainerType !== undefined)
+        updates.kit_container_type = input.kitContainerType || null
+      if (input.chargeCode !== undefined)
+        updates.charge_code = input.chargeCode || null
+      if (input.chainId !== undefined) {
+        updates.chain_id = input.chainId || null
+        if (!input.chainId) {
+          updates.chain_sequence_order = null
+        }
+      }
+      if (input.chainSequenceOrder !== undefined) {
+        updates.chain_sequence_order =
+          input.chainSequenceOrder == null ? null : input.chainSequenceOrder
+      }
 
       if (input.requiredComponents !== undefined) {
         const validationError = validateBom(input.requiredComponents)
@@ -322,4 +453,5 @@ export class KitDefinitionsService {
       .subscribe()
   }
 }
-// Developer and Creator: Jai Singh
+
+// Created and developed by Jai Singh

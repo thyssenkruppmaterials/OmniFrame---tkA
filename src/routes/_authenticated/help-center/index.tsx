@@ -1,7 +1,9 @@
+// Created and developed by Jai Singh
 import { createFileRoute } from '@tanstack/react-router'
 import ComingSoon from '@/components/coming-soon'
 
 export const Route = createFileRoute('/_authenticated/help-center/')({
   component: ComingSoon,
 })
-// Developer and Creator: Jai Singh
+
+// Created and developed by Jai Singh

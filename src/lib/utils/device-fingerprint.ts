@@ -1,3 +1,4 @@
+// Created and developed by Jai Singh
 /**
  * Device Fingerprinting and Identification Utilities
  * Creates unique device identifiers for RF Terminal tracking
@@ -585,3 +586,5 @@ export async function generateSuggestedDeviceName(
   })
   return `RF ${deviceInfo.deviceType} ${timestamp}`
 }
+
+// Created and developed by Jai Singh

@@ -1,3 +1,4 @@
+// Created and developed by Jai Singh
 //! Configuration module for the Rust Streaming Service
 //!
 //! Provides configuration for ExacqVision integration, Redis, and server settings.
@@ -7,7 +8,7 @@ use serde::Deserialize;
 /// ExacqVision configuration
 #[derive(Debug, Clone, Deserialize)]
 pub struct ExacqConfig {
-    /// Base URL for ExacqVision API — set via EXACQ_URL env var
+    /// Base URL for ExacqVision API (e.g., https://6k7tdjok.r.exacq.net)
     pub base_url: String,
     /// Username for authentication
     pub username: String,
@@ -20,7 +21,7 @@ impl ExacqConfig {
     pub fn from_env() -> anyhow::Result<Self> {
         Ok(Self {
             base_url: std::env::var("EXACQ_URL")
-                .map_err(|_| anyhow::anyhow!("EXACQ_URL environment variable must be set"))?,
+                .unwrap_or_else(|_| "https://6k7tdjok.r.exacq.net".to_string()),
             username: std::env::var("EXACQ_USER")
                 .map_err(|_| anyhow::anyhow!("EXACQ_USER environment variable must be set"))?,
             password: std::env::var("EXACQ_PASSWORD")
@@ -52,7 +53,7 @@ impl Default for AppConfig {
     fn default() -> Self {
         Self {
             exacq: ExacqConfig {
-                base_url: String::new(),
+                base_url: "https://6k7tdjok.r.exacq.net".to_string(),
                 username: String::new(),
                 password: String::new(),
             },
@@ -122,8 +123,10 @@ mod tests {
     fn app_config_default_has_correct_exacq_defaults() {
         let config = AppConfig::default();
 
-        assert!(config.exacq.base_url.is_empty());
+        assert_eq!(config.exacq.base_url, "https://6k7tdjok.r.exacq.net");
         assert!(config.exacq.username.is_empty());
         assert!(config.exacq.password.is_empty());
     }
 }
+
+// Created and developed by Jai Singh

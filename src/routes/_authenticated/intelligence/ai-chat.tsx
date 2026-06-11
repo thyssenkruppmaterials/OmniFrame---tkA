@@ -1,3 +1,4 @@
+// Created and developed by Jai Singh
 import { createFileRoute } from '@tanstack/react-router'
 import { Header } from '@/components/layout/header'
 import { Main } from '@/components/layout/main'
@@ -44,4 +45,5 @@ function AiChat() {
 export const Route = createFileRoute('/_authenticated/intelligence/ai-chat')({
   component: AiChat,
 })
-// Developer and Creator: Jai Singh
+
+// Created and developed by Jai Singh

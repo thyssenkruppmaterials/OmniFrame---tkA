@@ -1,3 +1,4 @@
+// Created and developed by Jai Singh
 //! WebSocket event streaming
 //!
 //! Provides real-time camera events (motion, triggers) via WebSocket.
@@ -310,3 +311,5 @@ fn parse_exacq_event(text: &str) -> Option<CameraEvent> {
         timestamp: chrono::Utc::now(),
     })
 }
+
+// Created and developed by Jai Singh

@@ -6,7 +6,7 @@ import reactRefresh from 'eslint-plugin-react-refresh'
 import tseslint from 'typescript-eslint'
 
 export default tseslint.config(
-  { ignores: ['dist', 'dev-dist', 'src/components/ui', '.pytest_cache', 'pytest-cache-files-*', 'node_modules', 'api', 'rust-core-service', 'rust-work-service', 'rust-ai-service', 'rust-streaming-service', 'rust-dashboard-service', 'supabase/functions', 'ios', 'load_test_logs'] },
+  { ignores: ['dist', 'dev-dist', 'src/components/ui', '.pytest_cache', 'pytest-cache-files-*', 'node_modules', 'api', 'rust-core-service', 'rust-work-service', 'rust-ai-service', 'rust-streaming-service', 'rust-dashboard-service', 'rust-mdm-service', 'supabase/functions', 'ios', 'load_test_logs', '.tmp', '.agents', '.cursor'] },
   {
     extends: [
       js.configs.recommended,

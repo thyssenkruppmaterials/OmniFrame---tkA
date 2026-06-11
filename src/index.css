@@ -48,6 +48,35 @@
   --sidebar-accent-foreground: var(--accent-foreground);
   --sidebar-border: var(--glass-border);
   --sidebar-ring: var(--ring);
+
+  /* OmniBelt — Mach 3 background-job halo colors (P5).
+   * One token per `ActiveJob.type` so the SVG ring stroke and the
+   * tray progress bar render the same hue. Light-mode values tuned
+   * for sufficient contrast against `--glass-background` (white-on-
+   * white risk) — chroma kept moderate so the halo reads as a
+   * "status hint" not a "headline color". */
+  --omnibelt-job-sap_import: oklch(0.72 0.13 195);
+  --omnibelt-job-sap_export: oklch(0.65 0.16 240);
+  --omnibelt-job-agent_job: oklch(0.62 0.18 285);
+  --omnibelt-job-report: oklch(0.78 0.14 75);
+  --omnibelt-job-scheduled: oklch(0.68 0.18 15);
+  --omnibelt-job-other: oklch(0.62 0.15 265);
+
+  /* RF Cinematic Shell — accent tokens for tile categories.
+   * Each tile category gets a theme-aware hue. Light-mode values
+   * tuned for legibility against `--glass-background-strong` and
+   * `--card`. Dark-mode counterparts live in `.dark`. */
+  --rf-accent-scan: oklch(0.62 0.16 220);
+  --rf-accent-putaway: oklch(0.6 0.15 155);
+  --rf-accent-pick: oklch(0.7 0.16 75);
+  --rf-accent-kit: oklch(0.65 0.13 180);
+  --rf-accent-count: oklch(0.6 0.17 240);
+  --rf-accent-grs: oklch(0.68 0.18 45);
+  --rf-accent-transfer: oklch(0.7 0.16 90);
+  --rf-accent-productivity: oklch(0.55 0.05 260);
+  --rf-accent-queue: oklch(0.6 0.18 285);
+  --rf-accent-claim: oklch(0.6 0.15 155);
+  --rf-accent-sap: oklch(0.65 0.2 25);
 }
 
 .dark {
@@ -91,6 +120,30 @@
   --sidebar-accent-foreground: oklch(0.985 0 0);
   --sidebar-border: var(--glass-border);
   --sidebar-ring: oklch(0.708 0 0);
+
+  /* OmniBelt — Mach 3 halo colors (dark mode). Slightly higher
+   * lightness + chroma than light-mode so the halo stays legible
+   * against the dark glass background without bloom. */
+  --omnibelt-job-sap_import: oklch(0.78 0.14 195);
+  --omnibelt-job-sap_export: oklch(0.72 0.18 240);
+  --omnibelt-job-agent_job: oklch(0.7 0.2 285);
+  --omnibelt-job-report: oklch(0.83 0.16 75);
+  --omnibelt-job-scheduled: oklch(0.74 0.2 15);
+  --omnibelt-job-other: oklch(0.7 0.17 265);
+
+  /* RF Cinematic Shell — dark mode accents (slightly lighter +
+   * higher chroma so they bloom legibly on dark glass). */
+  --rf-accent-scan: oklch(0.74 0.17 220);
+  --rf-accent-putaway: oklch(0.74 0.17 155);
+  --rf-accent-pick: oklch(0.8 0.18 75);
+  --rf-accent-kit: oklch(0.76 0.14 180);
+  --rf-accent-count: oklch(0.72 0.18 240);
+  --rf-accent-grs: oklch(0.78 0.19 45);
+  --rf-accent-transfer: oklch(0.8 0.17 90);
+  --rf-accent-productivity: oklch(0.75 0.04 260);
+  --rf-accent-queue: oklch(0.72 0.2 285);
+  --rf-accent-claim: oklch(0.74 0.17 155);
+  --rf-accent-sap: oklch(0.74 0.22 25);
 }
 
 @theme inline {
@@ -146,6 +199,30 @@
   --shadow-glass-light: var(--glass-shadow-light);
   --shadow-glass-medium: var(--glass-shadow-medium);
   --shadow-glass-heavy: var(--glass-shadow-heavy);
+
+  /* OmniBelt halo job tokens — surfaced as Tailwind color names so
+   * consumers can write `text-omnibelt-job-sap_import` if they
+   * want, though the SVG halo uses `var(...)` directly. */
+  --color-omnibelt-job-sap_import: var(--omnibelt-job-sap_import);
+  --color-omnibelt-job-sap_export: var(--omnibelt-job-sap_export);
+  --color-omnibelt-job-agent_job: var(--omnibelt-job-agent_job);
+  --color-omnibelt-job-report: var(--omnibelt-job-report);
+  --color-omnibelt-job-scheduled: var(--omnibelt-job-scheduled);
+  --color-omnibelt-job-other: var(--omnibelt-job-other);
+
+  /* RF Cinematic Shell accent tokens (Tailwind names so tiles can
+   * use utilities like `text-rf-accent-scan` or `ring-rf-accent-pick`). */
+  --color-rf-accent-scan: var(--rf-accent-scan);
+  --color-rf-accent-putaway: var(--rf-accent-putaway);
+  --color-rf-accent-pick: var(--rf-accent-pick);
+  --color-rf-accent-kit: var(--rf-accent-kit);
+  --color-rf-accent-count: var(--rf-accent-count);
+  --color-rf-accent-grs: var(--rf-accent-grs);
+  --color-rf-accent-transfer: var(--rf-accent-transfer);
+  --color-rf-accent-productivity: var(--rf-accent-productivity);
+  --color-rf-accent-queue: var(--rf-accent-queue);
+  --color-rf-accent-claim: var(--rf-accent-claim);
+  --color-rf-accent-sap: var(--rf-accent-sap);
 }
 
 @layer base {
@@ -208,6 +285,49 @@
 
 @utility faded-bottom {
   @apply after:pointer-events-none after:absolute after:bottom-0 after:left-0 after:hidden after:h-32 after:w-full after:bg-[linear-gradient(180deg,_transparent_10%,_var(--background)_70%)] md:after:block;
+}
+
+/* OmniBelt — Agent Chat composer + scroll surfaces (2026-05-24 PM).
+ * The reference component injected its scrollbar styles into
+ * `document.head` at import time, which we explicitly avoid (no
+ * mutation of global state on module load). Scoped here under
+ * named classes so only opted-in elements pick the custom
+ * scrollbar — every other textarea / scroll surface in the app
+ * keeps its native look. */
+@utility omnibelt-chat-textarea {
+  &::-webkit-scrollbar {
+    width: 6px;
+  }
+  &::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  &::-webkit-scrollbar-thumb {
+    background-color: #444444;
+    border-radius: 3px;
+  }
+  &::-webkit-scrollbar-thumb:hover {
+    background-color: #555555;
+  }
+  scrollbar-width: thin;
+  scrollbar-color: #444444 transparent;
+}
+
+@utility omnibelt-chat-scroll {
+  &::-webkit-scrollbar {
+    width: 6px;
+  }
+  &::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  &::-webkit-scrollbar-thumb {
+    background-color: #444444;
+    border-radius: 3px;
+  }
+  &::-webkit-scrollbar-thumb:hover {
+    background-color: #555555;
+  }
+  scrollbar-width: thin;
+  scrollbar-color: #444444 transparent;
 }
 
 /* iOS Safe Area Utilities */
@@ -339,6 +459,254 @@
     transform: scale(2);
     opacity: 0;
   }
+}
+
+/* Cinematic logo entrance — whole container fades/scales in */
+@keyframes cinematic-entrance {
+  0% {
+    opacity: 0;
+    transform: scale(0.4);
+    filter: blur(12px);
+  }
+  60% {
+    opacity: 1;
+    filter: blur(0px);
+  }
+  80% {
+    transform: scale(1.04);
+  }
+  100% {
+    opacity: 1;
+    transform: scale(1);
+    filter: blur(0px);
+  }
+}
+
+/* Bright flash bloom on first reveal */
+@keyframes cinematic-flash {
+  0% {
+    opacity: 0;
+    transform: scale(0.3);
+  }
+  30% {
+    opacity: 1;
+    transform: scale(1.3);
+  }
+  100% {
+    opacity: 0;
+    transform: scale(2);
+  }
+}
+
+/* Rings expand outward from the cube center */
+@keyframes cinematic-ring-expand {
+  0% {
+    opacity: 0;
+    transform: scale(0.3);
+  }
+  100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+/* Original PNG logo reveals with scale + blur lift */
+@keyframes cinematic-logo-reveal {
+  0% {
+    opacity: 0;
+    transform: scale(0.3) rotate(-90deg);
+    filter: blur(8px) drop-shadow(0 0 0 transparent);
+  }
+  50% {
+    opacity: 1;
+    filter: blur(0px) drop-shadow(0 0 20px rgba(6,182,212,0.6));
+  }
+  100% {
+    opacity: 1;
+    transform: scale(1) rotate(0deg);
+    filter: drop-shadow(0 0 12px rgba(6,182,212,0.4)) drop-shadow(0 0 24px rgba(6,182,212,0.15));
+  }
+}
+
+/* Cursor fade-out after typing completes */
+@keyframes cinematic-cursor-fade {
+  0% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+  }
+}
+
+@keyframes cinematic-glow {
+  0%,
+  100% {
+    opacity: 0.6;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 1;
+    transform: scale(1.2);
+  }
+}
+
+/* Repeating pulsar shockwave rippling outward from the logo */
+@keyframes cinematic-pulsar {
+  0% {
+    transform: scale(1);
+    opacity: 0.5;
+    border-color: rgba(6, 182, 212, 0.4);
+    box-shadow: 0 0 12px rgba(6, 182, 212, 0.25), inset 0 0 8px rgba(6, 182, 212, 0.1);
+  }
+  40% {
+    opacity: 0.3;
+  }
+  100% {
+    transform: scale(2.4);
+    opacity: 0;
+    border-color: rgba(6, 182, 212, 0);
+    box-shadow: 0 0 4px rgba(6, 182, 212, 0), inset 0 0 2px rgba(6, 182, 212, 0);
+  }
+}
+
+@keyframes cinematic-ring-pulse {
+  0%,
+  100% {
+    opacity: 0.4;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 0.8;
+    transform: scale(1.08);
+  }
+}
+
+@keyframes cinematic-float {
+  0%,
+  100% {
+    transform: translateY(0) translateX(0);
+    opacity: 0;
+  }
+  15% {
+    opacity: 0.8;
+  }
+  50% {
+    transform: translateY(-15px) translateX(3px);
+    opacity: 0.5;
+  }
+  85% {
+    opacity: 0;
+  }
+}
+
+/* Intro screen — anamorphic lens flare sweep across the title area */
+@keyframes intro-sweep-fade {
+  0% {
+    opacity: 0;
+  }
+  20% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+  }
+}
+
+/* Intro screen — slow-drifting atmospheric dust motes */
+@keyframes intro-mote-drift {
+  0% {
+    transform: translate(0, 0) scale(1);
+    opacity: 0;
+  }
+  15% {
+    opacity: 0.75;
+  }
+  50% {
+    transform: translate(12px, -18px) scale(1.15);
+    opacity: 0.55;
+  }
+  85% {
+    opacity: 0.35;
+  }
+  100% {
+    transform: translate(-6px, -36px) scale(1);
+    opacity: 0;
+  }
+}
+
+/* Light-mode counterpart of cinematic-logo-reveal — same motion, blue
+   drop-shadow palette anchored on the user-specified `#0070C0` (RGB
+   0,112,192). The 100% stop persists via `forwards` fill, so its filter
+   MUST match the inline cubeFilter on the <img> in cinematic-logo.tsx
+   (light branch) or the bright-cyan dark default would otherwise leak
+   in. Driven by `?theme=light` on /intro. */
+@keyframes cinematic-logo-reveal-light {
+  0% {
+    opacity: 0;
+    transform: scale(0.3) rotate(-90deg);
+    filter: blur(8px) drop-shadow(0 0 0 transparent);
+  }
+  50% {
+    opacity: 1;
+    filter: blur(0px) drop-shadow(0 4px 16px rgba(15, 23, 42, 0.24))
+      drop-shadow(0 0 18px rgba(0, 112, 192, 0.36));
+  }
+  100% {
+    opacity: 1;
+    transform: scale(1) rotate(0deg);
+    filter: drop-shadow(0 4px 14px rgba(15, 23, 42, 0.2))
+      drop-shadow(0 0 16px rgba(0, 112, 192, 0.32));
+  }
+}
+
+/* Light-mode counterpart of cinematic-pulsar — `#0070C0` anchor border,
+   with a soft slate outer halo replacing the bright cyan inset/outer
+   glow. Reads as gentle rings on a light backdrop instead of a halo
+   burning into the viewer. Driven by `?theme=light` on /intro. */
+@keyframes cinematic-pulsar-light {
+  0% {
+    transform: scale(1);
+    opacity: 0.6;
+    border-color: rgba(0, 112, 192, 0.55);
+    box-shadow: 0 0 10px rgba(15, 23, 42, 0.12);
+  }
+  40% {
+    opacity: 0.4;
+  }
+  100% {
+    transform: scale(2.4);
+    opacity: 0;
+    border-color: rgba(0, 112, 192, 0);
+    box-shadow: 0 0 4px rgba(15, 23, 42, 0);
+  }
+}
+
+/* Iter-6 — in-page light/dark theme toggle on the /intro screen.
+   The button's surface, border, accent, and icon color all come from
+   the palette via inline `style` — these rules only handle hover, active,
+   focus-visible, and the cross-cutting `border` + transitions that can't
+   be expressed inline cleanly. The `--toggle-border` and `--toggle-accent`
+   CSS variables are set on the button by IntroScreen so this single rule
+   block adapts to both themes without `:has()` or attribute selectors. */
+.intro-theme-toggle {
+  border: 1px solid var(--toggle-border, transparent);
+  cursor: pointer;
+  transition:
+    border-color 200ms ease,
+    transform 120ms ease,
+    background 700ms cubic-bezier(0.4, 0, 0.2, 1),
+    color 700ms cubic-bezier(0.4, 0, 0.2, 1);
+}
+.intro-theme-toggle:hover {
+  filter: brightness(1.08);
+  transform: translateY(-1px);
+}
+.intro-theme-toggle:active {
+  transform: scale(0.92);
+}
+.intro-theme-toggle:focus-visible {
+  outline: 2px solid var(--toggle-accent, currentColor);
+  outline-offset: 3px;
 }
 
 /* iOS PWA Keyboard Toolbar Suppression for Scanner Inputs */
@@ -525,3 +893,137 @@
     border: 1px solid #000;
   }
 }
+
+/* ─── RF Cinematic Shell — mesh backdrop animations ──────────────── */
+
+@keyframes rf-mesh-drift-a {
+  0%, 100% {
+    transform: translate3d(-10%, -10%, 0) scale(1);
+  }
+  50% {
+    transform: translate3d(8%, 6%, 0) scale(1.1);
+  }
+}
+
+@keyframes rf-mesh-drift-b {
+  0%, 100% {
+    transform: translate3d(15%, 12%, 0) scale(1);
+  }
+  50% {
+    transform: translate3d(-6%, -8%, 0) scale(1.15);
+  }
+}
+
+@keyframes rf-mesh-drift-c {
+  0%, 100% {
+    transform: translate3d(-12%, 20%, 0) scale(1);
+  }
+  50% {
+    transform: translate3d(10%, -6%, 0) scale(1.05);
+  }
+}
+
+.rf-mesh-blob {
+  position: absolute;
+  border-radius: 9999px;
+  filter: blur(80px);
+  opacity: 0.55;
+  will-change: transform;
+  pointer-events: none;
+}
+
+.rf-mesh-blob-1 {
+  width: 60vmax;
+  height: 60vmax;
+  top: -20vmax;
+  left: -10vmax;
+  background: radial-gradient(circle at center, var(--primary), transparent 60%);
+  animation: rf-mesh-drift-a 22s ease-in-out infinite;
+}
+
+.rf-mesh-blob-2 {
+  width: 50vmax;
+  height: 50vmax;
+  bottom: -15vmax;
+  right: -10vmax;
+  background: radial-gradient(circle at center, var(--rf-accent-scan), transparent 60%);
+  animation: rf-mesh-drift-b 28s ease-in-out infinite;
+}
+
+.rf-mesh-blob-3 {
+  width: 45vmax;
+  height: 45vmax;
+  top: 30%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  background: radial-gradient(circle at center, var(--rf-accent-putaway), transparent 65%);
+  animation: rf-mesh-drift-c 34s ease-in-out infinite;
+  opacity: 0.35;
+}
+
+.dark .rf-mesh-blob {
+  opacity: 0.4;
+  filter: blur(100px);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .rf-mesh-blob {
+    animation: none !important;
+  }
+}
+
+/* ─── RF Cinematic Scope — auto-glassify shadcn surfaces ──────────────── */
+/* Every Card, Input, and ScannerInput rendered inside `.rf-cinematic-scope`
+ * adopts the cinematic shell look — glass surfaces, rounded corners, soft
+ * borders. Avoids editing 13 sub-form files individually; they inherit the
+ * new design automatically. */
+
+.rf-cinematic-scope [data-slot='card'] {
+  background-color: var(--glass-background);
+  backdrop-filter: blur(var(--glass-blur-medium));
+  -webkit-backdrop-filter: blur(var(--glass-blur-medium));
+  border: 1px solid var(--glass-border);
+  border-radius: calc(var(--radius) + 4px);
+  box-shadow: var(--shadow-glass-light);
+  background-image: none;
+}
+
+.rf-cinematic-scope [data-slot='card-header'] {
+  border-bottom: 1px solid transparent;
+}
+
+.rf-cinematic-scope [data-slot='card-title'] {
+  letter-spacing: -0.01em;
+}
+
+.rf-cinematic-scope [data-slot='input'],
+.rf-cinematic-scope [data-slot='scanner-input'] {
+  background-color: oklch(from var(--background) l c h / 0.6);
+  border-color: var(--glass-border);
+  border-radius: 0.75rem;
+  backdrop-filter: blur(var(--glass-blur-light));
+  -webkit-backdrop-filter: blur(var(--glass-blur-light));
+  transition:
+    background-color 200ms ease,
+    border-color 200ms ease,
+    box-shadow 200ms ease;
+}
+
+.dark .rf-cinematic-scope [data-slot='input'],
+.dark .rf-cinematic-scope [data-slot='scanner-input'] {
+  background-color: oklch(from var(--background) calc(l + 0.04) c h / 0.55);
+}
+
+.rf-cinematic-scope [data-slot='input']:focus-visible,
+.rf-cinematic-scope [data-slot='scanner-input']:focus-visible {
+  border-color: oklch(from var(--primary) l c h / 0.6);
+  box-shadow: 0 0 0 3px oklch(from var(--primary) l c h / 0.15);
+}
+
+/* Nested cards inside a card (e.g. instruction cards inside a parent
+ * stat card) get a slightly stronger glass so they read as a layer-up. */
+.rf-cinematic-scope [data-slot='card'] [data-slot='card'] {
+  background-color: var(--glass-background-strong);
+  box-shadow: none;
+}
+

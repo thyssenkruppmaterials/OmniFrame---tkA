@@ -1,3 +1,4 @@
+// Created and developed by Jai Singh
 /**
  * Enterprise Health Check System for OmniFrame RBAC
  * Comprehensive health monitoring for all system components
@@ -911,4 +912,5 @@ export const healthCheckService = HealthCheckService.getInstance()
 
 // Export types
 export type { HealthCheck, SystemHealth, HealthCheckConfig, UptimeData }
-// Developer and Creator: Jai Singh
+
+// Created and developed by Jai Singh

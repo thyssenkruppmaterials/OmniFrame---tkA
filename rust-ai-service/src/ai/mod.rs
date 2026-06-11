@@ -1,3 +1,4 @@
+// Created and developed by Jai Singh
 //! AI Vision Analysis Module
 //! 
 //! Provides AI-powered image analysis using Hugging Face Inference API
@@ -10,3 +11,5 @@ mod fallback;
 
 pub use fallback::AIService;
 pub use prompts::{WAREHOUSE_ANALYSIS_PROMPT, DAMAGE_DETECTION_PROMPT, BARCODE_FOCUS_PROMPT};
+
+// Created and developed by Jai Singh

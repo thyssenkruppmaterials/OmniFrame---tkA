@@ -1,3 +1,4 @@
+// Created and developed by Jai Singh
 import { z } from 'zod'
 import { useForm } from 'react-hook-form'
 import { CaretSortIcon, CheckIcon } from '@radix-ui/react-icons'
@@ -171,3 +172,5 @@ export function AccountForm() {
     </Form>
   )
 }
+
+// Created and developed by Jai Singh

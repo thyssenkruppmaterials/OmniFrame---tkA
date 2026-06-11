@@ -1,3 +1,4 @@
+// Created and developed by Jai Singh
 /**
  * Labor Board Card Component
  * Draggable associate card for the interactive labor board
@@ -305,3 +306,5 @@ export const LaborBoardCard = memo(LaborBoardCardInner, (prev, next) => {
 LaborBoardCard.displayName = 'LaborBoardCard'
 
 export default LaborBoardCard
+
+// Created and developed by Jai Singh

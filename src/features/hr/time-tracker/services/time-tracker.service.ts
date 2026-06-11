@@ -1,3 +1,4 @@
+// Created and developed by Jai Singh
 import { supabase } from '@/lib/supabase/client'
 
 // The time_clock_entries table was created after types were generated.
@@ -305,3 +306,5 @@ export async function addManualClockEntry(params: {
   })
   return !error
 }
+
+// Created and developed by Jai Singh

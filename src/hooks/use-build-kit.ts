@@ -1,3 +1,4 @@
+// Created and developed by Jai Singh
 /**
  * Build Kit Tool Hook
  * Provides React Query mutations and queries for kit building operations
@@ -14,7 +15,11 @@ import { logger } from '@/lib/utils/logger'
 export function useBuildKitTool() {
   const queryClient = useQueryClient()
 
-  // Verify kit PO number exists and is ready for building
+  // Verify kit PO number exists and is ready for building. Legacy
+  // PO-keyed entry point; new scans that look like a kit serial number
+  // (`KIT-…`) should route through `verifyKitBySerialMutation` below
+  // instead so they land on the direct PK lookup and avoid aggregating
+  // across sibling kits sharing a PO.
   const verifyKitMutation = useMutation({
     mutationFn: (kitPoNumber: string) =>
       RRKittingDataService.verifyKitForBuild(kitPoNumber),
@@ -38,10 +43,51 @@ export function useBuildKitTool() {
     },
   })
 
-  // Start kit build (sets status to in_progress)
+  // Direct-by-serial entry point. Mirrors the picking flow's
+  // smart-detect: when the scanned input is a `KIT-…` serial the form
+  // calls this instead of `verifyKitMutation`, so the load is keyed on
+  // the globally unique `kit_serial_number` PK and never silently
+  // merges sibling kits that happen to share a Kit PO.
+  const verifyKitBySerialMutation = useMutation({
+    mutationFn: (kitSerialNumber: string) =>
+      RRKittingDataService.verifyKitForBuildBySerialNumber(kitSerialNumber),
+    onSuccess: (data) => {
+      if (data.exists && data.kitData) {
+        const { totalLines, kittedLines } = data.kitData
+        const message =
+          kittedLines > 0
+            ? `Kit verified! ${kittedLines}/${totalLines} lines already kitted`
+            : `Kit verified! ${totalLines} lines to kit`
+        toast.success(message)
+      } else {
+        toast.error(
+          data.error || 'Kit serial number not found or not ready for building'
+        )
+      }
+    },
+    onError: (error) => {
+      logger.error('Kit serial verification failed:', error)
+      toast.error('Failed to verify kit')
+    },
+  })
+
+  // Start kit build (sets status to in_progress).
+  //
+  // Accepts either a bare PO string (legacy callers) or a
+  // `{ kitPoNumber, kitSerialNumber? }` object. The serial-keyed
+  // shape scopes the status flip to a single kit and is required for
+  // multi-kit-per-PO scenarios — see
+  // `Debug/Fix-Build-Kit-Completion-Multi-Kit-PO.md`.
   const startBuildMutation = useMutation({
-    mutationFn: (kitPoNumber: string) =>
-      RRKittingDataService.startKitBuild(kitPoNumber),
+    mutationFn: (
+      input: string | { kitPoNumber: string; kitSerialNumber?: string | null }
+    ) =>
+      typeof input === 'string'
+        ? RRKittingDataService.startKitBuild(input)
+        : RRKittingDataService.startKitBuild(
+            input.kitPoNumber,
+            input.kitSerialNumber ?? null
+          ),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['kit-kanban'] })
       queryClient.invalidateQueries({ queryKey: ['kitting-data'] })
@@ -52,17 +98,28 @@ export function useBuildKitTool() {
     },
   })
 
-  // Kit a material (mark TO line as kitted)
+  // Kit a material (mark TO line as kitted). `kitSerialNumber` is
+  // optional but the RF Build Kit form now passes it whenever the
+  // loaded `kitData` has one, so material lookups don't grab rows
+  // belonging to a sibling kit sharing the PO.
   const kitMaterialMutation = useMutation({
     mutationFn: ({
       kitPoNumber,
       material,
       quantity,
+      kitSerialNumber,
     }: {
       kitPoNumber: string
       material: string
       quantity: number
-    }) => RRKittingDataService.kitMaterial(kitPoNumber, material, quantity),
+      kitSerialNumber?: string | null
+    }) =>
+      RRKittingDataService.kitMaterial(
+        kitPoNumber,
+        material,
+        quantity,
+        kitSerialNumber ?? null
+      ),
     onSuccess: (data) => {
       if (data.success && data.kittedLine) {
         toast.success(
@@ -118,13 +175,40 @@ export function useBuildKitTool() {
     },
   })
 
-  // Complete the kit build
+  // Complete the kit build.
+  //
+  // Accepts either a bare PO string or a
+  // `{ kitPoNumber, kitSerialNumber? }` object. THE FIX
+  // (see `Debug/Fix-Build-Kit-Completion-Multi-Kit-PO.md`): callers
+  // that have a serial in the loaded `kitData` MUST pass it so the
+  // "all lines kitted?" check and the final status UPDATE are scoped
+  // to that single kit — otherwise a PO covering two kits will reject
+  // completion of the fully-kitted one because the partly-kitted
+  // sibling's unkitted rows count against it.
   const completeKitMutation = useMutation({
-    mutationFn: (kitPoNumber: string) =>
-      RRKittingDataService.completeKitBuild(kitPoNumber),
-    onSuccess: (data, kitPoNumber) => {
+    mutationFn: (
+      input:
+        | string
+        | {
+            kitPoNumber: string
+            kitSerialNumber?: string | null
+            skipInspection?: boolean
+          }
+    ) =>
+      typeof input === 'string'
+        ? RRKittingDataService.completeKitBuild(input)
+        : RRKittingDataService.completeKitBuild(
+            input.kitPoNumber,
+            input.kitSerialNumber ?? null,
+            input.skipInspection ? { skipInspection: true } : undefined
+          ),
+    onSuccess: (data, input) => {
+      const kitPoNumber = typeof input === 'string' ? input : input.kitPoNumber
       if (data.success) {
-        toast.success(`🎉 Kit ${kitPoNumber} build completed!`, {
+        const onDockSuffix = data.skippedInspection
+          ? ' (on dock — inspection bypassed)'
+          : ''
+        toast.success(`🎉 Kit ${kitPoNumber} build completed!${onDockSuffix}`, {
           duration: 5000,
         })
         queryClient.invalidateQueries({ queryKey: ['kit-kanban'] })
@@ -140,10 +224,15 @@ export function useBuildKitTool() {
   })
 
   return {
-    // Verify Kit
+    // Verify Kit (legacy PO-keyed)
     verifyKit: verifyKitMutation.mutate,
     verifyKitAsync: verifyKitMutation.mutateAsync,
     isVerifyingKit: verifyKitMutation.isPending,
+
+    // Verify Kit (direct-by-serial PK lookup)
+    verifyKitBySerial: verifyKitBySerialMutation.mutate,
+    verifyKitBySerialAsync: verifyKitBySerialMutation.mutateAsync,
+    isVerifyingKitBySerial: verifyKitBySerialMutation.isPending,
 
     // Start Build
     startBuild: startBuildMutation.mutate,
@@ -176,3 +265,5 @@ export function useBuildKitTool() {
     },
   }
 }
+
+// Created and developed by Jai Singh

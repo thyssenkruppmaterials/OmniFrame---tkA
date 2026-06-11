@@ -1,3 +1,4 @@
+// Created and developed by Jai Singh
 /**
  * Review Templates Component
  * HR Employee Reviews - Template management with cards, detail view, and creation
@@ -646,3 +647,5 @@ function ReviewTemplates() {
 }
 
 export default ReviewTemplates
+
+// Created and developed by Jai Singh

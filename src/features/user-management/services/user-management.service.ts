@@ -1,3 +1,4 @@
+// Created and developed by Jai Singh
 import { supabase } from '@/lib/supabase/client'
 import { logger } from '@/lib/utils/logger'
 import { getRoleIdFromName } from '../../admin/roles/services/role.service'
@@ -17,6 +18,55 @@ import type {
   UserStatus,
   UserStatusHistory,
 } from '../types'
+
+// Extracts a human-readable message from a non-OK admin API response.
+//
+// The FastAPI backend uses two `detail` shapes:
+//   1. Plain string  — `{ detail: "User not found" }` (manual HTTPException)
+//   2. Object        — `{ detail: { error: "...", correlation_id: "..." } }`
+//      (returned by `api/utils/error_responses.py::sanitized_error`)
+//   3. Array         — `{ detail: [{ loc, msg, type }, ...] }`
+//      (Pydantic 422 validation errors)
+//
+// Without this normalization, `new Error(detail)` on shapes 2 and 3 stringifies
+// the object/array to the literal `"[object Object]"`, hiding the real reason
+// (and the correlation_id needed for support escalation). See
+// `Debug/Fix-Postgres-Connection-Exhaustion-Blocks-Auth.md` for the incident
+// where this swallowed the real backend error during a Supabase auth outage.
+async function extractApiErrorMessage(
+  response: Response,
+  fallback: string
+): Promise<string> {
+  let body: unknown = null
+  try {
+    body = await response.json()
+  } catch {
+    return `${fallback} (HTTP ${response.status}: ${response.statusText})`
+  }
+
+  const detail = (body as { detail?: unknown } | null)?.detail
+
+  if (typeof detail === 'string' && detail.length > 0) {
+    return detail
+  }
+
+  if (detail && typeof detail === 'object' && !Array.isArray(detail)) {
+    const obj = detail as { error?: unknown; correlation_id?: unknown }
+    const message = typeof obj.error === 'string' ? obj.error : fallback
+    const cid =
+      typeof obj.correlation_id === 'string' ? obj.correlation_id : null
+    return cid ? `${message} (id: ${cid})` : message
+  }
+
+  if (Array.isArray(detail) && detail.length > 0) {
+    const first = detail[0] as { msg?: unknown; loc?: unknown } | null
+    const msg = typeof first?.msg === 'string' ? first.msg : null
+    const loc = Array.isArray(first?.loc) ? first.loc.join('.') : null
+    if (msg) return loc ? `${loc}: ${msg}` : msg
+  }
+
+  return `${fallback} (HTTP ${response.status}: ${response.statusText})`
+}
 
 export class UserManagementService {
   /**
@@ -198,11 +248,8 @@ export class UserManagementService {
       })
 
       if (!response.ok) {
-        const errorData = await response
-          .json()
-          .catch(() => ({ detail: 'Failed to create user' }))
         throw new Error(
-          errorData.detail || `HTTP ${response.status}: ${response.statusText}`
+          await extractApiErrorMessage(response, 'Failed to create user')
         )
       }
 
@@ -436,11 +483,8 @@ export class UserManagementService {
       })
 
       if (!response.ok) {
-        const errorData = await response
-          .json()
-          .catch(() => ({ detail: 'Failed to invite user' }))
         throw new Error(
-          errorData.detail || `HTTP ${response.status}: ${response.statusText}`
+          await extractApiErrorMessage(response, 'Failed to invite user')
         )
       }
 
@@ -504,11 +548,8 @@ export class UserManagementService {
       )
 
       if (!response.ok) {
-        const errorData = await response
-          .json()
-          .catch(() => ({ detail: 'Failed to reset password' }))
         throw new Error(
-          errorData.detail || `HTTP ${response.status}: ${response.statusText}`
+          await extractApiErrorMessage(response, 'Failed to reset password')
         )
       }
 
@@ -901,11 +942,8 @@ export class UserManagementService {
       )
 
       if (!response.ok) {
-        const errorData = await response
-          .json()
-          .catch(() => ({ detail: 'Failed to resend invitation' }))
         throw new Error(
-          errorData.detail || `HTTP ${response.status}: ${response.statusText}`
+          await extractApiErrorMessage(response, 'Failed to resend invitation')
         )
       }
 
@@ -935,6 +973,14 @@ export class UserManagementService {
   /**
    * Bulk update users
    * ENHANCED January 4, 2026: Support for new status types
+   *
+   * NOTE: dispatches reference `UserManagementService.X` instead of `this.X`.
+   * If a caller passes this method as a detached callback (e.g.
+   * `useMutation({ mutationFn: UserManagementService.bulkUpdateUsers })`),
+   * `this` is rebound by the call site and `this.updateUserRole` resolves
+   * to `undefined`. Using the class name keeps the dispatch correct
+   * regardless of how the function is invoked. See
+   * memorybank/OmniFrame/Debug/Fix-Bulk-Action-This-Binding.md
    */
   static async bulkUpdateUsers(bulkData: BulkActionData): Promise<void> {
     try {
@@ -944,7 +990,7 @@ export class UserManagementService {
         case 'activate':
           await Promise.all(
             user_ids.map((id) =>
-              this.updateUserStatusWithReason(id, {
+              UserManagementService.updateUserStatusWithReason(id, {
                 new_status: 'active',
                 reason: reason || 'Bulk activation',
               })
@@ -954,7 +1000,7 @@ export class UserManagementService {
         case 'deactivate':
           await Promise.all(
             user_ids.map((id) =>
-              this.updateUserStatusWithReason(id, {
+              UserManagementService.updateUserStatusWithReason(id, {
                 new_status: 'inactive',
                 reason: reason || 'Bulk deactivation',
               })
@@ -965,7 +1011,7 @@ export class UserManagementService {
           if (!reason) throw new Error('Reason is required for suspend action')
           await Promise.all(
             user_ids.map((id) =>
-              this.updateUserStatusWithReason(id, {
+              UserManagementService.updateUserStatusWithReason(id, {
                 new_status: 'suspended',
                 reason,
               })
@@ -977,7 +1023,7 @@ export class UserManagementService {
             throw new Error('Reason is required for terminate action')
           await Promise.all(
             user_ids.map((id) =>
-              this.updateUserStatusWithReason(id, {
+              UserManagementService.updateUserStatusWithReason(id, {
                 new_status: 'terminated',
                 reason,
               })
@@ -988,7 +1034,7 @@ export class UserManagementService {
           if (!reason) throw new Error('Reason is required for on leave action')
           await Promise.all(
             user_ids.map((id) =>
-              this.updateUserStatusWithReason(id, {
+              UserManagementService.updateUserStatusWithReason(id, {
                 new_status: 'on_leave',
                 reason,
                 leave_return_date,
@@ -997,14 +1043,20 @@ export class UserManagementService {
           )
           break
         case 'delete':
-          await Promise.all(user_ids.map((id) => this.deleteUser(id)))
+          await Promise.all(
+            user_ids.map((id) => UserManagementService.deleteUser(id))
+          )
           break
         case 'change_role':
           if (!role) throw new Error('Role is required for change_role action')
-          await Promise.all(user_ids.map((id) => this.updateUserRole(id, role)))
+          await Promise.all(
+            user_ids.map((id) => UserManagementService.updateUserRole(id, role))
+          )
           break
         case 'send_invitation':
-          await Promise.all(user_ids.map((id) => this.resendInvitation(id)))
+          await Promise.all(
+            user_ids.map((id) => UserManagementService.resendInvitation(id))
+          )
           break
         case 'export':
           // Export is handled client-side
@@ -1132,7 +1184,7 @@ export class UserManagementService {
   static async getUserPermissions(userId: string): Promise<UserPermission[]> {
     try {
       // Get role-based permissions using role_id
-      const user = await this.getUserById(userId)
+      const user = await UserManagementService.getUserById(userId)
 
       const { data: rolePermissions, error: roleError } = user.role_id
         ? await supabase
@@ -1376,3 +1428,5 @@ export class UserManagementService {
     }
   }
 }
+
+// Created and developed by Jai Singh

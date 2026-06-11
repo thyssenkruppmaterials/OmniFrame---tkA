@@ -1,3 +1,4 @@
+# Created and developed by Jai Singh
 """
 Customer Portal Ticketing API endpoints.
 Public-facing endpoints with optional authentication for productivity tracking.
@@ -828,5 +829,4 @@ async def get_ticket_events(
         logger.error(f"Error fetching events: {str(e)}", exc_info=True)
         raise sanitized_error(500, public_message="Failed to fetch events.", exc=e, context="get_ticket_events")
 
-# Developer and Creator: Jai Singh
-
+# Created and developed by Jai Singh

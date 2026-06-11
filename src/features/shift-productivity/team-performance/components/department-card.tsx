@@ -1,3 +1,4 @@
+// Created and developed by Jai Singh
 /**
  * Department Card Component
  * Expandable department/area performance card with associate list
@@ -323,6 +324,35 @@ const TASK_METRIC_CONFIG: {
     shortLabel: 'Counts',
     color: 'text-indigo-600 dark:text-indigo-400',
     bgColor: 'bg-indigo-500/10',
+  },
+  // Kit workflow stages — migration 310
+  {
+    key: 'kit_picking',
+    label: 'Kit Picking',
+    shortLabel: 'Kit Pick',
+    color: 'text-lime-600 dark:text-lime-400',
+    bgColor: 'bg-lime-500/10',
+  },
+  {
+    key: 'kit_building',
+    label: 'Kit Building',
+    shortLabel: 'Kit Build',
+    color: 'text-teal-600 dark:text-teal-400',
+    bgColor: 'bg-teal-500/10',
+  },
+  {
+    key: 'kit_inspection',
+    label: 'Kit Inspection',
+    shortLabel: 'Kit Insp',
+    color: 'text-fuchsia-600 dark:text-fuchsia-400',
+    bgColor: 'bg-fuchsia-500/10',
+  },
+  {
+    key: 'kit_dock_staging',
+    label: 'Dock Staging',
+    shortLabel: 'Dock',
+    color: 'text-sky-600 dark:text-sky-400',
+    bgColor: 'bg-sky-500/10',
   },
 ]
 
@@ -849,3 +879,5 @@ export function AreaGrid({
     </motion.div>
   )
 }
+
+// Created and developed by Jai Singh

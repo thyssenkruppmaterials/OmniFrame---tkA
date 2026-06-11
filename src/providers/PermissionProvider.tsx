@@ -1,3 +1,4 @@
+// Created and developed by Jai Singh
 import { useEffect, createContext, useContext, ReactNode } from 'react'
 import { useNavigationStore } from '@/stores/navigationStore'
 import { usePermissionStore } from '@/stores/permissionStore'
@@ -182,3 +183,5 @@ export const usePermissionProvider = () => {
   }
   return context
 }
+
+// Created and developed by Jai Singh

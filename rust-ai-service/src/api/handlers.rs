@@ -1,3 +1,4 @@
+// Created and developed by Jai Singh
 //! API Handlers
 //! 
 //! HTTP endpoint handlers for the AI analysis service.
@@ -398,3 +399,5 @@ async fn mark_analysis_failed(
     
     Ok(())
 }
+
+// Created and developed by Jai Singh

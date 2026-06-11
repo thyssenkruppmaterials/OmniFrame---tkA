@@ -1,3 +1,4 @@
+// Created and developed by Jai Singh
 import { Suspense, lazy } from 'react'
 import { Loader2 } from 'lucide-react'
 import { useTabSearchParam } from '@/hooks/use-tab-search-param'
@@ -158,3 +159,5 @@ export default function KittingManagement() {
     </>
   )
 }
+
+// Created and developed by Jai Singh

@@ -9,7 +9,7 @@
       "owner": "Person or team responsible for review",
       "expires": "YYYY-MM-DD date when this exception must be re-evaluated"
     },
-    "docs": "See project documentation for the dependency audit policy."
+    "docs": "docs/quality/dependency-audit-policy.md"
   },
   "allowlist": []
 }

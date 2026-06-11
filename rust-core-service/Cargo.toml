@@ -1,10 +1,10 @@
 [package]
 name = "rust-core-service"
-version = "0.1.0"
+version = "0.1.1"
 edition = "2021"
 rust-version = "1.75"
-description = "High-performance Rust core service for OmniFrame - database queries, caching, and JWT validation"
-authors = ["Jai Singh"]
+description = "High-performance Rust core service for OneBox AI - database queries, caching, and JWT validation"
+authors = ["OneBox AI Team"]
 
 [dependencies]
 # Web Framework
@@ -19,14 +19,17 @@ tokio = { version = "1.35", features = ["full", "tracing"] }
 futures = "0.3"
 
 # Database
-sqlx = { version = "0.7", features = [
+# Pinned to =0.8.6 for RUSTSEC-2024-0363 (Postgres protocol PoC) and future
+# Supavisor transaction-mode pooling support (PR #3863 unnamed prepared
+# statements when `.persistent(false)`). See:
+# memorybank/OmniFrame/Implementations/Upgrade-Sqlx-08-Core-Service.md
+# `migrate` and `bigdecimal` features dropped (verified unused in src/).
+sqlx = { version = "=0.8.6", features = [
     "runtime-tokio-rustls",
     "postgres",
     "uuid",
     "chrono",
-    "json",
-    "bigdecimal",
-    "migrate"
+    "json"
 ] }
 
 # Redis - use bb8-redis which re-exports redis crate

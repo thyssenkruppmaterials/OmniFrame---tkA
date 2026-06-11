@@ -1,3 +1,4 @@
+// Created and developed by Jai Singh
 import {
   ChevronLeftIcon,
   ChevronRightIcon,
@@ -97,3 +98,5 @@ export function DataTablePagination<TData>({
     </div>
   )
 }
+
+// Created and developed by Jai Singh

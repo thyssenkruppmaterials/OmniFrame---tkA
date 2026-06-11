@@ -1,3 +1,4 @@
+// Created and developed by Jai Singh
 'use client'
 
 import { type HTMLAttributes, useEffect, useState } from 'react'
@@ -87,3 +88,5 @@ export const QRCode = ({
     />
   )
 }
+
+// Created and developed by Jai Singh

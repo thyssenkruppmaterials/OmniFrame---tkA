@@ -1,3 +1,4 @@
+// Created and developed by Jai Singh
 /**
  * Smart Session Manager
  * Predictive session management with intelligent refresh and monitoring
@@ -518,3 +519,5 @@ export const sessionManager = SessionManager.getInstance()
 
 // Export types
 export type { SessionConfig, SessionState }
+
+// Created and developed by Jai Singh

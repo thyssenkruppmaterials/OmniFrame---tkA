@@ -1,3 +1,4 @@
+// Created and developed by Jai Singh
 /**
  * Customer Portal Dashboard Component
  *
@@ -210,9 +211,9 @@ export function PortalDashboard() {
   }
 
   return (
-    <div className='space-y-4'>
+    <div>
       {/* Split View: Ticket List + Detail */}
-      <div className='grid min-h-[600px] grid-cols-1 gap-4 lg:grid-cols-5'>
+      <div className='grid min-h-[calc(100vh-200px)] grid-cols-1 gap-3 lg:grid-cols-5'>
         {/* Left Panel - Ticket List (40%) */}
         <div className='lg:col-span-2'>
           <TicketListPanel
@@ -270,3 +271,5 @@ export function PortalDashboard() {
     </div>
   )
 }
+
+// Created and developed by Jai Singh

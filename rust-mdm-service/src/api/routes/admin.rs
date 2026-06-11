@@ -1,3 +1,4 @@
+// Created and developed by Jai Singh
 use axum::{
     extract::{Path, Query, Request, State},
     http::StatusCode,
@@ -259,3 +260,5 @@ pub async fn write_command_event(
         tracing::warn!(error = %e, command_id = %command_id, "Failed to write command event");
     }
 }
+
+// Created and developed by Jai Singh

@@ -1,3 +1,4 @@
+// Created and developed by Jai Singh
 import { logger } from '@/lib/utils/logger'
 
 export interface CacheEntry<T> {
@@ -270,4 +271,5 @@ export class DistributedPermissionCache {
     logger.log('Distributed permission cache disconnected')
   }
 }
-// Developer and Creator: Jai Singh
+
+// Created and developed by Jai Singh

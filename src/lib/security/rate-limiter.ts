@@ -1,3 +1,4 @@
+// Created and developed by Jai Singh
 /**
  * Enterprise Rate Limiter for OmniFrame RBAC System
  * High-performance rate limiting and DDoS protection for 100,000+ users
@@ -803,4 +804,5 @@ export type {
   RateLimitRule,
   SecurityMetrics,
 }
-// Developer and Creator: Jai Singh
+
+// Created and developed by Jai Singh

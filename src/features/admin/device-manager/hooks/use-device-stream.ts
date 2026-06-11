@@ -1,3 +1,4 @@
+// Created and developed by Jai Singh
 import { useState, useCallback, useEffect, useRef } from 'react'
 import { supabase } from '@/lib/supabase/client'
 import type { DeviceStatusEvent } from '../types/device-manager.types'
@@ -117,3 +118,5 @@ export function useDeviceStream(): UseDeviceStreamReturn {
 
   return { devices, isConnected, error, reconnect, disconnect }
 }
+
+// Created and developed by Jai Singh

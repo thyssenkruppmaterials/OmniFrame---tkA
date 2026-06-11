@@ -1,3 +1,4 @@
+// Created and developed by Jai Singh
 import { Toaster as Sonner, ToasterProps } from 'sonner'
 import { useTheme } from '@/context/theme-context'
 import { useToastSettings } from '@/context/toast-settings-context'
@@ -60,3 +61,5 @@ const Toaster = ({ ...props }: ToasterProps) => {
 }
 
 export { Toaster }
+
+// Created and developed by Jai Singh

@@ -1,3 +1,4 @@
+// Created and developed by Jai Singh
 import { useState } from 'react'
 import {
   IconMapPin,
@@ -325,3 +326,5 @@ export function LocationIntelligenceTab() {
     </div>
   )
 }
+
+// Created and developed by Jai Singh

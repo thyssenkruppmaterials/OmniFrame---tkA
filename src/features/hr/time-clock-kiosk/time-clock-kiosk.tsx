@@ -1,3 +1,4 @@
+// Created and developed by Jai Singh
 import { useState, useCallback, useEffect } from 'react'
 import { format } from 'date-fns'
 import {
@@ -148,7 +149,7 @@ export default function TimeClockKiosk() {
         <header className='border-border bg-card flex shrink-0 items-center justify-between border-b px-6 py-3'>
           <div className='flex items-center gap-4'>
             <img
-              src='/images/favicon.svg'
+              src='/images/OneBoxLogoX.png'
               alt='OmniFrame Logo'
               className='h-9 w-9 shrink-0 object-contain'
               style={{ animation: 'spin 8s linear infinite' }}
@@ -455,3 +456,5 @@ export default function TimeClockKiosk() {
     </div>
   )
 }
+
+// Created and developed by Jai Singh

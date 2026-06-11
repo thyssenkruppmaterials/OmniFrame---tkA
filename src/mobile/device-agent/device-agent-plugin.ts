@@ -1,3 +1,4 @@
+// Created and developed by Jai Singh
 import { registerPlugin } from '@capacitor/core'
 
 export interface DeviceAgentPlugin {
@@ -58,3 +59,5 @@ export interface DeviceHealthReport {
 const DeviceAgent = registerPlugin<DeviceAgentPlugin>('DeviceAgent')
 
 export default DeviceAgent
+
+// Created and developed by Jai Singh

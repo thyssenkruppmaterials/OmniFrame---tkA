@@ -1,3 +1,4 @@
+// Created and developed by Jai Singh
 import { usePermissions } from '../context/permissions-context'
 import { PermissionCreateDialog } from './permission-create-dialog'
 import { PermissionDeleteDialog } from './permission-delete-dialog'
@@ -35,3 +36,5 @@ export function PermissionsDialogs() {
     </>
   )
 }
+
+// Created and developed by Jai Singh

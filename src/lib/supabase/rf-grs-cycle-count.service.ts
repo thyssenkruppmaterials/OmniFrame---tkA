@@ -1,3 +1,4 @@
+// Created and developed by Jai Singh
 /**
  * RF GRS Cycle Count Service
  *
@@ -574,4 +575,5 @@ class RFGRSCycleCountService {
 
 // Export singleton instance
 export const rfGRSCycleCountService = new RFGRSCycleCountService()
-// Developer and Creator: Jai Singh
+
+// Created and developed by Jai Singh

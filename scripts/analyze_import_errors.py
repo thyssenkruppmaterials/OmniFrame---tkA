@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# Created and developed by Jai Singh
 """
 Analyze import errors from the legacy inbound scans import.
 Shows summary of error types and missing users.
@@ -39,3 +40,5 @@ for user, count in missing_users.most_common(20):
     print(f"  {user}: {count} records")
 
 print("\n" + "=" * 80)
+
+# Created and developed by Jai Singh

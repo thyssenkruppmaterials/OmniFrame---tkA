@@ -1,9 +1,10 @@
+// Created and developed by Jai Singh
 //! API error types for rust-work-service
 //!
 //! Provides a unified error type for all API responses.
 
 use axum::{
-    http::StatusCode,
+    http::{HeaderValue, StatusCode},
     response::{IntoResponse, Response},
     Json,
 };
@@ -55,6 +56,16 @@ pub enum ApiError {
     /// Service unavailable - dependency failure
     #[error("Service unavailable: {0}")]
     ServiceUnavailable(String),
+
+    /// Too many requests — caller exceeded a per-window quota.
+    /// Carries an optional `Retry-After` value in seconds so the
+    /// HTTP layer can surface it to clients.
+    #[error("Too many requests: {message}")]
+    TooManyRequests {
+        message: String,
+        /// Seconds the caller should wait before retrying.
+        retry_after_secs: Option<u64>,
+    },
 
     /// Database error
     #[error("Database error: {0}")]
@@ -120,6 +131,20 @@ impl IntoResponse for ApiError {
                     code: Some("SERVICE_UNAVAILABLE".to_string()),
                 },
             ),
+            ApiError::TooManyRequests { message, retry_after_secs } => {
+                let body = ErrorResponse {
+                    error: message.clone(),
+                    details: None,
+                    code: Some("TOO_MANY_REQUESTS".to_string()),
+                };
+                let mut response = (StatusCode::TOO_MANY_REQUESTS, Json(body)).into_response();
+                if let Some(secs) = retry_after_secs {
+                    if let Ok(value) = HeaderValue::from_str(&secs.to_string()) {
+                        response.headers_mut().insert("Retry-After", value);
+                    }
+                }
+                return response;
+            }
             ApiError::Database(e) => (
                 StatusCode::INTERNAL_SERVER_ERROR,
                 ErrorResponse {
@@ -136,3 +161,5 @@ impl IntoResponse for ApiError {
 
 /// Type alias for API results
 pub type ApiResult<T> = Result<T, ApiError>;
+
+// Created and developed by Jai Singh

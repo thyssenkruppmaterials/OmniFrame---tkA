@@ -1,3 +1,4 @@
+// Created and developed by Jai Singh
 import ContentSection from '../components/content-section'
 import { AccountForm } from './account-form'
 
@@ -12,3 +13,5 @@ export default function SettingsAccount() {
     </ContentSection>
   )
 }
+
+// Created and developed by Jai Singh

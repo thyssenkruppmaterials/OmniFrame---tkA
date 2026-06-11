@@ -1,3 +1,4 @@
+// Created and developed by Jai Singh
 import { useState, useEffect } from 'react'
 import { formatDistanceToNow } from 'date-fns'
 import {
@@ -393,3 +394,5 @@ export function SessionHistory() {
     </div>
   )
 }
+
+// Created and developed by Jai Singh

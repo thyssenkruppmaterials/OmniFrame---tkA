@@ -1,26 +1,36 @@
-import { Separator } from '@/components/ui/separator'
-
+// Created and developed by Jai Singh
 interface ContentSectionProps {
   title: string
   desc: string
-  children: React.JSX.Element
+  eyebrow?: string
+  actions?: React.ReactNode
+  children: React.ReactNode
 }
 
 export default function ContentSection({
   title,
   desc,
+  eyebrow,
+  actions,
   children,
 }: ContentSectionProps) {
   return (
-    <div className='flex flex-1 flex-col'>
-      <div className='flex-none'>
-        <h3 className='text-lg font-medium'>{title}</h3>
-        <p className='text-muted-foreground text-sm'>{desc}</p>
-      </div>
-      <Separator className='my-4 flex-none' />
-      <div className='h-full w-full overflow-y-auto scroll-smooth pr-4 pb-12'>
-        <div className='-mx-1 w-full px-1.5'>{children}</div>
-      </div>
-    </div>
+    <section className='flex min-h-0 flex-1 flex-col gap-5'>
+      <header className='flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between'>
+        <div className='min-w-0'>
+          {eyebrow && (
+            <p className='text-muted-foreground mb-1 text-[11px] font-semibold tracking-wider uppercase'>
+              {eyebrow}
+            </p>
+          )}
+          <h3 className='text-xl font-semibold tracking-tight'>{title}</h3>
+          <p className='text-muted-foreground mt-1 max-w-3xl text-sm'>{desc}</p>
+        </div>
+        {actions && <div className='shrink-0'>{actions}</div>}
+      </header>
+      <div className='min-w-0'>{children}</div>
+    </section>
   )
 }
+
+// Created and developed by Jai Singh

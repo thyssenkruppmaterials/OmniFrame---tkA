@@ -1,3 +1,4 @@
+// Created and developed by Jai Singh
 /**
  * Smartsheet API client for OmniFrame Logistics.
  * Provides comprehensive interface to the FastAPI Smartsheet backend.
@@ -1080,4 +1081,5 @@ export const smartsheetApi = new SmartsheetApiClient()
 
 // Export default
 export default smartsheetApi
-// Developer and Creator: Jai Singh
+
+// Created and developed by Jai Singh

@@ -1,5 +1,7 @@
+// Created and developed by Jai Singh
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { format, formatDistanceToNow } from 'date-fns'
+import { useQuery } from '@tanstack/react-query'
 import {
   AlertCircle,
   CalendarIcon,
@@ -7,6 +9,7 @@ import {
   ChevronLeft,
   ChevronRight,
   ChevronUp,
+  Clock,
   Download,
   Eye,
   FileText,
@@ -20,7 +23,6 @@ import {
   Trash2,
   Truck,
   Upload,
-  Users,
   X,
 } from 'lucide-react'
 import { toast } from 'sonner'
@@ -42,13 +44,6 @@ import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Calendar } from '@/components/ui/calendar'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogHeader,
-  DialogTitle,
-} from '@/components/ui/dialog'
 import { DispositionEditorDialog } from '@/components/ui/disposition-editor-dialog'
 import { DispositionSelect } from '@/components/ui/disposition-select'
 import {
@@ -60,12 +55,20 @@ import {
 import { ImportConfirmDialog } from '@/components/ui/import-confirm-dialog'
 import { ImportProgressDialog } from '@/components/ui/import-progress-dialog'
 import { Input } from '@/components/ui/input'
+import { KpiGrid } from '@/components/ui/kpi-grid'
 import {
   Popover,
   PopoverContent,
   PopoverTrigger,
 } from '@/components/ui/popover'
-import { Separator } from '@/components/ui/separator'
+import {
+  ResponsiveDialog,
+  ResponsiveDialogBody,
+  ResponsiveDialogDescription,
+  ResponsiveDialogHeader,
+  ResponsiveDialogTitle,
+} from '@/components/ui/responsive-dialog'
+import { StatTile } from '@/components/ui/stat-tile'
 import {
   Table,
   TableBody,
@@ -357,6 +360,19 @@ const DeliveryStatusManager: React.FC<DeliveryStatusManagerProps> = React.memo(
     const [showOpenOnly, setShowOpenOnly] = useState(true) // Default to Open Only mode (November 1, 2025)
     const [showJS01Only, setShowJS01Only] = useState(false) // JS01 filter mode (November 5, 2025)
     const [showDeletedOnly, setShowDeletedOnly] = useState(false) // Show Deleted filter mode (November 9, 2025)
+
+    // Stat-card click filter (May 5, 2026) — mirrors the clickable-pill pattern
+    // used in the Inventory Counts tab. A single source of truth for which
+    // metric pill is currently driving the table filter.
+    type CardFilter =
+      | { type: 'shippingPoint'; value: 'oe' | 'irna' }
+      | { type: 'daysOpen'; value: 'over30' | 'over12' | 'over4' }
+      | {
+          type: 'tka'
+          value: 'liftFan' | 'wawf' | 'placeholder'
+        }
+      | null
+    const [cardFilter, setCardFilter] = useState<CardFilter>(null)
     const [selectedItem, setSelectedItem] = useState<DeliveryStatusData | null>(
       null
     )
@@ -415,9 +431,48 @@ const DeliveryStatusManager: React.FC<DeliveryStatusManagerProps> = React.memo(
     } = useDeliveryStatus({
       enableRealtime: shouldEnableRealtime,
       searchQuery: '',
-      openOnly: showOpenOnly && !showJS01Only && !showDeletedOnly, // Pass openOnly flag only if not in JS01 or Show Deleted mode
+      // `openOnly` is NEVER bypassed by a TKA card filter. Bypassing forces
+      // a fetch of the entire org (~98k rows) that truncates at the 10k row
+      // limit and makes the Total/OE/IRNA/Days Open card counts shift
+      // incorrectly because the cards compute from this main `data` array.
+      //
+      // Instead, when the LiftFan card is active, the LiftFan rows are
+      // pulled in by a *separate* secondary query below
+      // (`liftFanRowsQuery`) and merged into the table's data only — the
+      // cards keep computing from the stable openOnly dataset.
+      //
+      // WAWF rows live in the openOnly dataset already (41/42 are in OE+IRNA
+      // shipping points; the lone outlier is acknowledged in the comment on
+      // `tkaNonControllableCounts`), so WAWF clicks don't need any bypass.
+      openOnly: showOpenOnly && !showJS01Only && !showDeletedOnly,
       includeDeleted: showDeletedOnly, // Include deleted deliveries when in Show Deleted mode (November 9, 2025)
     })
+
+    // Secondary query: fetch LiftFan rows when the LiftFan TKA card is
+    // active. The server's `openOnly` filter excludes LiftFan by name, so
+    // LiftFan rows would otherwise be invisible to the table. Cards keep
+    // their stable openOnly source (above), so this query has no effect
+    // on card counts — only on what the table renders.
+    const isLiftFanCardActive =
+      cardFilter?.type === 'tka' && cardFilter.value === 'liftFan'
+    const { data: liftFanRows = [] } = useQuery({
+      queryKey: ['delivery-status-liftfan-rows', organizationId] as const,
+      queryFn: () => deliveryStatusService.fetchLiftFanRows(),
+      enabled: !!organizationId && isLiftFanCardActive,
+      staleTime: 60_000,
+    })
+
+    // Table data source = stable openOnly data ∪ LiftFan rows (when active).
+    // `data` (used by all card calcs) is unchanged.
+    const tableData = useMemo(() => {
+      if (!isLiftFanCardActive || liftFanRows.length === 0) return data
+      const seen = new Set(data.map((d) => d.id))
+      const merged = [...data]
+      for (const r of liftFanRows) {
+        if (!seen.has(r.id)) merged.push(r)
+      }
+      return merged
+    }, [data, liftFanRows, isLiftFanCardActive])
 
     // Pre-load dispositions IMMEDIATELY when data arrives to prevent sequential popping
     // Also auto-assign DCMA and WAWF dispositions (November 9, 2025)
@@ -469,7 +524,10 @@ const DeliveryStatusManager: React.FC<DeliveryStatusManagerProps> = React.memo(
 
     // Sort and filter data
     const sortedAndFilteredData = useMemo(() => {
-      let processedData = [...data]
+      // `tableData` = openOnly `data` ∪ LiftFan rows (when LiftFan card is
+      // active). All cards continue to read from `data`, so card counts stay
+      // stable regardless of which TKA card is clicked.
+      let processedData = [...tableData]
 
       // Show Deleted mode - show ONLY deleted deliveries (November 9, 2025)
       if (showDeletedOnly) {
@@ -488,6 +546,9 @@ const DeliveryStatusManager: React.FC<DeliveryStatusManagerProps> = React.memo(
       // Open Only mode - show OE + IRNA shipping points, non-completed
       // EXCLUDE "Ship in Place - LiftFan JPO Depot" (November 9, 2025)
       // EXCLUDE deliveries with "Deleted" disposition (November 10, 2025)
+      // EXCLUDE WAWF rows from default view (May 7, 2026) — they belong to
+      //   the TKA Non-Controllable section. The WAWF card click filter below
+      //   explicitly opts back into showing them.
       else if (showOpenOnly) {
         // Filter out deliveries with "Deleted" disposition regardless of search state
         // This ensures deleted dispositions never show in Open Only mode
@@ -496,6 +557,18 @@ const DeliveryStatusManager: React.FC<DeliveryStatusManagerProps> = React.memo(
             item.disposition_name?.toUpperCase() !== 'DELETED'
           return isNotDeleted
         })
+
+        // Filter out WAWF rows so they don't double-count against the TKA
+        // Non-Controllable section. Bypass when the WAWF card is itself the
+        // active card filter (so users can drill into WAWF rows from there).
+        const isWawfCardActive =
+          cardFilter?.type === 'tka' && cardFilter.value === 'wawf'
+        if (!isWawfCardActive) {
+          processedData = processedData.filter(
+            (item) =>
+              !item.external_identification_1?.toUpperCase().includes('WAWF')
+          )
+        }
 
         // Additional filtering when search is active (search bypasses openOnly database filter)
         if (searchQuery.trim()) {
@@ -520,6 +593,69 @@ const DeliveryStatusManager: React.FC<DeliveryStatusManagerProps> = React.memo(
               item.customer_name !== 'Ship in Place - LiftFan JPO Depot'
             return isNotCompleted && isOeOrIrna && isNotLiftFan
           })
+        }
+      }
+
+      // Apply stat-card pill filter (May 5, 2026)
+      // Mirrors the inventory counts tab: each clickable card pill applies a
+      // narrow secondary filter on top of whatever mode (Open Only / All /
+      // JS01 / Deleted) is active.
+      if (cardFilter) {
+        const oeShippingPoints = ['PDCE', 'NMP1', 'NME1', 'KY01', 'DCSP']
+        if (cardFilter.type === 'shippingPoint') {
+          if (cardFilter.value === 'oe') {
+            processedData = processedData.filter(
+              (item) =>
+                item.shipping_point &&
+                oeShippingPoints.includes(item.shipping_point.toUpperCase())
+            )
+          } else if (cardFilter.value === 'irna') {
+            processedData = processedData.filter(
+              (item) => item.shipping_point?.toUpperCase() === 'IRNA'
+            )
+          }
+        } else if (cardFilter.type === 'daysOpen') {
+          // Cumulative thresholds: each card answers "how many deliveries
+          // are at least N days old?", matching the literal ">N Days"
+          // labels on the cards. The buckets intentionally overlap — a
+          // 290-day-old delivery satisfies all three filters.
+          processedData = processedData.filter((item) => {
+            if (item.days_open === null || item.days_open === undefined)
+              return false
+            if (cardFilter.value === 'over30') return item.days_open > 30
+            if (cardFilter.value === 'over12') return item.days_open > 12
+            if (cardFilter.value === 'over4') return item.days_open > 4
+            return false
+          })
+        } else if (cardFilter.type === 'tka') {
+          // The TKA cards count *open* (no AGM) and *non-soft-deleted* rows
+          // — see `getStatistics()` in delivery-status.service.ts. When a
+          // TKA card is active the server-side `openOnly` flag is bypassed
+          // (see `useDeliveryStatus({ openOnly: ..., cardFilter?.type !==
+          // 'tka' })`), so `data` contains is_deleted=true and AGM-set rows
+          // that the table must drop client-side to keep the card count and
+          // the visible row count in sync.
+          const isOpenAndNotSoftDeleted = (item: DeliveryStatusData) =>
+            !item.actual_goods_movement_date && !item.is_deleted
+          if (cardFilter.value === 'liftFan') {
+            processedData = processedData.filter(
+              (item) =>
+                item.customer_name === 'Ship in Place - LiftFan JPO Depot' &&
+                isOpenAndNotSoftDeleted(item)
+            )
+          } else if (cardFilter.value === 'wawf') {
+            processedData = processedData.filter(
+              (item) =>
+                item.external_identification_1
+                  ?.toUpperCase()
+                  .includes('WAWF') && isOpenAndNotSoftDeleted(item)
+            )
+          } else if (cardFilter.value === 'placeholder') {
+            // "TBD" pill — currently no rows are tagged as TBD; reserved for
+            // future placeholder logic. Filter to nothing so the table reads
+            // as empty (matching the "0" on the card).
+            processedData = []
+          }
         }
       }
 
@@ -602,7 +738,7 @@ const DeliveryStatusManager: React.FC<DeliveryStatusManagerProps> = React.memo(
 
       return processedData
     }, [
-      data,
+      tableData,
       filterConfig,
       advancedFilterConfig,
       searchQuery,
@@ -610,6 +746,7 @@ const DeliveryStatusManager: React.FC<DeliveryStatusManagerProps> = React.memo(
       showOpenOnly,
       showJS01Only,
       showDeletedOnly,
+      cardFilter,
     ])
 
     // Pagination calculations
@@ -619,84 +756,88 @@ const DeliveryStatusManager: React.FC<DeliveryStatusManagerProps> = React.memo(
     const endIndex = startIndex + recordsPerPage
     const currentPageData = sortedAndFilteredData.slice(startIndex, endIndex)
 
-    // Calculate shipping point-specific counts (Open deliveries only)
-    // OE = Sum of open deliveries for shipping points: PDCE, NMP1, NME1, KY01, DCSP
-    // EXCLUDE "Ship in Place - LiftFan JPO Depot" and WAWF deliveries with no goods movement date
-    const shippingPointCounts = useMemo(() => {
-      const openDeliveries = data.filter(
-        (item) =>
-          item.status?.toLowerCase() !== 'completed' &&
-          item.customer_name !== 'Ship in Place - LiftFan JPO Depot' &&
-          !(
-            item.external_identification_1?.toUpperCase().includes('WAWF') &&
-            !item.actual_goods_movement_date
-          )
-      )
-
-      // OE shipping points array
-      const oeShippingPoints = ['PDCE', 'NMP1', 'NME1', 'KY01', 'DCSP']
-
-      return {
-        oe: openDeliveries.filter(
-          (item) =>
-            item.shipping_point &&
-            oeShippingPoints.includes(item.shipping_point.toUpperCase())
-        ).length,
-        irna: openDeliveries.filter(
-          (item) => item.shipping_point?.toUpperCase() === 'IRNA'
-        ).length,
-        total: openDeliveries.length,
-      }
-    }, [data])
-
-    // Calculate days open counts for OE + IRNA deliveries only
-    // Mutually exclusive ranges: >30, >12 to <=30, >4 to <=12
-    const daysOpenCounts = useMemo(() => {
-      const openDeliveries = data.filter(
-        (item) =>
-          item.status?.toLowerCase() !== 'completed' &&
-          item.customer_name !== 'Ship in Place - LiftFan JPO Depot' &&
-          !(
-            item.external_identification_1?.toUpperCase().includes('WAWF') &&
-            !item.actual_goods_movement_date
-          )
-      )
-
-      // OE shipping points array
-      const oeShippingPoints = ['PDCE', 'NMP1', 'NME1', 'KY01', 'DCSP']
-
-      // Filter for OE + IRNA only
-      const oeIrnaDeliveries = openDeliveries.filter((item) => {
-        const shippingPoint = item.shipping_point?.toUpperCase()
+    // Card counts must mirror what the table actually shows in `showOpenOnly`
+    // mode (the default view) so a user clicking a card sees the same number
+    // of rows in the table as the card claims. The canonical filter chain
+    // matches `sortedAndFilteredData`'s open-only branch:
+    //
+    //   - shipping_point IN OE + IRNA
+    //   - customer_name <> 'Ship in Place - LiftFan JPO Depot'  (TKA card)
+    //   - external_identification_1 NOT LIKE '%WAWF%'           (TKA card)
+    //   - status <> 'completed'  (i.e. no actual_goods_movement_date)
+    //   - disposition_name <> 'DELETED'
+    //
+    // The four card groups (Total Deliveries / Days Open / TKA / PGI) are
+    // designed to describe **non-overlapping** populations. LiftFan and WAWF
+    // rows belong exclusively to the TKA Non-Controllable card and must be
+    // excluded from Total/OE/IRNA and Days Open so the same row is never
+    // double-counted across two card groups.
+    //
+    // Defining the chain explicitly here (instead of relying on the server's
+    // `openOnly` flag) is intentional: that flag is bypassed when a TKA
+    // Non-Controllable card filter is active, so `data` may contain rows
+    // outside this scope. The cards must still describe the open-OE+IRNA
+    // population regardless.
+    const OE_SHIPPING_POINTS = useMemo(
+      () => ['PDCE', 'NMP1', 'NME1', 'KY01', 'DCSP'],
+      []
+    )
+    const openOeIrnaDeliveries = useMemo(() => {
+      return data.filter((item) => {
+        const sp = item.shipping_point?.toUpperCase()
+        const isOeOrIrna =
+          !!sp && (OE_SHIPPING_POINTS.includes(sp) || sp === 'IRNA')
+        const isOpen = item.status?.toLowerCase() !== 'completed'
+        const isNotLiftFan =
+          item.customer_name !== 'Ship in Place - LiftFan JPO Depot'
+        const isNotWawf = !item.external_identification_1
+          ?.toUpperCase()
+          .includes('WAWF')
+        const isNotDeletedDisposition =
+          item.disposition_name?.toUpperCase() !== 'DELETED'
         return (
-          shippingPoint &&
-          (oeShippingPoints.includes(shippingPoint) || shippingPoint === 'IRNA')
+          isOeOrIrna &&
+          isOpen &&
+          isNotLiftFan &&
+          isNotWawf &&
+          isNotDeletedDisposition
         )
       })
+    }, [data, OE_SHIPPING_POINTS])
 
+    const shippingPointCounts = useMemo(() => {
       return {
-        over30: oeIrnaDeliveries.filter(
+        oe: openOeIrnaDeliveries.filter(
           (item) =>
-            item.days_open !== null &&
-            item.days_open !== undefined &&
-            item.days_open > 30
+            item.shipping_point &&
+            OE_SHIPPING_POINTS.includes(item.shipping_point.toUpperCase())
         ).length,
-        over12: oeIrnaDeliveries.filter(
-          (item) =>
-            item.days_open !== null &&
-            item.days_open !== undefined &&
-            item.days_open > 12 &&
-            item.days_open <= 30
+        irna: openOeIrnaDeliveries.filter(
+          (item) => item.shipping_point?.toUpperCase() === 'IRNA'
         ).length,
-        over4: oeIrnaDeliveries.filter(
-          (item) =>
-            item.days_open !== null &&
-            item.days_open !== undefined &&
-            item.days_open > 4 &&
-            item.days_open <= 12
+        total: openOeIrnaDeliveries.length,
+      }
+    }, [openOeIrnaDeliveries, OE_SHIPPING_POINTS])
+
+    // Cumulative aging counts — each value answers "how many open OE/IRNA
+    // deliveries are at least N days old?", matching the ">N Days" card
+    // labels and the cumulative click-filter logic above. Buckets overlap
+    // by design (a 290-day delivery is counted in all three).
+    const daysOpenCounts = useMemo(() => {
+      const hasDaysOpen = (item: DeliveryStatusData) =>
+        item.days_open !== null && item.days_open !== undefined
+      return {
+        over30: openOeIrnaDeliveries.filter(
+          (item) => hasDaysOpen(item) && (item.days_open as number) > 30
+        ).length,
+        over12: openOeIrnaDeliveries.filter(
+          (item) => hasDaysOpen(item) && (item.days_open as number) > 12
+        ).length,
+        over4: openOeIrnaDeliveries.filter(
+          (item) => hasDaysOpen(item) && (item.days_open as number) > 4
         ).length,
       }
-    }, [data])
+    }, [openOeIrnaDeliveries])
 
     // TKA Non-Controllable counts now come from statistics (full dataset)
     // This ensures accurate counts even when Open Only filter is active (November 9, 2025)
@@ -735,9 +876,15 @@ const DeliveryStatusManager: React.FC<DeliveryStatusManagerProps> = React.memo(
       setCurrentPage(1)
     }, [searchQuery])
 
+    // Reset to first page when a stat-card pill filter is toggled (May 5, 2026)
+    React.useEffect(() => {
+      setCurrentPage(1)
+    }, [cardFilter])
+
     // Clear all filters
     const handleClearFilters = useCallback(() => {
       setFilterConfig({})
+      setCardFilter(null)
       setCurrentPage(1)
     }, [])
 
@@ -902,194 +1049,424 @@ const DeliveryStatusManager: React.FC<DeliveryStatusManagerProps> = React.memo(
       )
     }
 
-    // Memoized statistics cards to prevent unnecessary re-renders
+    // Memoized statistics cards (May 5, 2026 redesign)
+    // Mirrors the clickable-pill pattern from the Inventory Counts tab so each
+    // numeric pill doubles as a quick-filter for the table below.
     // eslint-disable-next-line react-hooks/rules-of-hooks
-    const StatisticsCards = useMemo(
-      () => (
-        <div className='grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-4'>
-          <Card>
-            <CardHeader className='flex flex-row items-center justify-between space-y-0 pb-2'>
-              <CardTitle className='text-sm font-medium'>
+    const StatisticsCards = useMemo(() => {
+      const isShippingPointActive = (v: 'oe' | 'irna') =>
+        cardFilter?.type === 'shippingPoint' && cardFilter.value === v
+      const anyShippingPointActive = cardFilter?.type === 'shippingPoint'
+
+      const isDaysOpenActive = (v: 'over30' | 'over12' | 'over4') =>
+        cardFilter?.type === 'daysOpen' && cardFilter.value === v
+      const anyDaysOpenActive = cardFilter?.type === 'daysOpen'
+
+      const isTkaActive = (v: 'liftFan' | 'wawf' | 'placeholder') =>
+        cardFilter?.type === 'tka' && cardFilter.value === v
+      const anyTkaActive = cardFilter?.type === 'tka'
+
+      // Wrapping <button> shared style. StatTile owns the surface tint;
+      // the outer button only carries the focus ring + active filter ring.
+      const pillButtonBase =
+        'group/pill block w-full rounded-lg text-left transition-shadow focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-offset-background cursor-pointer'
+
+      const toggleShippingPoint = (value: 'oe' | 'irna') =>
+        setCardFilter((curr) =>
+          curr?.type === 'shippingPoint' && curr.value === value
+            ? null
+            : { type: 'shippingPoint', value }
+        )
+
+      const toggleDaysOpen = (value: 'over30' | 'over12' | 'over4') =>
+        setCardFilter((curr) =>
+          curr?.type === 'daysOpen' && curr.value === value
+            ? null
+            : { type: 'daysOpen', value }
+        )
+
+      const toggleTka = (value: 'liftFan' | 'wawf' | 'placeholder') =>
+        setCardFilter((curr) =>
+          curr?.type === 'tka' && curr.value === value
+            ? null
+            : { type: 'tka', value }
+        )
+
+      return (
+        <div className='grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-4'>
+          {/* Card 1: Total Deliveries (shipping-point breakdown) */}
+          <Card className='group border-border/50 bg-card/50 relative overflow-hidden backdrop-blur-sm transition-all duration-300 hover:shadow-lg hover:shadow-black/5 dark:hover:shadow-black/20'>
+            <div className='from-primary/5 to-primary/0 absolute inset-0 bg-linear-to-br opacity-0 transition-opacity duration-300 group-hover:opacity-100' />
+            <CardHeader className='relative flex flex-row items-center justify-between space-y-0 pb-2'>
+              <CardTitle className='text-muted-foreground flex items-center gap-2 text-xs font-medium tracking-wide uppercase'>
+                <div className='flex h-6 w-6 items-center justify-center rounded-md bg-slate-500/10 dark:bg-slate-400/10'>
+                  <FileText className='h-3.5 w-3.5 text-slate-600 dark:text-slate-400' />
+                </div>
                 Total Deliveries
               </CardTitle>
-              <FileText className='text-muted-foreground h-4 w-4' />
+              {anyShippingPointActive ? (
+                <button
+                  type='button'
+                  onClick={() => setCardFilter(null)}
+                  className='text-muted-foreground hover:text-foreground inline-flex items-center gap-1 rounded-full bg-slate-500/10 px-2 py-0.5 text-[10px] font-semibold tracking-wider uppercase transition-colors'
+                  title='Clear shipping point filter'
+                >
+                  Filtered · clear
+                </button>
+              ) : (
+                <span className='text-muted-foreground/60 text-[10px] font-medium tracking-wider uppercase'>
+                  Click to filter
+                </span>
+              )}
             </CardHeader>
-            <CardContent>
-              <div className='flex items-center justify-around space-x-4'>
-                {/* Open Deliveries */}
-                <div className='text-center'>
-                  <div className='text-2xl font-bold'>
-                    {(
-                      shippingPointCounts.oe + shippingPointCounts.irna
-                    ).toLocaleString()}
-                  </div>
-                  <p className='text-muted-foreground text-xs'>Open</p>
-                </div>
-
-                <Separator orientation='vertical' className='bg-border h-14' />
-
-                {/* OE Shipping Points (PDCE, NMP1, NME1, KY01, DCSP) */}
-                <div className='text-center'>
-                  <div className='text-2xl font-bold'>
-                    {shippingPointCounts.oe.toLocaleString()}
-                  </div>
-                  <p className='text-muted-foreground text-xs'>OE</p>
-                </div>
-
-                <Separator orientation='vertical' className='bg-border h-14' />
-
-                {/* IRNA Shipping Point */}
-                <div className='text-center'>
-                  <div className='text-2xl font-bold'>
-                    {shippingPointCounts.irna.toLocaleString()}
-                  </div>
-                  <p className='text-muted-foreground text-xs'>IRNA</p>
-                </div>
-              </div>
+            <CardContent className='relative pt-1 pb-4'>
+              <KpiGrid columns={3} density='compact'>
+                <button
+                  type='button'
+                  aria-pressed={!anyShippingPointActive}
+                  onClick={() => setCardFilter(null)}
+                  className={cn(
+                    pillButtonBase,
+                    'focus-visible:ring-slate-500/40',
+                    !anyShippingPointActive &&
+                      'ring-2 ring-slate-500/40 dark:ring-slate-400/40'
+                  )}
+                  title='Show OE + IRNA combined'
+                >
+                  <StatTile
+                    label='Open'
+                    value={shippingPointCounts.oe + shippingPointCounts.irna}
+                    accent='default'
+                    className='h-full transition-colors hover:bg-slate-500/10 dark:hover:bg-slate-400/10'
+                  />
+                </button>
+                <button
+                  type='button'
+                  aria-pressed={isShippingPointActive('oe')}
+                  onClick={() => toggleShippingPoint('oe')}
+                  className={cn(
+                    pillButtonBase,
+                    'focus-visible:ring-sky-500/40',
+                    isShippingPointActive('oe') && 'ring-2 ring-sky-500/60'
+                  )}
+                  title='Filter table to OE shipping points'
+                >
+                  <StatTile
+                    label='OE'
+                    value={shippingPointCounts.oe}
+                    accent='sky'
+                    className='h-full transition-colors hover:bg-sky-500/15 dark:hover:bg-sky-500/15'
+                  />
+                </button>
+                <button
+                  type='button'
+                  aria-pressed={isShippingPointActive('irna')}
+                  onClick={() => toggleShippingPoint('irna')}
+                  className={cn(
+                    pillButtonBase,
+                    'focus-visible:ring-emerald-500/40',
+                    isShippingPointActive('irna') &&
+                      'ring-2 ring-emerald-500/60'
+                  )}
+                  title='Filter table to IRNA shipping point'
+                >
+                  <StatTile
+                    label='IRNA'
+                    value={shippingPointCounts.irna}
+                    accent='emerald'
+                    className='h-full transition-colors hover:bg-emerald-500/15 dark:hover:bg-emerald-500/15'
+                  />
+                </button>
+              </KpiGrid>
             </CardContent>
           </Card>
 
-          <Card>
-            <CardHeader className='flex flex-row items-center justify-between space-y-0 pb-2'>
-              <CardTitle className='text-sm font-medium'>Days Open</CardTitle>
-              <Users className='text-muted-foreground h-4 w-4' />
+          {/* Card 2: Days Open (mutually-exclusive aging buckets) */}
+          <Card
+            className={cn(
+              'group relative overflow-hidden backdrop-blur-sm transition-all duration-300 hover:shadow-lg',
+              daysOpenCounts.over30 > 0
+                ? 'border-red-500/30 bg-red-500/5 hover:shadow-red-500/10 dark:border-red-500/20 dark:bg-red-500/5 dark:hover:shadow-red-500/5'
+                : 'border-border/50 bg-card/50 hover:shadow-black/5 dark:hover:shadow-black/20'
+            )}
+          >
+            <div className='absolute inset-0 bg-linear-to-br from-red-500/5 to-orange-500/0 opacity-0 transition-opacity duration-300 group-hover:opacity-100' />
+            <CardHeader className='relative flex flex-row items-center justify-between space-y-0 pb-2'>
+              <CardTitle className='text-muted-foreground flex items-center gap-2 text-xs font-medium tracking-wide uppercase'>
+                <div
+                  className={cn(
+                    'flex h-6 w-6 items-center justify-center rounded-md',
+                    daysOpenCounts.over30 > 0
+                      ? 'bg-red-500/15 dark:bg-red-500/10'
+                      : 'bg-slate-500/10 dark:bg-slate-400/10'
+                  )}
+                >
+                  <Clock
+                    className={cn(
+                      'h-3.5 w-3.5',
+                      daysOpenCounts.over30 > 0
+                        ? 'text-red-600 dark:text-red-400'
+                        : 'text-slate-600 dark:text-slate-400'
+                    )}
+                  />
+                </div>
+                Days Open
+              </CardTitle>
+              {anyDaysOpenActive ? (
+                <button
+                  type='button'
+                  onClick={() => setCardFilter(null)}
+                  className='text-muted-foreground hover:text-foreground inline-flex items-center gap-1 rounded-full bg-slate-500/10 px-2 py-0.5 text-[10px] font-semibold tracking-wider uppercase transition-colors'
+                  title='Clear days-open filter'
+                >
+                  Filtered · clear
+                </button>
+              ) : (
+                <span className='text-muted-foreground/60 text-[10px] font-medium tracking-wider uppercase'>
+                  Click to filter
+                </span>
+              )}
             </CardHeader>
-            <CardContent>
-              <div className='flex items-center justify-around space-x-4'>
-                {/* >30 Days */}
-                <div className='text-center'>
-                  <div className='text-2xl font-bold'>
-                    {daysOpenCounts.over30.toLocaleString()}
-                  </div>
-                  <p className='text-muted-foreground text-xs'>&gt;30 Days</p>
-                </div>
-
-                <Separator orientation='vertical' className='bg-border h-14' />
-
-                {/* >12 Days */}
-                <div className='text-center'>
-                  <div className='text-2xl font-bold'>
-                    {daysOpenCounts.over12.toLocaleString()}
-                  </div>
-                  <p className='text-muted-foreground text-xs'>&gt;12 Days</p>
-                </div>
-
-                <Separator orientation='vertical' className='bg-border h-14' />
-
-                {/* >4 Days */}
-                <div className='text-center'>
-                  <div className='text-2xl font-bold'>
-                    {daysOpenCounts.over4.toLocaleString()}
-                  </div>
-                  <p className='text-muted-foreground text-xs'>&gt;4 Days</p>
-                </div>
-              </div>
+            <CardContent className='relative pt-1 pb-4'>
+              <KpiGrid columns={3} density='compact'>
+                <button
+                  type='button'
+                  aria-pressed={isDaysOpenActive('over30')}
+                  onClick={() => toggleDaysOpen('over30')}
+                  className={cn(
+                    pillButtonBase,
+                    'focus-visible:ring-red-500/40',
+                    isDaysOpenActive('over30') && 'ring-2 ring-red-500/60'
+                  )}
+                  title='Filter table to deliveries over 30 days open'
+                >
+                  <StatTile
+                    label='>30 Days'
+                    value={daysOpenCounts.over30}
+                    accent='rose'
+                    className='h-full transition-colors hover:bg-rose-500/15 dark:hover:bg-rose-500/15'
+                  />
+                </button>
+                <button
+                  type='button'
+                  aria-pressed={isDaysOpenActive('over12')}
+                  onClick={() => toggleDaysOpen('over12')}
+                  className={cn(
+                    pillButtonBase,
+                    'focus-visible:ring-orange-500/40',
+                    isDaysOpenActive('over12') && 'ring-2 ring-orange-500/60'
+                  )}
+                  title='Filter table to deliveries 13–30 days open'
+                >
+                  <StatTile
+                    label='>12 Days'
+                    value={daysOpenCounts.over12}
+                    accent='orange'
+                    className='h-full transition-colors hover:bg-orange-500/15 dark:hover:bg-orange-500/15'
+                  />
+                </button>
+                <button
+                  type='button'
+                  aria-pressed={isDaysOpenActive('over4')}
+                  onClick={() => toggleDaysOpen('over4')}
+                  className={cn(
+                    pillButtonBase,
+                    'focus-visible:ring-amber-500/40',
+                    isDaysOpenActive('over4') && 'ring-2 ring-amber-500/60'
+                  )}
+                  title='Filter table to deliveries 5–12 days open'
+                >
+                  <StatTile
+                    label='>4 Days'
+                    value={daysOpenCounts.over4}
+                    accent='amber'
+                    className='h-full transition-colors hover:bg-amber-500/15 dark:hover:bg-amber-500/15'
+                  />
+                </button>
+              </KpiGrid>
             </CardContent>
           </Card>
 
-          <Card>
-            <CardHeader className='flex flex-row items-center justify-between space-y-0 pb-2'>
-              <CardTitle className='text-sm font-medium'>
+          {/* Card 3: TKA Non-Controllable (LiftFan / WAWF / TBD) */}
+          <Card
+            className={cn(
+              'group relative overflow-hidden backdrop-blur-sm transition-all duration-300 hover:shadow-lg',
+              tkaNonControllableCounts.liftFan + tkaNonControllableCounts.wawf >
+                0
+                ? 'border-amber-500/30 bg-amber-500/5 hover:shadow-amber-500/10 dark:border-amber-500/20 dark:bg-amber-500/5 dark:hover:shadow-amber-500/5'
+                : 'border-border/50 bg-card/50 hover:shadow-black/5 dark:hover:shadow-black/20'
+            )}
+          >
+            <div className='absolute inset-0 bg-linear-to-br from-amber-500/5 to-orange-500/0 opacity-0 transition-opacity duration-300 group-hover:opacity-100' />
+            <CardHeader className='relative flex flex-row items-center justify-between space-y-0 pb-2'>
+              <CardTitle className='text-muted-foreground flex items-center gap-2 text-xs font-medium tracking-wide uppercase'>
+                <div
+                  className={cn(
+                    'flex h-6 w-6 items-center justify-center rounded-md',
+                    tkaNonControllableCounts.liftFan +
+                      tkaNonControllableCounts.wawf >
+                      0
+                      ? 'bg-amber-500/15 dark:bg-amber-500/10'
+                      : 'bg-slate-500/10 dark:bg-slate-400/10'
+                  )}
+                >
+                  <AlertCircle
+                    className={cn(
+                      'h-3.5 w-3.5',
+                      tkaNonControllableCounts.liftFan +
+                        tkaNonControllableCounts.wawf >
+                        0
+                        ? 'text-amber-600 dark:text-amber-400'
+                        : 'text-slate-600 dark:text-slate-400'
+                    )}
+                  />
+                </div>
                 TKA Non-Controllable
               </CardTitle>
-              <AlertCircle className='text-muted-foreground h-4 w-4' />
+              {anyTkaActive ? (
+                <button
+                  type='button'
+                  onClick={() => setCardFilter(null)}
+                  className='text-muted-foreground hover:text-foreground inline-flex items-center gap-1 rounded-full bg-slate-500/10 px-2 py-0.5 text-[10px] font-semibold tracking-wider uppercase transition-colors'
+                  title='Clear TKA filter'
+                >
+                  Filtered · clear
+                </button>
+              ) : (
+                <span className='text-muted-foreground/60 text-[10px] font-medium tracking-wider uppercase'>
+                  Click to filter
+                </span>
+              )}
             </CardHeader>
-            <CardContent>
-              <div className='flex items-center justify-around space-x-4'>
-                {/* LiftFan JPO Depot */}
-                <div className='text-center'>
-                  <div className='text-2xl font-bold'>
-                    {tkaNonControllableCounts.liftFan.toLocaleString()}
-                  </div>
-                  <p className='text-muted-foreground text-xs'>LiftFan</p>
-                </div>
-
-                <Separator orientation='vertical' className='bg-border h-14' />
-
-                {/* WAWF */}
-                <div className='text-center'>
-                  <div className='text-2xl font-bold'>
-                    {tkaNonControllableCounts.wawf.toLocaleString()}
-                  </div>
-                  <p className='text-muted-foreground text-xs'>WAWF</p>
-                </div>
-
-                <Separator orientation='vertical' className='bg-border h-14' />
-
-                {/* Placeholder */}
-                <div className='text-center'>
-                  <div className='text-2xl font-bold'>
-                    {tkaNonControllableCounts.placeholder.toLocaleString()}
-                  </div>
-                  <p className='text-muted-foreground text-xs'>TBD</p>
-                </div>
-              </div>
+            <CardContent className='relative pt-1 pb-4'>
+              <KpiGrid columns={3} density='compact'>
+                <button
+                  type='button'
+                  aria-pressed={isTkaActive('liftFan')}
+                  onClick={() => toggleTka('liftFan')}
+                  className={cn(
+                    pillButtonBase,
+                    'focus-visible:ring-violet-500/40',
+                    isTkaActive('liftFan') && 'ring-2 ring-violet-500/60'
+                  )}
+                  title='Filter table to LiftFan JPO Depot deliveries'
+                >
+                  <StatTile
+                    label='LiftFan'
+                    value={tkaNonControllableCounts.liftFan}
+                    accent='violet'
+                    className='h-full transition-colors hover:bg-violet-500/15 dark:hover:bg-violet-500/15'
+                  />
+                </button>
+                <button
+                  type='button'
+                  aria-pressed={isTkaActive('wawf')}
+                  onClick={() => toggleTka('wawf')}
+                  className={cn(
+                    pillButtonBase,
+                    'focus-visible:ring-amber-500/40',
+                    isTkaActive('wawf') && 'ring-2 ring-amber-500/60'
+                  )}
+                  title='Filter table to WAWF deliveries (no goods movement)'
+                >
+                  <StatTile
+                    label='WAWF'
+                    value={tkaNonControllableCounts.wawf}
+                    accent='amber'
+                    className='h-full transition-colors hover:bg-amber-500/15 dark:hover:bg-amber-500/15'
+                  />
+                </button>
+                <button
+                  type='button'
+                  aria-pressed={isTkaActive('placeholder')}
+                  onClick={() => toggleTka('placeholder')}
+                  className={cn(
+                    pillButtonBase,
+                    'focus-visible:ring-slate-500/40',
+                    isTkaActive('placeholder') &&
+                      'ring-2 ring-slate-500/40 dark:ring-slate-400/40'
+                  )}
+                  title='Filter table to TBD placeholder deliveries'
+                >
+                  <StatTile
+                    label='TBD'
+                    value={tkaNonControllableCounts.placeholder}
+                    accent='default'
+                    className='h-full transition-colors hover:bg-slate-500/10 dark:hover:bg-slate-400/10'
+                  />
+                </button>
+              </KpiGrid>
             </CardContent>
           </Card>
 
-          <Card>
-            <CardHeader className='flex flex-row items-center justify-between space-y-0 pb-2'>
-              <div className='flex flex-1 items-center gap-2'>
-                <CardTitle className='text-sm font-medium'>
-                  Deliveries PGI
-                </CardTitle>
-                <Popover
-                  open={isPgiCalendarOpen}
-                  onOpenChange={setIsPgiCalendarOpen}
-                >
-                  <PopoverTrigger asChild>
-                    <Button
-                      variant='outline'
-                      size='sm'
-                      className='h-6 gap-1 px-2 text-xs'
-                    >
-                      <CalendarIcon className='h-3 w-3' />
-                      {format(pgiSelectedDate, 'MMM d')}
-                    </Button>
-                  </PopoverTrigger>
-                  <PopoverContent className='w-auto p-0' align='start'>
-                    <Calendar
-                      mode='single'
-                      selected={pgiSelectedDate}
-                      onSelect={(date) => {
-                        if (date) {
-                          setPgiSelectedDate(date)
-                          setIsPgiCalendarOpen(false)
-                        }
-                      }}
-                      captionLayout='dropdown'
-                      initialFocus
-                    />
-                  </PopoverContent>
-                </Popover>
-              </div>
-              <Truck className='text-muted-foreground h-4 w-4' />
+          {/* Card 4: Deliveries PGI — date-driven counter (calendar IS the filter) */}
+          <Card className='group border-border/50 bg-card/50 relative overflow-hidden backdrop-blur-sm transition-all duration-300 hover:shadow-lg hover:shadow-black/5 dark:hover:shadow-black/20'>
+            <div className='absolute inset-0 bg-linear-to-br from-purple-500/5 to-purple-500/0 opacity-0 transition-opacity duration-300 group-hover:opacity-100' />
+            <CardHeader className='relative flex flex-row items-center justify-between space-y-0 pb-2'>
+              <CardTitle className='text-muted-foreground flex items-center gap-2 text-xs font-medium tracking-wide uppercase'>
+                <div className='flex h-6 w-6 items-center justify-center rounded-md bg-purple-500/15 dark:bg-purple-500/10'>
+                  <Truck className='h-3.5 w-3.5 text-purple-600 dark:text-purple-400' />
+                </div>
+                Deliveries PGI
+              </CardTitle>
+              <Popover
+                open={isPgiCalendarOpen}
+                onOpenChange={setIsPgiCalendarOpen}
+              >
+                <PopoverTrigger asChild>
+                  <Button
+                    variant='outline'
+                    size='sm'
+                    className='h-6 gap-1 px-2 text-xs'
+                  >
+                    <CalendarIcon className='h-3 w-3' />
+                    {format(pgiSelectedDate, 'MMM d')}
+                  </Button>
+                </PopoverTrigger>
+                <PopoverContent className='w-auto p-0' align='start'>
+                  <Calendar
+                    mode='single'
+                    selected={pgiSelectedDate}
+                    onSelect={(date) => {
+                      if (date) {
+                        setPgiSelectedDate(date)
+                        setIsPgiCalendarOpen(false)
+                      }
+                    }}
+                    captionLayout='dropdown'
+                    initialFocus
+                  />
+                </PopoverContent>
+              </Popover>
             </CardHeader>
-            <CardContent>
-              <div className='text-2xl font-bold'>
-                {isLoadingPgi ? (
-                  <Loader2 className='inline h-6 w-6 animate-spin' />
-                ) : (
-                  pgiCount.toLocaleString()
-                )}
-              </div>
-              <p className='text-muted-foreground text-xs'>
-                Actual Goods Movement Date
-              </p>
+            <CardContent className='relative pt-1 pb-4'>
+              <StatTile
+                label='Actual Goods Movement Date'
+                accent='violet'
+                format='raw'
+                value={
+                  isLoadingPgi ? (
+                    <Loader2 className='inline h-7 w-7 animate-spin' />
+                  ) : (
+                    pgiCount.toLocaleString()
+                  )
+                }
+                valueTitle={String(pgiCount)}
+              />
             </CardContent>
           </Card>
         </div>
-      ),
-      [
-        shippingPointCounts,
-        daysOpenCounts,
-        tkaNonControllableCounts,
-        pgiCount,
-        isLoadingPgi,
-        pgiSelectedDate,
-        isPgiCalendarOpen,
-      ]
-    )
+      )
+    }, [
+      shippingPointCounts,
+      daysOpenCounts,
+      tkaNonControllableCounts,
+      pgiCount,
+      isLoadingPgi,
+      pgiSelectedDate,
+      isPgiCalendarOpen,
+      cardFilter,
+    ])
 
     return (
       <div ref={componentRef} className='space-y-6'>
@@ -1524,224 +1901,309 @@ const DeliveryStatusManager: React.FC<DeliveryStatusManagerProps> = React.memo(
         </Card>
 
         {/* Delivery Audit Trail Dialog - Enhanced with rr_all_deliveries data */}
-        <Dialog
+        <ResponsiveDialog
           open={isDetailsDialogOpen}
           onOpenChange={setIsDetailsDialogOpen}
+          size='xl'
         >
-          <DialogContent className='max-h-[85vh] w-[95vw] max-w-[1400px] min-w-[1200px] overflow-y-auto'>
-            <DialogHeader>
-              <DialogTitle className='text-2xl font-bold'>
-                Delivery Audit Trail
-              </DialogTitle>
-              <DialogDescription>
-                Complete delivery information and workflow history for delivery{' '}
-                {selectedItem?.delivery}
-              </DialogDescription>
-            </DialogHeader>
+          <ResponsiveDialogHeader>
+            <ResponsiveDialogTitle className='text-2xl font-bold'>
+              Delivery Audit Trail
+            </ResponsiveDialogTitle>
+            <ResponsiveDialogDescription>
+              Complete delivery information and workflow history for delivery{' '}
+              {selectedItem?.delivery}
+            </ResponsiveDialogDescription>
+          </ResponsiveDialogHeader>
 
-            {selectedItem && (
-              <div className='space-y-6'>
-                {/* Basic Delivery Information */}
-                <Card className='bg-muted/50'>
-                  <CardHeader className='pb-3'>
-                    <CardTitle className='text-lg font-semibold'>
-                      Delivery Information
-                    </CardTitle>
-                  </CardHeader>
-                  <CardContent>
-                    <div className='grid grid-cols-2 gap-4 text-sm lg:grid-cols-4'>
-                      <div>
-                        <p className='text-muted-foreground'>Delivery Number</p>
-                        <p className='text-base font-semibold'>
-                          {selectedItem.delivery || 'N/A'}
-                        </p>
-                      </div>
-                      <div>
-                        <p className='text-muted-foreground'>
-                          Delivery Priority
-                        </p>
-                        <p className='text-base font-semibold'>
-                          {selectedItem.delivery_priority || 'N/A'}
-                        </p>
-                      </div>
-                      <div>
-                        <p className='text-muted-foreground'>Transfer Order</p>
-                        <p className='text-base font-semibold'>
-                          {selectedItem.transfer_order_number || 'N/A'}
-                        </p>
-                      </div>
-                      <div>
-                        <p className='text-muted-foreground'>Current Status</p>
-                        <div className='mt-1'>
-                          <StatusBadge status={selectedItem.status} />
-                        </div>
-                      </div>
-                      <div>
-                        <p className='text-muted-foreground'>Shipping Point</p>
-                        <p className='text-base font-medium'>
-                          {selectedItem.shipping_point || 'N/A'}
-                        </p>
-                      </div>
-                      <div>
-                        <p className='text-muted-foreground'>Customer Name</p>
-                        <p className='text-base font-medium'>
-                          {selectedItem.customer_name || 'N/A'}
-                        </p>
-                      </div>
-                      <div>
-                        <p className='text-muted-foreground'>Ship to Party</p>
-                        <p className='text-base font-medium'>
-                          {selectedItem.ship_to_party || 'N/A'}
-                        </p>
-                      </div>
-                      <div>
-                        <p className='text-muted-foreground'>Days Open</p>
-                        <p className='text-base font-semibold text-orange-600'>
-                          {selectedItem.days_open !== null
-                            ? `${selectedItem.days_open} days`
-                            : 'N/A'}
-                        </p>
+          {selectedItem && (
+            <ResponsiveDialogBody className='space-y-6'>
+              {/* Basic Delivery Information */}
+              <Card className='bg-muted/50'>
+                <CardHeader className='pb-3'>
+                  <CardTitle className='text-lg font-semibold'>
+                    Delivery Information
+                  </CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className='grid grid-cols-2 gap-4 text-sm lg:grid-cols-4'>
+                    <div>
+                      <p className='text-muted-foreground'>Delivery Number</p>
+                      <p className='text-base font-semibold'>
+                        {selectedItem.delivery || 'N/A'}
+                      </p>
+                    </div>
+                    <div>
+                      <p className='text-muted-foreground'>Delivery Priority</p>
+                      <p className='text-base font-semibold'>
+                        {selectedItem.delivery_priority || 'N/A'}
+                      </p>
+                    </div>
+                    <div>
+                      <p className='text-muted-foreground'>Transfer Order</p>
+                      <p className='text-base font-semibold'>
+                        {selectedItem.transfer_order_number || 'N/A'}
+                      </p>
+                    </div>
+                    <div>
+                      <p className='text-muted-foreground'>Current Status</p>
+                      <div className='mt-1'>
+                        <StatusBadge status={selectedItem.status} />
                       </div>
                     </div>
-                  </CardContent>
-                </Card>
+                    <div>
+                      <p className='text-muted-foreground'>Shipping Point</p>
+                      <p className='text-base font-medium'>
+                        {selectedItem.shipping_point || 'N/A'}
+                      </p>
+                    </div>
+                    <div>
+                      <p className='text-muted-foreground'>Customer Name</p>
+                      <p className='text-base font-medium'>
+                        {selectedItem.customer_name || 'N/A'}
+                      </p>
+                    </div>
+                    <div>
+                      <p className='text-muted-foreground'>Ship to Party</p>
+                      <p className='text-base font-medium'>
+                        {selectedItem.ship_to_party || 'N/A'}
+                      </p>
+                    </div>
+                    <div>
+                      <p className='text-muted-foreground'>Days Open</p>
+                      <p className='text-base font-semibold text-orange-600'>
+                        {selectedItem.days_open !== null
+                          ? `${selectedItem.days_open} days`
+                          : 'N/A'}
+                      </p>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
 
-                {/* Warehouse & Logistics Information */}
+              {/* Warehouse & Logistics Information */}
+              <Card>
+                <CardHeader className='pb-3'>
+                  <CardTitle className='text-lg font-semibold'>
+                    Warehouse & Logistics
+                  </CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className='grid grid-cols-2 gap-4 text-sm lg:grid-cols-4'>
+                    <div>
+                      <p className='text-muted-foreground'>Warehouse Number</p>
+                      <p className='text-base font-medium'>
+                        {selectedItem.warehouse_number || 'N/A'}
+                      </p>
+                    </div>
+                    <div>
+                      <p className='text-muted-foreground'>
+                        Sales Organization
+                      </p>
+                      <p className='text-base font-medium'>
+                        {selectedItem.sales_organization || 'N/A'}
+                      </p>
+                    </div>
+                    <div>
+                      <p className='text-muted-foreground'>Delivery Block</p>
+                      <p className='text-base font-medium'>
+                        {selectedItem.delivery_block || 'N/A'}
+                      </p>
+                    </div>
+                    <div>
+                      <p className='text-muted-foreground'>
+                        Goods Movement Status
+                      </p>
+                      <p className='text-base font-medium'>
+                        {selectedItem.goods_movement_status || 'N/A'}
+                      </p>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+
+              {/* Timeline Information */}
+              <Card>
+                <CardHeader className='pb-3'>
+                  <CardTitle className='text-lg font-semibold'>
+                    Timeline & Dates
+                  </CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className='grid grid-cols-2 gap-4 text-sm lg:grid-cols-3'>
+                    <div>
+                      <p className='text-muted-foreground'>
+                        Delivery Creation Date
+                      </p>
+                      <p className='text-base font-medium'>
+                        {selectedItem.delivery_creation_date
+                          ? format(
+                              new Date(selectedItem.delivery_creation_date),
+                              'MMM dd, yyyy'
+                            )
+                          : 'N/A'}
+                      </p>
+                      {selectedItem.delivery_create_time && (
+                        <p className='text-muted-foreground text-xs'>
+                          Time: {selectedItem.delivery_create_time}
+                        </p>
+                      )}
+                    </div>
+                    <div>
+                      <p className='text-muted-foreground'>
+                        Transfer Order Create Date
+                      </p>
+                      <p className='text-base font-medium'>
+                        {selectedItem.transfer_order_create_date
+                          ? format(
+                              new Date(selectedItem.transfer_order_create_date),
+                              'MMM dd, yyyy'
+                            )
+                          : 'N/A'}
+                      </p>
+                      {selectedItem.transfer_order_create_time && (
+                        <p className='text-muted-foreground text-xs'>
+                          Time: {selectedItem.transfer_order_create_time}
+                        </p>
+                      )}
+                    </div>
+                    <div>
+                      <p className='text-muted-foreground'>
+                        Transfer Order Confirm Date
+                      </p>
+                      <p className='text-base font-medium'>
+                        {selectedItem.transfer_order_confirm_date
+                          ? format(
+                              new Date(
+                                selectedItem.transfer_order_confirm_date
+                              ),
+                              'MMM dd, yyyy'
+                            )
+                          : 'N/A'}
+                      </p>
+                    </div>
+                    <div>
+                      <p className='text-muted-foreground'>
+                        Delivery Change Date
+                      </p>
+                      <p className='text-base font-medium'>
+                        {selectedItem.delivery_change_date
+                          ? format(
+                              new Date(selectedItem.delivery_change_date),
+                              'MMM dd, yyyy'
+                            )
+                          : 'N/A'}
+                      </p>
+                    </div>
+                    <div>
+                      <p className='text-muted-foreground'>
+                        Actual Goods Movement Date
+                      </p>
+                      <p className='text-base font-medium'>
+                        {selectedItem.actual_goods_movement_date
+                          ? format(
+                              new Date(selectedItem.actual_goods_movement_date),
+                              'MMM dd, yyyy'
+                            )
+                          : 'N/A'}
+                      </p>
+                    </div>
+                    <div>
+                      <p className='text-muted-foreground'>
+                        Shipment Create Date
+                      </p>
+                      <p className='text-base font-medium'>
+                        {selectedItem.shipment_create_date
+                          ? format(
+                              new Date(selectedItem.shipment_create_date),
+                              'MMM dd, yyyy'
+                            )
+                          : 'N/A'}
+                      </p>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+
+              {/* Personnel Information */}
+              <Card>
+                <CardHeader className='pb-3'>
+                  <CardTitle className='text-lg font-semibold'>
+                    Personnel & Attribution
+                  </CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className='grid grid-cols-2 gap-4 text-sm lg:grid-cols-3'>
+                    <div>
+                      <p className='text-muted-foreground'>
+                        Delivery Created By
+                      </p>
+                      <p className='text-base font-medium'>
+                        {selectedItem.delivery_created_name || 'N/A'}
+                      </p>
+                      {selectedItem.delivery_created_by && (
+                        <p className='text-muted-foreground font-mono text-xs'>
+                          ID: {selectedItem.delivery_created_by}
+                        </p>
+                      )}
+                    </div>
+                    <div>
+                      <p className='text-muted-foreground'>
+                        Delivery Changed By
+                      </p>
+                      <p className='text-base font-medium'>
+                        {selectedItem.delivery_changed_by_name || 'N/A'}
+                      </p>
+                      {selectedItem.delivery_change_by && (
+                        <p className='text-muted-foreground font-mono text-xs'>
+                          ID: {selectedItem.delivery_change_by}
+                        </p>
+                      )}
+                    </div>
+                    <div>
+                      <p className='text-muted-foreground'>
+                        Shipment Created By
+                      </p>
+                      <p className='text-base font-medium'>
+                        {selectedItem.shipment_created_name || 'N/A'}
+                      </p>
+                      {selectedItem.shipment_create_by && (
+                        <p className='text-muted-foreground font-mono text-xs'>
+                          ID: {selectedItem.shipment_create_by}
+                        </p>
+                      )}
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+
+              {/* Shipment Information */}
+              {selectedItem.shipment_number && (
                 <Card>
                   <CardHeader className='pb-3'>
                     <CardTitle className='text-lg font-semibold'>
-                      Warehouse & Logistics
-                    </CardTitle>
-                  </CardHeader>
-                  <CardContent>
-                    <div className='grid grid-cols-2 gap-4 text-sm lg:grid-cols-4'>
-                      <div>
-                        <p className='text-muted-foreground'>
-                          Warehouse Number
-                        </p>
-                        <p className='text-base font-medium'>
-                          {selectedItem.warehouse_number || 'N/A'}
-                        </p>
-                      </div>
-                      <div>
-                        <p className='text-muted-foreground'>
-                          Sales Organization
-                        </p>
-                        <p className='text-base font-medium'>
-                          {selectedItem.sales_organization || 'N/A'}
-                        </p>
-                      </div>
-                      <div>
-                        <p className='text-muted-foreground'>Delivery Block</p>
-                        <p className='text-base font-medium'>
-                          {selectedItem.delivery_block || 'N/A'}
-                        </p>
-                      </div>
-                      <div>
-                        <p className='text-muted-foreground'>
-                          Goods Movement Status
-                        </p>
-                        <p className='text-base font-medium'>
-                          {selectedItem.goods_movement_status || 'N/A'}
-                        </p>
-                      </div>
-                    </div>
-                  </CardContent>
-                </Card>
-
-                {/* Timeline Information */}
-                <Card>
-                  <CardHeader className='pb-3'>
-                    <CardTitle className='text-lg font-semibold'>
-                      Timeline & Dates
+                      Shipment Details
                     </CardTitle>
                   </CardHeader>
                   <CardContent>
                     <div className='grid grid-cols-2 gap-4 text-sm lg:grid-cols-3'>
                       <div>
-                        <p className='text-muted-foreground'>
-                          Delivery Creation Date
-                        </p>
-                        <p className='text-base font-medium'>
-                          {selectedItem.delivery_creation_date
-                            ? format(
-                                new Date(selectedItem.delivery_creation_date),
-                                'MMM dd, yyyy'
-                              )
-                            : 'N/A'}
-                        </p>
-                        {selectedItem.delivery_create_time && (
-                          <p className='text-muted-foreground text-xs'>
-                            Time: {selectedItem.delivery_create_time}
-                          </p>
-                        )}
-                      </div>
-                      <div>
-                        <p className='text-muted-foreground'>
-                          Transfer Order Create Date
-                        </p>
-                        <p className='text-base font-medium'>
-                          {selectedItem.transfer_order_create_date
-                            ? format(
-                                new Date(
-                                  selectedItem.transfer_order_create_date
-                                ),
-                                'MMM dd, yyyy'
-                              )
-                            : 'N/A'}
-                        </p>
-                        {selectedItem.transfer_order_create_time && (
-                          <p className='text-muted-foreground text-xs'>
-                            Time: {selectedItem.transfer_order_create_time}
-                          </p>
-                        )}
-                      </div>
-                      <div>
-                        <p className='text-muted-foreground'>
-                          Transfer Order Confirm Date
-                        </p>
-                        <p className='text-base font-medium'>
-                          {selectedItem.transfer_order_confirm_date
-                            ? format(
-                                new Date(
-                                  selectedItem.transfer_order_confirm_date
-                                ),
-                                'MMM dd, yyyy'
-                              )
-                            : 'N/A'}
+                        <p className='text-muted-foreground'>Shipment Number</p>
+                        <p className='font-mono text-base font-semibold'>
+                          {selectedItem.shipment_number}
                         </p>
                       </div>
                       <div>
                         <p className='text-muted-foreground'>
-                          Delivery Change Date
+                          External Identification 1
                         </p>
                         <p className='text-base font-medium'>
-                          {selectedItem.delivery_change_date
-                            ? format(
-                                new Date(selectedItem.delivery_change_date),
-                                'MMM dd, yyyy'
-                              )
-                            : 'N/A'}
+                          {selectedItem.external_identification_1 || 'N/A'}
                         </p>
                       </div>
                       <div>
                         <p className='text-muted-foreground'>
-                          Actual Goods Movement Date
-                        </p>
-                        <p className='text-base font-medium'>
-                          {selectedItem.actual_goods_movement_date
-                            ? format(
-                                new Date(
-                                  selectedItem.actual_goods_movement_date
-                                ),
-                                'MMM dd, yyyy'
-                              )
-                            : 'N/A'}
-                        </p>
-                      </div>
-                      <div>
-                        <p className='text-muted-foreground'>
-                          Shipment Create Date
+                          Shipment Created
                         </p>
                         <p className='text-base font-medium'>
                           {selectedItem.shipment_create_date
@@ -1755,161 +2217,65 @@ const DeliveryStatusManager: React.FC<DeliveryStatusManagerProps> = React.memo(
                     </div>
                   </CardContent>
                 </Card>
+              )}
 
-                {/* Personnel Information */}
-                <Card>
-                  <CardHeader className='pb-3'>
-                    <CardTitle className='text-lg font-semibold'>
-                      Personnel & Attribution
-                    </CardTitle>
-                  </CardHeader>
-                  <CardContent>
-                    <div className='grid grid-cols-2 gap-4 text-sm lg:grid-cols-3'>
-                      <div>
-                        <p className='text-muted-foreground'>
-                          Delivery Created By
-                        </p>
-                        <p className='text-base font-medium'>
-                          {selectedItem.delivery_created_name || 'N/A'}
-                        </p>
-                        {selectedItem.delivery_created_by && (
-                          <p className='text-muted-foreground font-mono text-xs'>
-                            ID: {selectedItem.delivery_created_by}
-                          </p>
+              {/* Record Tracking */}
+              <Card>
+                <CardHeader className='pb-3'>
+                  <CardTitle className='text-lg font-semibold'>
+                    Record Information
+                  </CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className='grid grid-cols-2 gap-4 text-sm lg:grid-cols-4'>
+                    <div>
+                      <p className='text-muted-foreground'>Record Created</p>
+                      <p className='text-base font-medium'>
+                        {format(
+                          new Date(selectedItem.created_at),
+                          'MMM dd, yyyy h:mm a'
                         )}
-                      </div>
-                      <div>
-                        <p className='text-muted-foreground'>
-                          Delivery Changed By
-                        </p>
-                        <p className='text-base font-medium'>
-                          {selectedItem.delivery_changed_by_name || 'N/A'}
-                        </p>
-                        {selectedItem.delivery_change_by && (
-                          <p className='text-muted-foreground font-mono text-xs'>
-                            ID: {selectedItem.delivery_change_by}
-                          </p>
+                      </p>
+                      <p className='text-muted-foreground text-xs'>
+                        {formatDistanceToNow(
+                          new Date(selectedItem.created_at),
+                          { addSuffix: true }
                         )}
-                      </div>
-                      <div>
-                        <p className='text-muted-foreground'>
-                          Shipment Created By
-                        </p>
-                        <p className='text-base font-medium'>
-                          {selectedItem.shipment_created_name || 'N/A'}
-                        </p>
-                        {selectedItem.shipment_create_by && (
-                          <p className='text-muted-foreground font-mono text-xs'>
-                            ID: {selectedItem.shipment_create_by}
-                          </p>
-                        )}
-                      </div>
+                      </p>
                     </div>
-                  </CardContent>
-                </Card>
-
-                {/* Shipment Information */}
-                {selectedItem.shipment_number && (
-                  <Card>
-                    <CardHeader className='pb-3'>
-                      <CardTitle className='text-lg font-semibold'>
-                        Shipment Details
-                      </CardTitle>
-                    </CardHeader>
-                    <CardContent>
-                      <div className='grid grid-cols-2 gap-4 text-sm lg:grid-cols-3'>
-                        <div>
-                          <p className='text-muted-foreground'>
-                            Shipment Number
-                          </p>
-                          <p className='font-mono text-base font-semibold'>
-                            {selectedItem.shipment_number}
-                          </p>
-                        </div>
-                        <div>
-                          <p className='text-muted-foreground'>
-                            External Identification 1
-                          </p>
-                          <p className='text-base font-medium'>
-                            {selectedItem.external_identification_1 || 'N/A'}
-                          </p>
-                        </div>
-                        <div>
-                          <p className='text-muted-foreground'>
-                            Shipment Created
-                          </p>
-                          <p className='text-base font-medium'>
-                            {selectedItem.shipment_create_date
-                              ? format(
-                                  new Date(selectedItem.shipment_create_date),
-                                  'MMM dd, yyyy'
-                                )
-                              : 'N/A'}
-                          </p>
-                        </div>
-                      </div>
-                    </CardContent>
-                  </Card>
-                )}
-
-                {/* Record Tracking */}
-                <Card>
-                  <CardHeader className='pb-3'>
-                    <CardTitle className='text-lg font-semibold'>
-                      Record Information
-                    </CardTitle>
-                  </CardHeader>
-                  <CardContent>
-                    <div className='grid grid-cols-2 gap-4 text-sm lg:grid-cols-4'>
-                      <div>
-                        <p className='text-muted-foreground'>Record Created</p>
-                        <p className='text-base font-medium'>
-                          {format(
-                            new Date(selectedItem.created_at),
-                            'MMM dd, yyyy h:mm a'
-                          )}
-                        </p>
-                        <p className='text-muted-foreground text-xs'>
-                          {formatDistanceToNow(
-                            new Date(selectedItem.created_at),
-                            { addSuffix: true }
-                          )}
-                        </p>
-                      </div>
-                      <div>
-                        <p className='text-muted-foreground'>Last Updated</p>
-                        <p className='text-base font-medium'>
-                          {format(
-                            new Date(selectedItem.updated_at),
-                            'MMM dd, yyyy h:mm a'
-                          )}
-                        </p>
-                        <p className='text-muted-foreground text-xs'>
-                          {formatDistanceToNow(
-                            new Date(selectedItem.updated_at),
-                            { addSuffix: true }
-                          )}
-                        </p>
-                      </div>
-                      <div>
-                        <p className='text-muted-foreground'>Record ID</p>
-                        <p className='text-muted-foreground font-mono text-xs'>
-                          {selectedItem.id}
-                        </p>
-                      </div>
-                      <div>
-                        <p className='text-muted-foreground'>Organization ID</p>
-                        <p className='text-muted-foreground font-mono text-xs'>
-                          {selectedItem.organization_id}
-                        </p>
-                      </div>
+                    <div>
+                      <p className='text-muted-foreground'>Last Updated</p>
+                      <p className='text-base font-medium'>
+                        {format(
+                          new Date(selectedItem.updated_at),
+                          'MMM dd, yyyy h:mm a'
+                        )}
+                      </p>
+                      <p className='text-muted-foreground text-xs'>
+                        {formatDistanceToNow(
+                          new Date(selectedItem.updated_at),
+                          { addSuffix: true }
+                        )}
+                      </p>
                     </div>
-                  </CardContent>
-                </Card>
-              </div>
-            )}
-          </DialogContent>
-        </Dialog>
+                    <div>
+                      <p className='text-muted-foreground'>Record ID</p>
+                      <p className='text-muted-foreground font-mono text-xs'>
+                        {selectedItem.id}
+                      </p>
+                    </div>
+                    <div>
+                      <p className='text-muted-foreground'>Organization ID</p>
+                      <p className='text-muted-foreground font-mono text-xs'>
+                        {selectedItem.organization_id}
+                      </p>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+            </ResponsiveDialogBody>
+          )}
+        </ResponsiveDialog>
       </div>
     )
   }
@@ -1918,3 +2284,5 @@ const DeliveryStatusManager: React.FC<DeliveryStatusManagerProps> = React.memo(
 DeliveryStatusManager.displayName = 'DeliveryStatusManager'
 
 export default DeliveryStatusManager
+
+// Created and developed by Jai Singh

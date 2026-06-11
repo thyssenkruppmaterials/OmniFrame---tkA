@@ -1,3 +1,4 @@
+// Created and developed by Jai Singh
 /**
  * Start Kit Confirmation Dialog
  * Shows kit details and confirms the creation of a kit build
@@ -380,3 +381,5 @@ export function StartKitConfirmDialog({
     </Dialog>
   )
 }
+
+// Created and developed by Jai Singh

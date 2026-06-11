@@ -1,0 +1,137 @@
+name: Build Omni-Agent EXE
+
+# Phase D #9 — automated builds of the OmniFrame SAP Agent.
+#
+# Triggers when anything under `omni_agent/**` changes (or via the manual
+# "Run workflow" button). Produces `OmniFrame_Agent.exe` from agent.py
+# using PyInstaller on a Windows runner, computes its SHA-256, and
+# attaches both as workflow artifacts that the team can download.
+#
+# Supabase Storage upload is intentionally NOT wired up — it requires a
+# secret (`SUPABASE_SERVICE_ROLE_KEY`) the user will configure separately
+# before enabling the upload step at the bottom of this file.
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - 'omni_agent/**'
+  pull_request:
+    paths:
+      - 'omni_agent/**'
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: windows-latest
+
+    steps:
+      - name: Check out repo
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+          cache-dependency-path: omni_agent/requirements.txt
+
+      - name: Install dependencies
+        working-directory: omni_agent
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Read AGENT_VERSION
+        id: version
+        shell: pwsh
+        working-directory: omni_agent
+        run: |
+          $line = Select-String -Path "agent.py" -Pattern '^AGENT_VERSION\s*=\s*"([^"]+)"' | Select-Object -First 1
+          if (-not $line) { Write-Error "Could not find AGENT_VERSION in agent.py"; exit 1 }
+          $version = $line.Matches[0].Groups[1].Value
+          "version=$version" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
+          Write-Host "AGENT_VERSION = $version"
+
+      - name: Build OmniFrame_Agent.exe
+        working-directory: omni_agent
+        run: |
+          python -m PyInstaller --onefile --console --name OmniFrame_Agent agent.py
+
+      - name: Compute SHA-256
+        id: sha256
+        shell: pwsh
+        working-directory: omni_agent
+        run: |
+          $hash = (Get-FileHash -Algorithm SHA256 dist\OmniFrame_Agent.exe).Hash.ToLower()
+          "sha256=$hash" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
+          Set-Content -Path "dist\OmniFrame_Agent.exe.sha256" -Value $hash
+          Write-Host "SHA-256: $hash"
+
+      - name: Package zip
+        shell: pwsh
+        working-directory: omni_agent
+        run: |
+          Compress-Archive -Path dist\OmniFrame_Agent.exe -DestinationPath dist\OmniFrame_Agent.zip -Force
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: OmniFrame_Agent-v${{ steps.version.outputs.version }}
+          path: |
+            omni_agent/dist/OmniFrame_Agent.exe
+            omni_agent/dist/OmniFrame_Agent.exe.sha256
+            omni_agent/dist/OmniFrame_Agent.zip
+
+      - name: Summary
+        shell: pwsh
+        run: |
+          $summary = @"
+          ## OmniFrame Agent build
+
+          - Version: ``${{ steps.version.outputs.version }}``
+          - SHA-256: ``${{ steps.sha256.outputs.sha256 }}``
+          - Artifact: ``OmniFrame_Agent-v${{ steps.version.outputs.version }}``
+
+          ### To publish to Supabase Storage
+
+          The Supabase upload step is intentionally not wired up here.
+          To enable it, configure the following repository secrets:
+
+          - ``SUPABASE_PROJECT_REF`` — e.g. ``wncpqxwmbxjgxvrpcake``
+          - ``SUPABASE_SERVICE_ROLE_KEY`` — service-role key (NOT anon)
+
+          Then add a new step that runs:
+
+          \`\`\`
+          curl -X POST -H "Authorization: Bearer \$env:SUPABASE_SERVICE_ROLE_KEY" \\
+               -H "x-upsert: true" \\
+               --data-binary "@omni_agent/dist/OmniFrame_Agent.zip" \\
+               "https://\$env:SUPABASE_PROJECT_REF.supabase.co/storage/v1/object/downloads/OmniFrame_Agent.zip"
+          \`\`\`
+
+          This writes through to the public ``downloads`` bucket the
+          web app references in its install dialog.
+          "@
+          $summary | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Encoding utf8
+
+      # ──────────────────────────────────────────────────────────────────
+      # Optional: upload to Supabase Storage (downloads bucket).
+      # Uncomment + configure SUPABASE_PROJECT_REF / SUPABASE_SERVICE_ROLE_KEY
+      # secrets to enable. Disabled by default per implementation plan.
+      # ──────────────────────────────────────────────────────────────────
+      # - name: Upload to Supabase Storage
+      #   if: github.ref == 'refs/heads/main'
+      #   shell: pwsh
+      #   working-directory: omni_agent
+      #   env:
+      #     SUPABASE_PROJECT_REF: ${{ secrets.SUPABASE_PROJECT_REF }}
+      #     SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+      #   run: |
+      #     $url = "https://$env:SUPABASE_PROJECT_REF.supabase.co/storage/v1/object/downloads/OmniFrame_Agent.zip"
+      #     $headers = @{
+      #       "Authorization" = "Bearer $env:SUPABASE_SERVICE_ROLE_KEY"
+      #       "x-upsert" = "true"
+      #     }
+      #     Invoke-RestMethod -Uri $url -Method Post -Headers $headers -InFile dist\OmniFrame_Agent.zip -ContentType "application/zip"

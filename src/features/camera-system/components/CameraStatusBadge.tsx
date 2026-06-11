@@ -1,3 +1,4 @@
+// Created and developed by Jai Singh
 /**
  * Camera Status Badge Component
  *
@@ -103,3 +104,5 @@ export function CameraStatusBadge({
     </span>
   )
 }
+
+// Created and developed by Jai Singh

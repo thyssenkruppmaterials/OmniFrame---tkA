@@ -1,0 +1,81 @@
+name: omni-agent-v2-validate
+
+# Runs the macOS validation harness on every push and PR. We can't actually
+# produce the Windows binary on a Linux runner — that's gated on a separate
+# `windows-2022` job we'll add once Workers A/B/C have landed. For now,
+# this workflow:
+#
+#   * Verifies the Rust workspace compiles (host target + Windows syntax).
+#   * Runs clippy, cargo fmt --check, cargo test.
+#   * AST-parses the Python helper + runs pytest (if installed).
+#   * Builds the gui/ renderer (npm ci + npm run build).
+#   * Cross-checks the JSON-RPC contract across Rust / Python / TS.
+#
+# Triggers: push/PR to any branch touching omni_agent_v2/, or manual dispatch.
+
+on:
+  push:
+    branches: ['**']
+    paths:
+      - 'omni_agent_v2/**'
+      - '.github/workflows/omni-agent-v2-*.yml'
+  pull_request:
+    paths:
+      - 'omni_agent_v2/**'
+      - '.github/workflows/omni-agent-v2-*.yml'
+  workflow_dispatch:
+
+jobs:
+  validate:
+    name: validate (ubuntu-latest)
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    defaults:
+      run:
+        working-directory: omni_agent_v2
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Rust toolchain (matches rust-toolchain.toml)
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+          # rust-toolchain.toml requests the Windows MSVC target as well; we
+          # ask for it explicitly so cross-target `cargo check` works.
+          targets: x86_64-pc-windows-msvc
+
+      - name: Cache cargo registry + git + target
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry/index/
+            ~/.cargo/registry/cache/
+            ~/.cargo/git/db/
+            omni_agent_v2/target/
+          key: ${{ runner.os }}-cargo-${{ hashFiles('omni_agent_v2/Cargo.toml', 'omni_agent_v2/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-cargo-
+
+      - name: Setup Node 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: omni_agent_v2/gui/package-lock.json
+
+      - name: Setup Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install pytest (for python/tests/)
+        run: |
+          python3 -m pip install --upgrade pip
+          python3 -m pip install pytest
+
+      - name: Run validation harness
+        run: bash packaging/build_macos_validate.sh --no-windows
+        # --no-windows because Ubuntu runners don't ship the MSVC linker;
+        # the harness's separate `cargo check --target x86_64-pc-windows-msvc`
+        # step exercises the cross-target codepath anyway.

@@ -1,3 +1,4 @@
+// Created and developed by Jai Singh
 /**
  * Section Editor Component
  * Manages sections within the template builder
@@ -38,8 +39,10 @@ interface SectionEditorProps {
   onToggleCollapse: (sectionId: string) => void
   onItemClick: (item: StandardWorkItem) => void
   onDeleteItem: (itemId: string) => void
+  onDuplicateItem?: (itemId: string) => void
   selectedItemId: string | null
   isFirst: boolean
+  readOnly?: boolean
 }
 
 export function SectionEditor({
@@ -49,8 +52,10 @@ export function SectionEditor({
   onToggleCollapse,
   onItemClick,
   onDeleteItem,
+  onDuplicateItem,
   selectedItemId,
   isFirst,
+  readOnly = false,
 }: SectionEditorProps) {
   const [isEditing, setIsEditing] = useState(false)
   const [editName, setEditName] = useState(section.name)
@@ -105,54 +110,61 @@ export function SectionEditor({
             </Button>
           </CollapsibleTrigger>
 
-          {isEditing ? (
+          {isEditing && !readOnly ? (
             <Input
               value={editName}
               onChange={(e) => setEditName(e.target.value)}
               onBlur={handleSaveName}
               onKeyDown={handleKeyDown}
               className='h-7 text-sm font-medium'
+              aria-label='Section name'
               autoFocus
             />
           ) : (
             <span
-              className='hover:text-primary flex-1 cursor-pointer text-sm font-medium'
-              onClick={() => setIsEditing(true)}
+              className={cn(
+                'flex-1 text-sm font-medium',
+                !readOnly && 'hover:text-primary cursor-pointer'
+              )}
+              onClick={() => !readOnly && setIsEditing(true)}
             >
               {section.name}
             </span>
           )}
 
           <Badge variant='outline' className='text-xs'>
-            {section.items.length} items
+            {section.items.length} item{section.items.length === 1 ? '' : 's'}
           </Badge>
 
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <Button
-                variant='ghost'
-                size='icon'
-                className='h-6 w-6 opacity-0 group-hover:opacity-100'
-              >
-                <MoreHorizontal className='h-4 w-4' />
-              </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align='end'>
-              <DropdownMenuItem onClick={() => setIsEditing(true)}>
-                <Edit className='mr-2 h-4 w-4' />
-                Rename Section
-              </DropdownMenuItem>
-              {!isFirst && (
-                <DropdownMenuItem
-                  onClick={() => onDeleteSection(section.id)}
-                  className='text-destructive'
+          {!readOnly && (
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button
+                  variant='ghost'
+                  size='icon'
+                  aria-label={`Section actions: ${section.name}`}
+                  className='h-6 w-6 opacity-0 group-hover:opacity-100'
                 >
-                  <Trash2 className='mr-2 h-4 w-4' />
-                  Delete Section
+                  <MoreHorizontal className='h-4 w-4' aria-hidden='true' />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align='end'>
+                <DropdownMenuItem onClick={() => setIsEditing(true)}>
+                  <Edit className='mr-2 h-4 w-4' />
+                  Rename Section
                 </DropdownMenuItem>
-              )}
-            </DropdownMenuContent>
-          </DropdownMenu>
+                {!isFirst && (
+                  <DropdownMenuItem
+                    onClick={() => onDeleteSection(section.id)}
+                    className='text-destructive'
+                  >
+                    <Trash2 className='mr-2 h-4 w-4' />
+                    Delete Section
+                  </DropdownMenuItem>
+                )}
+              </DropdownMenuContent>
+            </DropdownMenu>
+          )}
         </div>
 
         {/* Section Content */}
@@ -175,6 +187,12 @@ export function SectionEditor({
                       isSelected={selectedItemId === item.id}
                       onClick={() => onItemClick(item)}
                       onDelete={() => onDeleteItem(item.id)}
+                      onDuplicate={
+                        onDuplicateItem
+                          ? () => onDuplicateItem(item.id)
+                          : undefined
+                      }
+                      readOnly={readOnly}
                     />
                   ))}
                 </div>
@@ -186,3 +204,5 @@ export function SectionEditor({
     </Collapsible>
   )
 }
+
+// Created and developed by Jai Singh

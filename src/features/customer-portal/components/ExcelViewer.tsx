@@ -1,3 +1,4 @@
+// Created and developed by Jai Singh
 import { useState, useEffect } from 'react'
 import { IconLoader2 } from '@tabler/icons-react'
 import { supabase } from '@/lib/supabase/client'
@@ -249,3 +250,5 @@ export function ExcelViewer({
     </div>
   )
 }
+
+// Created and developed by Jai Singh

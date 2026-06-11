@@ -1,3 +1,4 @@
+# Created and developed by Jai Singh
 """
 Regression tests for ticket creation correctness (F-02).
 
@@ -60,3 +61,5 @@ class TestTicketStatusIndependence:
                     f"Priority value '{p.value}' collides with a status value — "
                     f"this could mask F-02-class bugs"
                 )
+
+# Created and developed by Jai Singh

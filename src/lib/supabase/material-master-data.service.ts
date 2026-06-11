@@ -1,3 +1,4 @@
+// Created and developed by Jai Singh
 import { toast } from 'sonner'
 import { RUST_CORE_ENABLED } from '@/lib/rust-core/config'
 import { rustMaterialMasterDataService } from '@/lib/rust-core/material-master-data.service'
@@ -946,4 +947,5 @@ export class MaterialMasterDataService {
     }
   }
 }
-// Developer and Creator: Jai Singh
+
+// Created and developed by Jai Singh

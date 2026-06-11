@@ -1,3 +1,4 @@
+// Created and developed by Jai Singh
 /**
  * Delete Working Area Dialog Component
  * Confirmation dialog for deleting working areas
@@ -146,3 +147,5 @@ export function DeleteAreaDialog({
     </AlertDialog>
   )
 }
+
+// Created and developed by Jai Singh

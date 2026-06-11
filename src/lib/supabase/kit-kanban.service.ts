@@ -1,3 +1,4 @@
+// Created and developed by Jai Singh
 /**
  * Kit Kanban Service
  * Service for managing kit kanban board tasks and columns in Supabase
@@ -11,7 +12,7 @@ import { logger } from '@/lib/utils/logger'
 import { supabase } from './client'
 
 // Type-safe wrapper for the supabase client to handle tables not in generated types
-const db = supabase as ReturnType<(typeof supabase)['from']> & {
+const db = supabase as unknown as ReturnType<(typeof supabase)['from']> & {
   from: (table: string) => ReturnType<(typeof supabase)['from']>
 }
 
@@ -150,7 +151,9 @@ export class KitKanbanService {
     try {
       // Check if columns already exist
       const { data: existingColumns, error: checkError } = await (
-        db.from(this.COLUMNS_TABLE) as ReturnType<(typeof supabase)['from']>
+        db.from(this.COLUMNS_TABLE) as unknown as ReturnType<
+          (typeof supabase)['from']
+        >
       )
         .select('id')
         .limit(1)
@@ -177,8 +180,10 @@ export class KitKanbanService {
       }))
 
       const { error: insertError } = await (
-        db.from(this.COLUMNS_TABLE) as ReturnType<(typeof supabase)['from']>
-      ).insert(columnsToInsert as unknown[])
+        db.from(this.COLUMNS_TABLE) as unknown as ReturnType<
+          (typeof supabase)['from']
+        >
+      ).insert(columnsToInsert as never[])
 
       if (insertError) {
         logger.error(
@@ -215,7 +220,9 @@ export class KitKanbanService {
     }
 
     const { data, error } = await (
-      db.from(this.COLUMNS_TABLE) as ReturnType<(typeof supabase)['from']>
+      db.from(this.COLUMNS_TABLE) as unknown as ReturnType<
+        (typeof supabase)['from']
+      >
     )
       .select('*')
       .eq('is_active', true)
@@ -234,7 +241,9 @@ export class KitKanbanService {
    */
   static async getTasks(): Promise<KanbanTask[]> {
     const { data, error } = await (
-      db.from(this.TASKS_TABLE) as ReturnType<(typeof supabase)['from']>
+      db.from(this.TASKS_TABLE) as unknown as ReturnType<
+        (typeof supabase)['from']
+      >
     )
       .select('*')
       .order('position_in_column', { ascending: true })
@@ -256,32 +265,102 @@ export class KitKanbanService {
     const tasks = await this.getTasks()
     const columns = await this.getColumns()
 
-    // Batch-fetch active Black Hat flags for all kits in one query
-    const kitPoNumbers = [
-      ...new Set(tasks.map((t) => t.kit_po_number).filter(Boolean)),
+    // Batch-fetch active Black Hat flags. Prefer kit_serial_number scope
+    // (post 303_kit_build_flags_serial_scope) and fall back to PO scope
+    // for any legacy rows whose serial column was never backfilled.
+    const kitSerialNumbers = [
+      ...new Set(
+        tasks.map((t) => t.kit_serial_number).filter((s): s is string => !!s)
+      ),
     ]
-    const blackHatMap = new Map<string, string | null>()
-    if (kitPoNumbers.length > 0) {
-      try {
-        const { data: flags } = await (
+    const kitPoNumbers = [
+      ...new Set(
+        tasks.map((t) => t.kit_po_number).filter((s): s is string => !!s)
+      ),
+    ]
+    const blackHatBySerial = new Map<string, string | null>()
+    const blackHatByPo = new Map<string, string | null>()
+
+    try {
+      if (kitSerialNumbers.length > 0) {
+        const { data: serialFlags } = await (
+          db.from('kit_build_flags') as ReturnType<(typeof supabase)['from']>
+        )
+          .select('kit_serial_number, notes')
+          .in('kit_serial_number', kitSerialNumbers)
+          .eq('flag_type', 'black')
+          .eq('is_active', true)
+
+        if (serialFlags) {
+          for (const f of serialFlags as unknown as {
+            kit_serial_number: string | null
+            notes: string | null
+          }[]) {
+            if (f.kit_serial_number) {
+              blackHatBySerial.set(f.kit_serial_number, f.notes)
+            }
+          }
+        }
+      }
+
+      if (kitPoNumbers.length > 0) {
+        const { data: poFlags } = await (
           db.from('kit_build_flags') as ReturnType<(typeof supabase)['from']>
         )
           .select('kit_po_number, notes')
           .in('kit_po_number', kitPoNumbers)
+          .is('kit_serial_number', null)
           .eq('flag_type', 'black')
           .eq('is_active', true)
 
-        if (flags) {
-          for (const f of flags as {
-            kit_po_number: string
+        if (poFlags) {
+          for (const f of poFlags as unknown as {
+            kit_po_number: string | null
             notes: string | null
           }[]) {
-            blackHatMap.set(f.kit_po_number, f.notes)
+            if (f.kit_po_number) {
+              blackHatByPo.set(f.kit_po_number, f.notes)
+            }
           }
         }
-      } catch {
-        // Non-fatal: kanban still works without flag data
       }
+    } catch {
+      // Non-fatal: kanban still works without flag data
+    }
+
+    // Batch-fetch the human-readable kit number (e.g. "424 Inlet #1")
+    // from RR_Kitting_DATA so each kanban card can show what the kit
+    // actually is. kit_number is NOT a column on kit_kanban_tasks — it
+    // lives only on RR_Kitting_DATA — so we enrich here, keyed by
+    // kit_serial_number per [[Kit-Serial-Scoping]] (no PO fallback to
+    // avoid mislabelling kits that share a PO).
+    const kitNumberBySerial = new Map<string, string>()
+    try {
+      if (kitSerialNumbers.length > 0) {
+        const { data: serialRows } = await (
+          db.from('RR_Kitting_DATA') as ReturnType<(typeof supabase)['from']>
+        )
+          .select('kit_serial_number, kit_number')
+          .in('kit_serial_number', kitSerialNumbers)
+          .not('kit_number', 'is', null)
+
+        if (serialRows) {
+          for (const r of serialRows as unknown as {
+            kit_serial_number: string | null
+            kit_number: string | null
+          }[]) {
+            if (
+              r.kit_serial_number &&
+              r.kit_number &&
+              !kitNumberBySerial.has(r.kit_serial_number)
+            ) {
+              kitNumberBySerial.set(r.kit_serial_number, r.kit_number)
+            }
+          }
+        }
+      }
+    } catch {
+      // Non-fatal: kanban still works without kit-number labels
     }
 
     // Initialize map with all columns
@@ -298,9 +377,24 @@ export class KitKanbanService {
     sortedTasks.forEach((task, index) => {
       const positionPriority = index + 1
       const uiTask = this.transformToUITask(task, positionPriority)
-      if (task.kit_po_number && blackHatMap.has(task.kit_po_number)) {
+      // Attach the human-readable kit number sourced above so the card
+      // can render "Kit {kit_number}" (e.g. "Kit 424 Inlet #1").
+      if (
+        task.kit_serial_number &&
+        kitNumberBySerial.has(task.kit_serial_number)
+      ) {
+        uiTask.kitNumber = kitNumberBySerial.get(task.kit_serial_number)
+      }
+      if (
+        task.kit_serial_number &&
+        blackHatBySerial.has(task.kit_serial_number)
+      ) {
         uiTask.hasBlackHat = true
-        uiTask.blackHatNote = blackHatMap.get(task.kit_po_number) ?? undefined
+        uiTask.blackHatNote =
+          blackHatBySerial.get(task.kit_serial_number) ?? undefined
+      } else if (task.kit_po_number && blackHatByPo.has(task.kit_po_number)) {
+        uiTask.hasBlackHat = true
+        uiTask.blackHatNote = blackHatByPo.get(task.kit_po_number) ?? undefined
       }
       const columnTasks = taskMap.get(task.column_id) || []
       columnTasks.push(uiTask)
@@ -404,7 +498,9 @@ export class KitKanbanService {
 
       // Get the "planning" column (start column)
       const { data: columns, error: colError } = await (
-        db.from(this.COLUMNS_TABLE) as ReturnType<(typeof supabase)['from']>
+        db.from(this.COLUMNS_TABLE) as unknown as ReturnType<
+          (typeof supabase)['from']
+        >
       )
         .select('id')
         .eq('column_name', 'planning')
@@ -421,7 +517,7 @@ export class KitKanbanService {
         }
       }
 
-      const columnsArray = columns as { id: string }[] | null
+      const columnsArray = columns as unknown as { id: string }[] | null
       if (!columnsArray || columnsArray.length === 0) {
         logger.error('[KitKanbanService] createTask: No planning column found')
         return {
@@ -435,7 +531,9 @@ export class KitKanbanService {
 
       // Get the next position in the column
       const { data: existingTasks } = await (
-        db.from(this.TASKS_TABLE) as ReturnType<(typeof supabase)['from']>
+        db.from(this.TASKS_TABLE) as unknown as ReturnType<
+          (typeof supabase)['from']
+        >
       )
         .select('position_in_column')
         .eq('column_id', columnId)
@@ -444,15 +542,18 @@ export class KitKanbanService {
 
       const nextPosition =
         existingTasks &&
-        (existingTasks as { position_in_column: number }[]).length > 0
-          ? (existingTasks as { position_in_column: number }[])[0]
+        (existingTasks as unknown as { position_in_column: number }[]).length >
+          0
+          ? (existingTasks as unknown as { position_in_column: number }[])[0]
               .position_in_column + 1
           : 0
 
       // Create the task (no organization_id needed - tables are shared)
       // Note: kit_number is not stored in kanban_tasks table, only in RR_Kitting_DATA
       const { data: newTask, error: insertError } = await (
-        db.from(this.TASKS_TABLE) as ReturnType<(typeof supabase)['from']>
+        db.from(this.TASKS_TABLE) as unknown as ReturnType<
+          (typeof supabase)['from']
+        >
       )
         .insert({
           task_title: `${input.kitSerialNumber} - ${input.kitPoNumber}`,
@@ -468,7 +569,7 @@ export class KitKanbanService {
           to_lines_kitted: 0,
           current_step: 'planning',
           due_date: input.dueDate || null,
-        } as unknown)
+        } as never)
         .select('id')
         .single()
 
@@ -483,7 +584,10 @@ export class KitKanbanService {
       logger.log(
         `[KitKanbanService] createTask: Successfully created kanban task for kit ${input.kitPoNumber}`
       )
-      return { success: true, taskId: (newTask as { id: string })?.id }
+      return {
+        success: true,
+        taskId: (newTask as unknown as { id: string })?.id,
+      }
     } catch (err) {
       logger.error('[KitKanbanService] createTask: Unexpected error:', err)
       return {
@@ -505,7 +609,9 @@ export class KitKanbanService {
     newPosition: number
   ): Promise<{ success: boolean; error?: string }> {
     const { error } = await (
-      db.from(this.TASKS_TABLE) as ReturnType<(typeof supabase)['from']>
+      db.from(this.TASKS_TABLE) as unknown as ReturnType<
+        (typeof supabase)['from']
+      >
     )
       .update({
         column_id: targetColumnId,
@@ -556,7 +662,9 @@ export class KitKanbanService {
     }
 
     const { error } = await (
-      db.from(this.TASKS_TABLE) as ReturnType<(typeof supabase)['from']>
+      db.from(this.TASKS_TABLE) as unknown as ReturnType<
+        (typeof supabase)['from']
+      >
     )
       .update(updateData as Record<string, unknown>)
       .eq('id', taskId)
@@ -578,7 +686,9 @@ export class KitKanbanService {
     newPriority: number
   ): Promise<{ success: boolean; error?: string }> {
     const { error } = await (
-      db.from(this.TASKS_TABLE) as ReturnType<(typeof supabase)['from']>
+      db.from(this.TASKS_TABLE) as unknown as ReturnType<
+        (typeof supabase)['from']
+      >
     )
       .update({
         priority: newPriority,
@@ -604,7 +714,9 @@ export class KitKanbanService {
     newPriority: number
   ): Promise<{ success: boolean; error?: string }> {
     const { error } = await (
-      db.from(this.TASKS_TABLE) as ReturnType<(typeof supabase)['from']>
+      db.from(this.TASKS_TABLE) as unknown as ReturnType<
+        (typeof supabase)['from']
+      >
     )
       .update({
         priority: newPriority,
@@ -629,7 +741,9 @@ export class KitKanbanService {
     newPriority: number
   ): Promise<{ success: boolean; error?: string }> {
     const { error } = await (
-      db.from(this.TASKS_TABLE) as ReturnType<(typeof supabase)['from']>
+      db.from(this.TASKS_TABLE) as unknown as ReturnType<
+        (typeof supabase)['from']
+      >
     )
       .update({
         priority: newPriority,
@@ -655,7 +769,9 @@ export class KitKanbanService {
     taskId: string
   ): Promise<{ success: boolean; error?: string }> {
     const { error } = await (
-      db.from(this.TASKS_TABLE) as ReturnType<(typeof supabase)['from']>
+      db.from(this.TASKS_TABLE) as unknown as ReturnType<
+        (typeof supabase)['from']
+      >
     )
       .delete()
       .eq('id', taskId)
@@ -727,7 +843,9 @@ export class KitKanbanService {
     kitBuildPlanId: string
   ): Promise<KanbanTask | null> {
     const { data, error } = await (
-      db.from(this.TASKS_TABLE) as ReturnType<(typeof supabase)['from']>
+      db.from(this.TASKS_TABLE) as unknown as ReturnType<
+        (typeof supabase)['from']
+      >
     )
       .select('*')
       .eq('kit_build_plan_id', kitBuildPlanId)
@@ -753,7 +871,9 @@ export class KitKanbanService {
   }> {
     // First get the task to retrieve the kit_po_number
     const { data: taskData, error: taskError } = await (
-      db.from(this.TASKS_TABLE) as ReturnType<(typeof supabase)['from']>
+      db.from(this.TASKS_TABLE) as unknown as ReturnType<
+        (typeof supabase)['from']
+      >
     )
       .select('kit_po_number')
       .eq('id', taskId)
@@ -764,11 +884,14 @@ export class KitKanbanService {
       return { success: false, error: 'Could not find task' }
     }
 
-    const kitPoNumber = (taskData as { kit_po_number: string }).kit_po_number
+    const kitPoNumber = (taskData as unknown as { kit_po_number: string })
+      .kit_po_number
 
     // Get the "in_progress" column
     const { data: columns, error: colError } = await (
-      db.from(this.COLUMNS_TABLE) as ReturnType<(typeof supabase)['from']>
+      db.from(this.COLUMNS_TABLE) as unknown as ReturnType<
+        (typeof supabase)['from']
+      >
     )
       .select('id')
       .eq('column_name', 'in_progress')
@@ -779,11 +902,13 @@ export class KitKanbanService {
       return { success: false, error: 'Could not find in_progress column' }
     }
 
-    const targetColumnId = (columns as { id: string }).id
+    const targetColumnId = (columns as unknown as { id: string }).id
 
     // Get the next position in the target column
     const { data: existingTasks } = await (
-      db.from(this.TASKS_TABLE) as ReturnType<(typeof supabase)['from']>
+      db.from(this.TASKS_TABLE) as unknown as ReturnType<
+        (typeof supabase)['from']
+      >
     )
       .select('position_in_column')
       .eq('column_id', targetColumnId)
@@ -792,14 +917,16 @@ export class KitKanbanService {
 
     const nextPosition =
       existingTasks &&
-      (existingTasks as { position_in_column: number }[]).length > 0
-        ? (existingTasks as { position_in_column: number }[])[0]
+      (existingTasks as unknown as { position_in_column: number }[]).length > 0
+        ? (existingTasks as unknown as { position_in_column: number }[])[0]
             .position_in_column + 1
         : 0
 
     // Update the task: move to in_progress column and update step
     const { error: updateError } = await (
-      db.from(this.TASKS_TABLE) as ReturnType<(typeof supabase)['from']>
+      db.from(this.TASKS_TABLE) as unknown as ReturnType<
+        (typeof supabase)['from']
+      >
     )
       .update({
         column_id: targetColumnId,
@@ -818,15 +945,21 @@ export class KitKanbanService {
   }
 
   /**
-   * Get task by kit PO number
-   * Note: Uses .limit(1) instead of .single() to handle cases where there might be
-   * multiple tasks with the same PO number (shouldn't happen but defensive coding)
+   * Get task by kit PO number.
+   *
+   * @deprecated Multi-kit-per-PO is supported (e.g. C47E/4 Gear Box 1 + 2
+   * share a PO) — this returns whichever task happens to come back first
+   * and will silently merge unrelated kits. Use
+   * {@link getTaskByKitSerialNumber} when identifying a specific kit.
+   * Retained for legacy callers operating on a PO group.
    */
   static async getTaskByKitPoNumber(
     kitPoNumber: string
   ): Promise<KanbanTask | null> {
     const { data, error } = await (
-      db.from(this.TASKS_TABLE) as ReturnType<(typeof supabase)['from']>
+      db.from(this.TASKS_TABLE) as unknown as ReturnType<
+        (typeof supabase)['from']
+      >
     )
       .select('*')
       .eq('kit_po_number', kitPoNumber)
@@ -844,12 +977,66 @@ export class KitKanbanService {
   }
 
   /**
-   * Sync kanban task progress from RR_Kitting_DATA
-   * Call this after picking or kitting operations to keep kanban board in sync
-   * @param kitPoNumber - The Kit PO number to sync
-   * @returns Success status and updated counts
+   * Get task by kit_serial_number (the unique kit identity).
+   * Preferred over {@link getTaskByKitPoNumber} for any kit-level lookup
+   * where two kits could share a PO.
    */
-  static async syncKitProgressFromData(kitPoNumber: string): Promise<{
+  static async getTaskByKitSerialNumber(
+    kitSerialNumber: string
+  ): Promise<KanbanTask | null> {
+    const { data, error } = await (
+      db.from(this.TASKS_TABLE) as unknown as ReturnType<
+        (typeof supabase)['from']
+      >
+    )
+      .select('*')
+      .eq('kit_serial_number', kitSerialNumber)
+      .order('created_at', { ascending: false })
+      .limit(1)
+
+    if (error) {
+      logger.error('Error fetching kanban task by kit serial number:', error)
+      return null
+    }
+
+    const tasks = data as unknown as KanbanTask[]
+    return tasks && tasks.length > 0 ? tasks[0] : null
+  }
+
+  /**
+   * Fetch the human-readable kit number (e.g. "424 Inlet #1") for a
+   * single kit serial. kit_number lives on RR_Kitting_DATA, not on
+   * kit_kanban_tasks, so realtime INSERT payloads don't carry it — this
+   * lets the board enrich a freshly-inserted card. Keyed by
+   * kit_serial_number per [[Kit-Serial-Scoping]].
+   */
+  static async getKitNumberBySerial(
+    kitSerialNumber: string
+  ): Promise<string | null> {
+    const { data, error } = await (
+      db.from('RR_Kitting_DATA') as ReturnType<(typeof supabase)['from']>
+    )
+      .select('kit_number')
+      .eq('kit_serial_number', kitSerialNumber)
+      .not('kit_number', 'is', null)
+      .limit(1)
+
+    if (error) {
+      logger.error('Error fetching kit number by serial:', error)
+      return null
+    }
+
+    const rows = data as unknown as { kit_number: string | null }[]
+    return rows && rows.length > 0 ? rows[0].kit_number : null
+  }
+
+  /**
+   * Sync kanban task progress for a single kit identified by its serial.
+   * This is the preferred entry point — it never aggregates rows across
+   * kits that happen to share a PO, and it updates the kanban task whose
+   * `kit_serial_number` matches.
+   */
+  static async syncKitProgressFromSerial(kitSerialNumber: string): Promise<{
     success: boolean
     toLinesPicked?: number
     toLinesKitted?: number
@@ -858,16 +1045,17 @@ export class KitKanbanService {
     error?: string
   }> {
     try {
-      logger.log(`📊 KitKanbanService: Syncing progress for kit ${kitPoNumber}`)
+      logger.log(
+        `📊 KitKanbanService: Syncing progress for kit serial ${kitSerialNumber}`
+      )
 
-      // Query RR_Kitting_DATA for the actual picked/kitted counts
       const { data: kitLines, error: fetchError } = await (
         db.from('RR_Kitting_DATA') as ReturnType<(typeof supabase)['from']>
       )
         .select(
-          'kit_to_line_picked_date_time, kit_to_line_kitted_date_time, kit_inspection_completion_date_time, kit_ready_on_dock_date_time, transfer_order_number'
+          'kit_to_line_picked_date_time, kit_to_line_kitted_date_time, kit_inspection_completion_date_time, kit_ready_on_dock_date_time, transfer_order_number, cancelled'
         )
-        .eq('kit_po_number', kitPoNumber)
+        .eq('kit_serial_number', kitSerialNumber)
         .not('transfer_order_number', 'is', null)
 
       if (fetchError) {
@@ -876,7 +1064,7 @@ export class KitKanbanService {
       }
 
       if (!kitLines || kitLines.length === 0) {
-        logger.log(`⚠️ No kit lines found for ${kitPoNumber}`)
+        logger.log(`⚠️ No kit lines found for ${kitSerialNumber}`)
         return {
           success: true,
           toLinesPicked: 0,
@@ -891,40 +1079,17 @@ export class KitKanbanService {
         kit_inspection_completion_date_time: string | null
         kit_ready_on_dock_date_time: string | null
         transfer_order_number: string | null
+        // migration 325 — cancelled lines are excluded from progress totals
+        cancelled?: boolean | null
       }
 
-      const lines = kitLines as KitLine[]
-      const totalLines = lines.length
-      const pickedCount = lines.filter(
-        (l) => l.kit_to_line_picked_date_time !== null
-      ).length
-      const kittedCount = lines.filter(
-        (l) => l.kit_to_line_kitted_date_time !== null
-      ).length
-      const inspected = lines.some(
-        (l) => l.kit_inspection_completion_date_time !== null
-      )
-      const onDock = lines.some((l) => l.kit_ready_on_dock_date_time !== null)
+      const lines = kitLines as unknown as KitLine[]
+      const { totalLines, pickedCount, kittedCount, currentStep } =
+        this.computeKitProgress(lines)
 
-      // Determine current step based on progress
-      let currentStep = 'planning'
-      if (onDock) {
-        currentStep = 'on_dock'
-      } else if (inspected) {
-        currentStep = 'inspection'
-      } else if (
-        kittedCount > 0 ||
-        (pickedCount === totalLines && pickedCount > 0)
-      ) {
-        currentStep = 'kitting'
-      } else if (pickedCount > 0) {
-        currentStep = 'picking'
-      }
-
-      // Find and update the kanban task
-      const task = await this.getTaskByKitPoNumber(kitPoNumber)
+      const task = await this.getTaskByKitSerialNumber(kitSerialNumber)
       if (!task) {
-        logger.log(`⚠️ No kanban task found for kit ${kitPoNumber}`)
+        logger.log(`⚠️ No kanban task found for kit serial ${kitSerialNumber}`)
         return {
           success: true,
           toLinesPicked: pickedCount,
@@ -933,17 +1098,73 @@ export class KitKanbanService {
         }
       }
 
-      // Update the kanban task with the synced progress
+      // When the kit lands on dock (the new
+      // [[RF-Dock-Staging-Flow]] terminal step), promote the kanban card
+      // to the `completed` lane in the same UPDATE as the progress
+      // counters so operators see the move on the next board tick.
+      // The criterion is purely `kit_ready_on_dock_date_time IS NOT NULL`
+      // (encoded in `currentStep === 'on_dock'`) — that invariant holds
+      // regardless of whether the org runs inspections, and it also
+      // catches historical rows that landed on-dock via the pre-2026-05-17
+      // skip-inspection branch with `kit_dock_location = NULL`.
+      const updatePayload: Record<string, unknown> = {
+        to_lines_picked: pickedCount,
+        to_lines_kitted: kittedCount,
+        total_to_lines: totalLines,
+        current_step: currentStep,
+        updated_at: new Date().toISOString(),
+      }
+
+      let targetColumnId: string | null = null
+      if (currentStep === 'on_dock' || currentStep === 'completed') {
+        const { data: completedColumns } = await (
+          db.from(this.COLUMNS_TABLE) as unknown as ReturnType<
+            (typeof supabase)['from']
+          >
+        )
+          .select('id')
+          .eq('column_name', 'completed')
+          .limit(1)
+
+        const completedColumnRows = completedColumns as unknown as
+          | { id: string }[]
+          | null
+        const completedColumnId = completedColumnRows?.[0]?.id ?? null
+
+        if (completedColumnId && task.column_id !== completedColumnId) {
+          targetColumnId = completedColumnId
+
+          // Append to the bottom of the completed column to keep newly
+          // staged kits visually grouped together.
+          const { data: maxPosData } = await (
+            db.from(this.TASKS_TABLE) as unknown as ReturnType<
+              (typeof supabase)['from']
+            >
+          )
+            .select('position_in_column')
+            .eq('column_id', completedColumnId)
+            .order('position_in_column', { ascending: false })
+            .limit(1)
+
+          const nextPosition =
+            maxPosData &&
+            (maxPosData as unknown as { position_in_column: number }[]).length >
+              0
+              ? (maxPosData as unknown as { position_in_column: number }[])[0]
+                  .position_in_column + 1
+              : 0
+
+          updatePayload.column_id = completedColumnId
+          updatePayload.position_in_column = nextPosition
+        }
+      }
+
       const { error: updateError } = await (
-        db.from(this.TASKS_TABLE) as ReturnType<(typeof supabase)['from']>
+        db.from(this.TASKS_TABLE) as unknown as ReturnType<
+          (typeof supabase)['from']
+        >
       )
-        .update({
-          to_lines_picked: pickedCount,
-          to_lines_kitted: kittedCount,
-          total_to_lines: totalLines,
-          current_step: currentStep,
-          updated_at: new Date().toISOString(),
-        } as Record<string, unknown>)
+        .update(updatePayload)
         .eq('id', task.id)
 
       if (updateError) {
@@ -951,8 +1172,14 @@ export class KitKanbanService {
         return { success: false, error: updateError.message }
       }
 
+      if (targetColumnId) {
+        logger.log(
+          `🚚 KitKanbanService: Promoted ${kitSerialNumber} to completed lane (kit_ready_on_dock_date_time stamped)`
+        )
+      }
+
       logger.log(
-        `✅ KitKanbanService: Synced progress for ${kitPoNumber}: ${pickedCount}/${totalLines} picked, ${kittedCount}/${totalLines} kitted, step: ${currentStep}`
+        `✅ KitKanbanService: Synced progress for ${kitSerialNumber}: ${pickedCount}/${totalLines} picked, ${kittedCount}/${totalLines} kitted, step: ${currentStep}`
       )
       return {
         success: true,
@@ -962,12 +1189,150 @@ export class KitKanbanService {
         currentStep,
       }
     } catch (err) {
-      logger.error('Error syncing kit progress:', err)
+      logger.error('Error syncing kit progress by serial:', err)
       return {
         success: false,
         error: err instanceof Error ? err.message : 'Unknown error',
       }
     }
+  }
+
+  /**
+   * PO-scoped sync. Fans out to {@link syncKitProgressFromSerial} for
+   * every distinct kit serial under the PO so that multi-kit POs no
+   * longer collapse into a single aggregated kanban card.
+   *
+   * Kept as the public surface for legacy callers that still pass a PO,
+   * but every new code path should call {@link syncKitProgressFromSerial}
+   * directly with the actual kit serial it is operating on.
+   */
+  static async syncKitProgressFromData(kitPoNumber: string): Promise<{
+    success: boolean
+    toLinesPicked?: number
+    toLinesKitted?: number
+    totalLines?: number
+    currentStep?: string
+    error?: string
+  }> {
+    try {
+      const { data: rows, error: fetchError } = await (
+        db.from('RR_Kitting_DATA') as ReturnType<(typeof supabase)['from']>
+      )
+        .select('kit_serial_number')
+        .eq('kit_po_number', kitPoNumber)
+        .not('kit_serial_number', 'is', null)
+
+      if (fetchError) {
+        logger.error(
+          'Error fetching kit serials for PO-scoped sync:',
+          fetchError
+        )
+        return { success: false, error: fetchError.message }
+      }
+
+      const serials = Array.from(
+        new Set(
+          ((rows ?? []) as unknown as { kit_serial_number: string | null }[])
+            .map((r) => r.kit_serial_number)
+            .filter((s): s is string => !!s)
+        )
+      )
+
+      if (serials.length === 0) {
+        logger.log(`⚠️ No kit serials found for PO ${kitPoNumber}`)
+        return {
+          success: true,
+          toLinesPicked: 0,
+          toLinesKitted: 0,
+          totalLines: 0,
+        }
+      }
+
+      let lastResult: Awaited<
+        ReturnType<typeof KitKanbanService.syncKitProgressFromSerial>
+      > | null = null
+      for (const serial of serials) {
+        lastResult = await this.syncKitProgressFromSerial(serial)
+        if (!lastResult.success) {
+          logger.warn(
+            `[KitKanbanService] PO-scoped sync: serial ${serial} failed: ${lastResult.error}`
+          )
+        }
+      }
+
+      // Surface the last per-serial result to keep the existing return
+      // shape stable. Callers that actually need per-serial progress
+      // should use syncKitProgressFromSerial directly.
+      return (
+        lastResult ?? {
+          success: true,
+          toLinesPicked: 0,
+          toLinesKitted: 0,
+          totalLines: 0,
+        }
+      )
+    } catch (err) {
+      logger.error('Error in PO-scoped sync:', err)
+      return {
+        success: false,
+        error: err instanceof Error ? err.message : 'Unknown error',
+      }
+    }
+  }
+
+  /**
+   * Pure helper: compute aggregate progress + workflow step from a set
+   * of RR_Kitting_DATA rows. Exported only so the per-serial and the
+   * PO-fanout paths can stay in sync.
+   */
+  private static computeKitProgress(
+    lines: Array<{
+      kit_to_line_picked_date_time: string | null
+      kit_to_line_kitted_date_time: string | null
+      kit_inspection_completion_date_time: string | null
+      kit_ready_on_dock_date_time: string | null
+      // migration 325 — undefined for legacy callers that didn't select
+      // the column; treated as not-cancelled.
+      cancelled?: boolean | null
+    }>
+  ): {
+    totalLines: number
+    pickedCount: number
+    kittedCount: number
+    currentStep: string
+  } {
+    // Cancelled lines are excluded from totals so a cancelled TO
+    // doesn't keep the kanban card stuck in "Picking 0/N" forever.
+    // Inspection / on-dock signals are kept as-is — they're row-level
+    // flags on the parent kit, not per-line. See [[Cancel-Kit-TO-Line]].
+    const activeLines = lines.filter((l) => !l.cancelled)
+    const totalLines = activeLines.length
+    const pickedCount = activeLines.filter(
+      (l) => l.kit_to_line_picked_date_time !== null
+    ).length
+    const kittedCount = activeLines.filter(
+      (l) => l.kit_to_line_kitted_date_time !== null
+    ).length
+    const inspected = lines.some(
+      (l) => l.kit_inspection_completion_date_time !== null
+    )
+    const onDock = lines.some((l) => l.kit_ready_on_dock_date_time !== null)
+
+    let currentStep = 'planning'
+    if (onDock) {
+      currentStep = 'on_dock'
+    } else if (inspected) {
+      currentStep = 'inspection'
+    } else if (
+      kittedCount > 0 ||
+      (pickedCount === totalLines && pickedCount > 0)
+    ) {
+      currentStep = 'kitting'
+    } else if (pickedCount > 0) {
+      currentStep = 'picking'
+    }
+
+    return { totalLines, pickedCount, kittedCount, currentStep }
   }
 
   /**
@@ -1004,13 +1369,15 @@ export class KitKanbanService {
 
       // Get the planning column
       const { data: columns } = await (
-        db.from(this.COLUMNS_TABLE) as ReturnType<(typeof supabase)['from']>
+        db.from(this.COLUMNS_TABLE) as unknown as ReturnType<
+          (typeof supabase)['from']
+        >
       )
         .select('id')
         .eq('column_name', 'planning')
         .limit(1)
 
-      const columnsArray = columns as { id: string }[] | null
+      const columnsArray = columns as unknown as { id: string }[] | null
       if (!columnsArray || columnsArray.length === 0) {
         return {
           success: false,
@@ -1058,7 +1425,7 @@ export class KitKanbanService {
         transfer_order_number: string | null
       }
 
-      const plans = kitPlans as KitPlanRecord[]
+      const plans = kitPlans as unknown as KitPlanRecord[]
 
       // Group by kit_serial_number to get unique kits
       // Each unique kit (even with same PO number) has a unique serial number
@@ -1107,12 +1474,14 @@ export class KitKanbanService {
       // Get existing kanban tasks to check what's missing
       // Use kit_serial_number since that's the unique identifier stored in the table
       const { data: existingTasks } = await (
-        db.from(this.TASKS_TABLE) as ReturnType<(typeof supabase)['from']>
+        db.from(this.TASKS_TABLE) as unknown as ReturnType<
+          (typeof supabase)['from']
+        >
       ).select('kit_serial_number')
 
       const existingTaskKeys = new Set<string>()
       if (existingTasks) {
-        for (const task of existingTasks as {
+        for (const task of existingTasks as unknown as {
           kit_serial_number: string | null
         }[]) {
           if (task.kit_serial_number) {
@@ -1132,7 +1501,9 @@ export class KitKanbanService {
 
       // Get current max position in planning column
       const { data: maxPosData } = await (
-        db.from(this.TASKS_TABLE) as ReturnType<(typeof supabase)['from']>
+        db.from(this.TASKS_TABLE) as unknown as ReturnType<
+          (typeof supabase)['from']
+        >
       )
         .select('position_in_column')
         .eq('column_id', planningColumnId)
@@ -1141,8 +1512,8 @@ export class KitKanbanService {
 
       let nextPosition =
         maxPosData &&
-        (maxPosData as { position_in_column: number }[]).length > 0
-          ? (maxPosData as { position_in_column: number }[])[0]
+        (maxPosData as unknown as { position_in_column: number }[]).length > 0
+          ? (maxPosData as unknown as { position_in_column: number }[])[0]
               .position_in_column + 1
           : 0
 
@@ -1154,7 +1525,9 @@ export class KitKanbanService {
 
         // Create the missing kanban task (no organization_id or kit_number needed in this table)
         const { error: insertError } = await (
-          db.from(this.TASKS_TABLE) as ReturnType<(typeof supabase)['from']>
+          db.from(this.TASKS_TABLE) as unknown as ReturnType<
+            (typeof supabase)['from']
+          >
         ).insert({
           task_title: `${kit.kitSerialNumber || 'N/A'} - ${kit.kitPoNumber}`,
           kit_build_plan_id: kit.id,
@@ -1169,7 +1542,7 @@ export class KitKanbanService {
           to_lines_kitted: 0,
           current_step: 'planning',
           due_date: kit.dueDate || null,
-        } as unknown)
+        } as never)
 
         if (insertError) {
           logger.error(
@@ -1217,9 +1590,11 @@ export class KitKanbanService {
 
       // Get all tasks that are not in planning or completed steps
       const { data: tasks, error } = await (
-        db.from(this.TASKS_TABLE) as ReturnType<(typeof supabase)['from']>
+        db.from(this.TASKS_TABLE) as unknown as ReturnType<
+          (typeof supabase)['from']
+        >
       )
-        .select('kit_po_number, current_step')
+        .select('kit_serial_number, current_step')
         .not('current_step', 'eq', 'completed')
 
       if (error) {
@@ -1233,25 +1608,28 @@ export class KitKanbanService {
       }
 
       interface TaskRecord {
-        kit_po_number: string | null
+        kit_serial_number: string | null
         current_step: string | null
       }
 
-      const taskRecords = tasks as TaskRecord[]
+      const taskRecords = tasks as unknown as TaskRecord[]
       let synced = 0
       let errors = 0
 
-      // Sync each task's progress from RR_Kitting_DATA
+      // Sync each task's progress per kit serial so kits sharing a PO
+      // do not collapse into a single aggregated card.
       for (const task of taskRecords) {
-        if (!task.kit_po_number) continue
+        if (!task.kit_serial_number) continue
 
-        const result = await this.syncKitProgressFromData(task.kit_po_number)
+        const result = await this.syncKitProgressFromSerial(
+          task.kit_serial_number
+        )
         if (result.success) {
           synced++
         } else {
           errors++
           logger.warn(
-            `⚠️ Failed to sync task ${task.kit_po_number}:`,
+            `⚠️ Failed to sync task ${task.kit_serial_number}:`,
             result.error
           )
         }
@@ -1267,4 +1645,5 @@ export class KitKanbanService {
     }
   }
 }
-// Developer and Creator: Jai Singh
+
+// Created and developed by Jai Singh

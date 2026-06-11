@@ -1,3 +1,4 @@
+// Created and developed by Jai Singh
 import { Button } from '@/components/ui/button'
 
 export default function MaintenanceError() {
@@ -17,3 +18,5 @@ export default function MaintenanceError() {
     </div>
   )
 }
+
+// Created and developed by Jai Singh

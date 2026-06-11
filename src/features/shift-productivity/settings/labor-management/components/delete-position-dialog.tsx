@@ -1,3 +1,4 @@
+// Created and developed by Jai Singh
 /**
  * Delete Position Dialog Component
  * Confirmation dialog for deleting organizational positions
@@ -141,3 +142,5 @@ export function DeletePositionDialog({
     </AlertDialog>
   )
 }
+
+// Created and developed by Jai Singh

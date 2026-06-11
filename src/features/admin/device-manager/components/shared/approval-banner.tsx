@@ -1,3 +1,4 @@
+// Created and developed by Jai Singh
 import { IconAlertTriangle } from '@tabler/icons-react'
 import { Button } from '@/components/ui/button'
 
@@ -34,3 +35,5 @@ export function ApprovalBanner({
     </div>
   )
 }
+
+// Created and developed by Jai Singh

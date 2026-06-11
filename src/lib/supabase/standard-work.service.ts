@@ -1,3 +1,4 @@
+// Created and developed by Jai Singh
 /**
  * Standard Work Service
  * Comprehensive service for managing standard work checklists, templates, and submissions
@@ -445,11 +446,17 @@ class StandardWorkService {
 
     const items = await this.getTemplateItems(templateId)
 
+    // Guard against the literal "undefined-copy" code if the original template
+    // has no template_code; only suffix when a code actually exists.
+    const duplicatedCode = original.template_code
+      ? `${original.template_code}-copy`
+      : undefined
+
     const newTemplate = await this.createTemplate({
       ...original,
       id: undefined,
       template_name: newName,
-      template_code: `${original.template_code}-copy`,
+      template_code: duplicatedCode,
       status: 'draft',
       version: 1,
       created_at: undefined,
@@ -538,6 +545,79 @@ class StandardWorkService {
     if (error) throw error
   }
 
+  /**
+   * Restore a previously soft-deleted item. Used by the builder's "Undo
+   * delete" toast — the item keeps the same id, display_order, and
+   * section_name so the row pops back exactly where it was.
+   */
+  async restoreItem(itemId: string): Promise<StandardWorkItem> {
+    const { data, error } = await (supabase as any)
+      .from('standard_work_items')
+      .update({ is_active: true, updated_at: new Date().toISOString() })
+      .eq('id', itemId)
+      .select()
+      .single()
+
+    if (error) throw error
+    return data as StandardWorkItem
+  }
+
+  /**
+   * Clone an item within the same template. The duplicate is inserted
+   * directly after the source row (display_order = source + 1) and all
+   * later items in the same section are shifted down to make space. This
+   * matches what users expect from "Duplicate" in form builders like
+   * Typeform / Google Forms.
+   */
+  async duplicateItem(itemId: string): Promise<StandardWorkItem> {
+    const source = await this.getItem(itemId)
+    if (!source) throw new Error('Item not found')
+
+    const siblings = await this.getTemplateItems(source.template_id)
+    const sameSection = siblings.filter(
+      (i) => (i.section_name ?? null) === (source.section_name ?? null)
+    )
+    const sourceIndex = sameSection.findIndex((i) => i.id === source.id)
+    const insertOrder =
+      sourceIndex >= 0 ? sameSection[sourceIndex].display_order + 1 : 0
+
+    // Shift everything below the source down by one so display_order stays
+    // dense. Errors are swallowed individually but the first one is rethrown
+    // so callers can surface a toast.
+    const toShift = sameSection.filter(
+      (i) => i.display_order >= insertOrder && i.id !== source.id
+    )
+    if (toShift.length > 0) {
+      const shiftResults = await Promise.all(
+        toShift.map((i) =>
+          (supabase as any)
+            .from('standard_work_items')
+            .update({ display_order: i.display_order + 1 })
+            .eq('id', i.id)
+        )
+      )
+      const firstShiftError = shiftResults.find((r) => r.error)?.error
+      if (firstShiftError) throw firstShiftError
+    }
+
+    const {
+      id: _omitId,
+      created_at: _omitCreated,
+      updated_at: _omitUpdated,
+      ...rest
+    } = source
+    const baseTitle = source.item_title?.trim() || 'Untitled item'
+    const dupTitle = baseTitle.endsWith('(Copy)')
+      ? baseTitle
+      : `${baseTitle} (Copy)`
+    return this.createItem({
+      ...rest,
+      item_title: dupTitle,
+      display_order: insertOrder,
+      is_active: true,
+    })
+  }
+
   async reorderItems(
     templateId: string,
     itemOrders: Array<{
@@ -546,18 +626,26 @@ class StandardWorkService {
       section_name?: string
     }>
   ): Promise<void> {
-    for (const item of itemOrders) {
-      const { error } = await (supabase as any)
-        .from('standard_work_items')
-        .update({
-          display_order: item.display_order,
-          section_name: item.section_name,
-        })
-        .eq('id', item.id)
-        .eq('template_id', templateId)
+    if (itemOrders.length === 0) return
 
-      if (error) throw error
-    }
+    // Run all updates in parallel to avoid the previous N sequential round
+    // trips. Supabase enforces RLS per row so this is still safe; we collect
+    // any errors and surface the first one to keep the call site simple.
+    const results = await Promise.all(
+      itemOrders.map((item) =>
+        (supabase as any)
+          .from('standard_work_items')
+          .update({
+            display_order: item.display_order,
+            section_name: item.section_name,
+          })
+          .eq('id', item.id)
+          .eq('template_id', templateId)
+      )
+    )
+
+    const firstError = results.find((r) => r.error)?.error
+    if (firstError) throw firstError
   }
 
   async bulkCreateItems(
@@ -832,6 +920,40 @@ class StandardWorkService {
     return data
   }
 
+  /**
+   * Single-round-trip bundle for the runner. Wraps `getSubmissionWithResponses`
+   * and shapes it into the `{ submission, items[], responses[] }` form the
+   * runner UI consumes, replacing three parallel queries with one RPC.
+   */
+  async getSubmissionBundle(submissionId: string): Promise<{
+    submission: StandardWorkSubmission
+    items: StandardWorkItem[]
+    responses: StandardWorkResponse[]
+  }> {
+    const bundle = await this.getSubmissionWithResponses(submissionId)
+    const items: StandardWorkItem[] = []
+    const responses: StandardWorkResponse[] = []
+    for (const entry of bundle.responses ?? []) {
+      // Skip items that have been soft-deleted from the template since the
+      // submission was started so the runner doesn't render orphans.
+      if (entry?.item && entry.item.is_active !== false) {
+        items.push(entry.item as StandardWorkItem)
+      }
+      if (entry?.response) {
+        responses.push(entry.response as StandardWorkResponse)
+      }
+    }
+    items.sort((a, b) => a.display_order - b.display_order)
+    // Hydrate the submission with the joined template + area so the runner
+    // header card has the same shape as the previous `getSubmission` query.
+    const submission = {
+      ...bundle.submission,
+      template: bundle.template,
+      working_area: bundle.area,
+    } as StandardWorkSubmission
+    return { submission, items, responses }
+  }
+
   // ===== TEMPLATE ASSIGNMENTS =====
 
   async getTemplateAssignments(
@@ -955,6 +1077,11 @@ class StandardWorkService {
     return submissions
   }
 
+  /**
+   * Returns an existing submission for the same template + shift_date that is
+   * already final (submitted/approved). Used to block double-submission of the
+   * same checklist for the same day.
+   */
   async checkDuplicateSubmission(
     organizationId: string,
     templateId: string,
@@ -979,6 +1106,61 @@ class StandardWorkService {
     return data as StandardWorkSubmission | null
   }
 
+  /**
+   * Returns the user's open draft / in-progress submission for a given
+   * template + day, if any. Lets the runner transparently resume rather than
+   * creating parallel drafts.
+   */
+  async findOpenDraft(
+    organizationId: string,
+    templateId: string,
+    submittedBy: string,
+    shiftDate: string,
+    workingAreaId?: string
+  ): Promise<StandardWorkSubmission | null> {
+    let query = (supabase as any)
+      .from('standard_work_submissions')
+      .select('*')
+      .eq('organization_id', organizationId)
+      .eq('template_id', templateId)
+      .eq('submitted_by', submittedBy)
+      .eq('shift_date', shiftDate)
+      .in('status', ['draft', 'in_progress'])
+      .order('created_at', { ascending: false })
+
+    if (workingAreaId) {
+      query = query.eq('working_area_id', workingAreaId)
+    }
+
+    const { data, error } = await query.limit(1).maybeSingle()
+
+    if (error) throw error
+    return data as StandardWorkSubmission | null
+  }
+
+  /**
+   * Compute a UTC ISO `due_at` for a submission given the template's local
+   * due_time ("HH:MM[:SS]") and the local shift_date ("YYYY-MM-DD"). Browser
+   * timezone is used. Returns `undefined` when no due_time is set so the
+   * server-side trigger can fall through to its default behavior.
+   */
+  private buildDueAt(
+    shiftDate: string,
+    dueTime?: string | null
+  ): string | undefined {
+    if (!dueTime) return undefined
+    const [h = '00', m = '00', s = '00'] = dueTime.split(':')
+    const local = new Date(shiftDate + 'T00:00:00')
+    local.setHours(
+      parseInt(h, 10) || 0,
+      parseInt(m, 10) || 0,
+      parseInt(s, 10) || 0,
+      0
+    )
+    if (Number.isNaN(local.getTime())) return undefined
+    return local.toISOString()
+  }
+
   async startNewSubmission(
     organizationId: string,
     templateId: string,
@@ -987,6 +1169,40 @@ class StandardWorkService {
     submitterInfo?: { name: string; position: string }
   ): Promise<StandardWorkSubmission> {
     const today = getLocalDateString()
+
+    // If a final (submitted/approved) duplicate exists for today, refuse:
+    // double-submission would inflate completion stats.
+    const duplicate = await this.checkDuplicateSubmission(
+      organizationId,
+      templateId,
+      today,
+      workingAreaId
+    )
+    if (duplicate) {
+      const error = new Error(
+        'A submission for this checklist has already been submitted today.'
+      ) as Error & { code?: string; existing?: StandardWorkSubmission }
+      error.code = 'DUPLICATE_SUBMISSION'
+      error.existing = duplicate
+      throw error
+    }
+
+    // If an open draft exists for the user/template/day, resume it transparently
+    // instead of creating a parallel draft (the dashboard already shows
+    // Continue, but stale today-submissions cache could trigger a Start click).
+    const existingDraft = await this.findOpenDraft(
+      organizationId,
+      templateId,
+      submittedBy,
+      today,
+      workingAreaId
+    )
+    if (existingDraft) return existingDraft
+
+    const template = await this.getTemplate(templateId)
+    const dueAt = template
+      ? this.buildDueAt(today, template.due_time)
+      : undefined
 
     const submission = await this.createSubmission({
       organization_id: organizationId,
@@ -997,7 +1213,11 @@ class StandardWorkService {
       submitter_position: submitterInfo?.position,
       status: 'draft',
       shift_date: today,
-    })
+      // Cast through any so we can populate columns added by migration 098 that
+      // are not yet reflected in the generated row type. The DB will set the
+      // column natively.
+      ...((dueAt ? { due_at: dueAt } : {}) as Partial<StandardWorkSubmission>),
+    } as Partial<StandardWorkSubmission>)
 
     const items = await this.getTemplateItems(templateId)
     const initialResponses: Partial<StandardWorkResponse>[] = items.map(
@@ -1261,4 +1481,5 @@ class StandardWorkService {
 }
 
 export default StandardWorkService.getInstance()
-// Developer and Creator: Jai Singh
+
+// Created and developed by Jai Singh

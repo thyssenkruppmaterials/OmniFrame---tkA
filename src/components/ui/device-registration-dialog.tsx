@@ -1,3 +1,4 @@
+// Created and developed by Jai Singh
 /**
  * Device Registration Dialog
  * Prompts users to name their RF Terminal device on first login
@@ -297,3 +298,5 @@ export function useDeviceRegistration() {
 
   return { needsRegistration, registeredDevice, setNeedsRegistration }
 }
+
+// Created and developed by Jai Singh

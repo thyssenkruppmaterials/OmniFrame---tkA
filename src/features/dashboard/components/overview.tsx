@@ -1,3 +1,4 @@
+// Created and developed by Jai Singh
 import { Bar, BarChart, ResponsiveContainer, XAxis, YAxis } from 'recharts'
 
 const data = [
@@ -79,3 +80,5 @@ export function Overview() {
     </ResponsiveContainer>
   )
 }
+
+// Created and developed by Jai Singh

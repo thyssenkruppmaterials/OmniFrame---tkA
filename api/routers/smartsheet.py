@@ -1,3 +1,4 @@
+# Created and developed by Jai Singh
 """
 FastAPI router for Smartsheet operations.
 Provides comprehensive RESTful endpoints for all Smartsheet functionality.
@@ -1054,4 +1055,4 @@ async def batch_operations(
         logger.error(f"Batch operations failed: {str(e)}")
         raise handle_service_error(e)
 
-# Developer and Creator: Jai Singh
+# Created and developed by Jai Singh

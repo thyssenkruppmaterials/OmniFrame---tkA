@@ -1,3 +1,4 @@
+// Created and developed by Jai Singh
 /**
  * Timecard Management Component
  * Enterprise-grade supervisor timecard management with real data from Supabase.
@@ -738,3 +739,5 @@ function TimecardManagement() {
 }
 
 export default TimecardManagement
+
+// Created and developed by Jai Singh

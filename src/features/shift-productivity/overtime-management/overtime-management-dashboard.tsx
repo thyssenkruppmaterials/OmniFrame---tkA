@@ -1,3 +1,4 @@
+// Created and developed by Jai Singh
 import { useCallback, useEffect, useState } from 'react'
 import {
   format,
@@ -1297,7 +1298,7 @@ function StatCard({
   description,
   highlight = false,
 }: {
-  icon: React.ElementType
+  icon: React.ComponentType<{ className?: string }>
   title: string
   value: number | string
   description: string
@@ -1351,3 +1352,5 @@ function PriorityBadge({
     </span>
   )
 }
+
+// Created and developed by Jai Singh

@@ -1,3 +1,4 @@
+// Created and developed by Jai Singh
 import React from 'react'
 import { AlertTriangle, AlertCircle, Info, Loader2 } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
@@ -90,9 +91,7 @@ export const ConfirmDialog = React.memo(
               <Icon className={`h-5 w-5 ${config.iconColor}`} />
               {title}
             </DialogTitle>
-            {description && (
-              <DialogDescription>{description}</DialogDescription>
-            )}
+            <DialogDescription>{description || message}</DialogDescription>
           </DialogHeader>
 
           <div className='space-y-4'>
@@ -168,3 +167,5 @@ export const ConfirmDialog = React.memo(
 )
 
 ConfirmDialog.displayName = 'ConfirmDialog'
+
+// Created and developed by Jai Singh

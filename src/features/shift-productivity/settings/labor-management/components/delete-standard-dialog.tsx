@@ -1,3 +1,4 @@
+// Created and developed by Jai Singh
 /**
  * Delete Labor Standard Dialog Component
  * Confirmation dialog for deleting labor standards
@@ -120,3 +121,5 @@ export function DeleteStandardDialog({
     </AlertDialog>
   )
 }
+
+// Created and developed by Jai Singh

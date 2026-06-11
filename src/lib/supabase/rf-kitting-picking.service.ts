@@ -1,3 +1,4 @@
+// Created and developed by Jai Singh
 /**
  * RF Kitting Picking Operations Service
  * Handles picking workflow for Kit PO items in the RF Terminal
@@ -51,6 +52,35 @@ export interface KittingPickValidation {
 }
 
 /**
+ * One row returned to the operator when a scanned Kit PO maps to more
+ * than one active kit. The form renders a picker over these so the
+ * operator commits to a specific kit_serial_number before any
+ * subsequent pick mutations.
+ */
+export interface KitDisambiguationOption {
+  kit_serial_number: string
+  kit_number: string
+  kit_build_status: string
+  kit_build_number: string | null
+  total_lines: number
+  picked_count: number
+}
+
+export interface VerifyKitForPickingResult {
+  /** Loaded kit data when verification resolved to a single kit. */
+  data: KittingPickData | null
+  /** Operator-facing error message if verification failed. */
+  error: string | null
+  /**
+   * Populated only when more than one active kit shares the scanned PO
+   * and no kit_serial_number was supplied. Caller must present a picker
+   * (or short-circuit if length === 1) and re-call verifyKitForPicking
+   * with the chosen kit_serial_number.
+   */
+  kits?: KitDisambiguationOption[]
+}
+
+/**
  * RF Kitting Picking Service Class
  * Handles picking operations for Kit PO items
  */
@@ -58,22 +88,35 @@ class RFKittingPickingService {
   private static readonly TABLE_NAME = 'RR_Kitting_DATA'
 
   /**
-   * Verify a Kit PO Number exists and is ready for picking
-   * Valid statuses for picking: 'pending', 'printed', 'in_progress'
-   * @param kitPoNumber - The Kit PO number to verify
-   * @returns Kit picking data if valid
+   * Verify a Kit PO Number exists and is ready for picking.
+   *
+   * Two scoping modes:
+   * - Pass `kitPoNumber` only — legacy / fallback scan path. If exactly
+   *   one active kit exists for the PO, returns its data. If two or
+   *   more active kits share the PO (e.g. C47E/4 Gear Box 1 + 2),
+   *   returns a `kits` list and the caller must present a picker.
+   * - Pass `kitPoNumber` + `kitSerialNumber` — used after the operator
+   *   selects a specific kit from the picker. Identification is by
+   *   serial; PO is verified for sanity but does not affect filtering.
+   *
+   * Operators who scan a `kit_serial_number` directly should call
+   * {@link verifyKitForPickingBySerialNumber} instead — that path skips
+   * the PO-meta lookup and never returns a `kits` disambiguation list
+   * because the serial is already globally unique.
+   *
+   * Valid statuses for picking: 'pending', 'printed', 'in_progress'.
    */
-  async verifyKitForPicking(kitPoNumber: string): Promise<{
-    data: KittingPickData | null
-    error: string | null
-  }> {
+  async verifyKitForPicking(
+    kitPoNumber: string,
+    kitSerialNumber?: string
+  ): Promise<VerifyKitForPickingResult> {
     try {
       logger.log(
-        '🔍 RF Kitting Picking: Verifying kit for picking:',
-        kitPoNumber
+        '🔍 RF Kitting Picking: Verifying kit for picking (PO path):',
+        kitPoNumber,
+        kitSerialNumber ? `(serial: ${kitSerialNumber})` : ''
       )
 
-      // Get the user's organization ID
       const {
         data: { user },
         error: userError,
@@ -82,12 +125,174 @@ class RFKittingPickingService {
         return { data: null, error: 'User not authenticated' }
       }
 
-      // Query RR_Kitting_DATA for kit items
-      // Note: Using type assertion as RR_Kitting_DATA may not be in generated types
-      const { data: kitItems, error } = await (supabase
-        .from(RFKittingPickingService.TABLE_NAME as any)
-        .select(
-          `
+      // First: resolve which kit serial(s) sit under this PO. Only when
+      // we have a single serial may we proceed without disambiguation.
+      // Filtering downstream uses kit_serial_number — a PO-scoped query
+      // would silently merge unrelated kits' floor / rack lists.
+      let resolvedSerial: string | null = kitSerialNumber?.trim() || null
+
+      if (!resolvedSerial) {
+        const { data: kitMeta, error: kitMetaError } = await (supabase
+          .from(RFKittingPickingService.TABLE_NAME as any)
+          .select(
+            'kit_serial_number, kit_number, kit_build_status, kit_build_number, transfer_order_number, kit_to_line_picked_date_time'
+          )
+          .eq('kit_po_number', kitPoNumber) as any)
+
+        if (kitMetaError) {
+          logger.error(
+            '❌ RF Kitting Picking: Database error (PO lookup):',
+            kitMetaError
+          )
+          return { data: null, error: kitMetaError.message }
+        }
+
+        const metaRows = (kitMeta ?? []) as Array<{
+          kit_serial_number: string | null
+          kit_number: string | null
+          kit_build_status: string | null
+          kit_build_number: string | null
+          transfer_order_number: string | null
+          kit_to_line_picked_date_time: string | null
+        }>
+
+        if (metaRows.length === 0) {
+          return { data: null, error: `Kit PO ${kitPoNumber} not found` }
+        }
+
+        const validStatuses = new Set(['pending', 'printed', 'in_progress'])
+        const perSerial = new Map<
+          string,
+          KitDisambiguationOption & { _hasValidStatus: boolean }
+        >()
+
+        for (const row of metaRows) {
+          if (!row.kit_serial_number) continue
+          const existing = perSerial.get(row.kit_serial_number)
+          const hasValidStatus = validStatuses.has(
+            row.kit_build_status?.toLowerCase() || ''
+          )
+          if (!existing) {
+            perSerial.set(row.kit_serial_number, {
+              kit_serial_number: row.kit_serial_number,
+              kit_number: row.kit_number || '',
+              kit_build_status: row.kit_build_status || '',
+              kit_build_number: row.kit_build_number,
+              total_lines: row.transfer_order_number ? 1 : 0,
+              picked_count: row.kit_to_line_picked_date_time ? 1 : 0,
+              _hasValidStatus: hasValidStatus,
+            })
+          } else {
+            if (row.transfer_order_number) existing.total_lines += 1
+            if (row.kit_to_line_picked_date_time) existing.picked_count += 1
+          }
+        }
+
+        const activeKits = Array.from(perSerial.values()).filter(
+          (k) => k._hasValidStatus
+        )
+
+        if (activeKits.length === 0) {
+          // Surface the status of the first kit so the operator knows
+          // why the kit cannot be picked (matches the prior single-kit
+          // behaviour).
+          const firstStatus =
+            Array.from(perSerial.values())[0]?.kit_build_status ?? 'unknown'
+          return {
+            data: null,
+            error: `Kit ${kitPoNumber} is not ready for picking. Current status: ${firstStatus}`,
+          }
+        }
+
+        if (activeKits.length > 1) {
+          // Strip the internal helper field before returning to the UI.
+          const kits = activeKits.map(
+            ({ _hasValidStatus: _ignored, ...rest }) => rest
+          )
+          return {
+            data: null,
+            error: null,
+            kits,
+          }
+        }
+
+        resolvedSerial = activeKits[0].kit_serial_number
+      }
+
+      return this.loadKitPayloadBySerial(resolvedSerial)
+    } catch (error: unknown) {
+      logger.error('❌ RF Kitting Picking: Unexpected error:', error)
+      return {
+        data: null,
+        error: error instanceof Error ? error.message : String(error),
+      }
+    }
+  }
+
+  /**
+   * Direct-by-serial entry point for the RF Kit Picking scan input.
+   *
+   * `kit_serial_number` is the globally unique PK on `RR_Kitting_DATA`
+   * (format `KIT-YYYYMMDD-NNN`) so this path never needs the PO-meta
+   * disambiguation pre-flight done by {@link verifyKitForPicking}. The
+   * operator drops straight into picking even when the underlying PO
+   * covers multiple kits.
+   *
+   * The Black Hat check inside {@link loadKitPayloadBySerial} still
+   * keys on `kit_serial_number` first and falls back to legacy
+   * PO-scoped flag rows, identical to the PO-path behaviour — so
+   * Black-Hat-blocked sibling kits do not bleed across.
+   *
+   * Valid statuses for picking: 'pending', 'printed', 'in_progress'.
+   */
+  async verifyKitForPickingBySerialNumber(
+    kitSerialNumber: string
+  ): Promise<VerifyKitForPickingResult> {
+    try {
+      const serial = kitSerialNumber.trim()
+      logger.log(
+        '🔍 RF Kitting Picking: Verifying kit for picking (serial path):',
+        serial
+      )
+
+      const {
+        data: { user },
+        error: userError,
+      } = await supabase.auth.getUser()
+      if (userError || !user) {
+        return { data: null, error: 'User not authenticated' }
+      }
+
+      if (!serial) {
+        return { data: null, error: 'Kit serial number is required' }
+      }
+
+      return this.loadKitPayloadBySerial(serial)
+    } catch (error: unknown) {
+      logger.error(
+        '❌ RF Kitting Picking: Unexpected error (serial path):',
+        error
+      )
+      return {
+        data: null,
+        error: error instanceof Error ? error.message : String(error),
+      }
+    }
+  }
+
+  /**
+   * Shared loader: fetch every TO row for a `kit_serial_number`, run
+   * the Black Hat gate, and assemble the {@link KittingPickData}
+   * payload. Single source of truth so the PO-path and serial-path
+   * entry points behave identically once a serial is resolved.
+   */
+  private async loadKitPayloadBySerial(
+    resolvedSerial: string
+  ): Promise<VerifyKitForPickingResult> {
+    const { data: kitItems, error } = await (supabase
+      .from(RFKittingPickingService.TABLE_NAME as any)
+      .select(
+        `
           id,
           kit_po_number,
           kit_build_number,
@@ -107,209 +312,236 @@ class RFKittingPickingService {
           kit_to_line_picked_date_time,
           kit_flag_type
         `
-        )
-        .eq('kit_po_number', kitPoNumber)
-        .order('source_storage_bin', { ascending: true })
-        .order('material', { ascending: true }) as any)
+      )
+      .eq('kit_serial_number', resolvedSerial)
+      .order('source_storage_bin', { ascending: true })
+      .order('material', { ascending: true }) as any)
 
-      if (error) {
-        logger.error('❌ RF Kitting Picking: Database error:', error)
-        return { data: null, error: error.message }
+    if (error) {
+      logger.error('❌ RF Kitting Picking: Database error:', error)
+      return { data: null, error: error.message }
+    }
+
+    if (!kitItems || kitItems.length === 0) {
+      logger.log(
+        `❌ RF Kitting Picking: No kit rows found for serial ${resolvedSerial}`
+      )
+      return {
+        data: null,
+        error: `Kit serial ${resolvedSerial} not found`,
       }
+    }
 
-      if (!kitItems || kitItems.length === 0) {
-        logger.log(`❌ RF Kitting Picking: No kit found for: ${kitPoNumber}`)
-        return { data: null, error: `Kit PO ${kitPoNumber} not found` }
+    interface KittingRecord {
+      id: string
+      kit_po_number: string
+      kit_build_number: string
+      kit_serial_number: string
+      engine_program: string
+      kit_number: string
+      kit_build_status: string
+      due_date: string | null
+      transfer_order_number: string | null
+      material: string | null
+      material_description: string | null
+      source_storage_bin: string | null
+      dest_storage_bin: string | null
+      source_target_qty: string | null
+      batch: string | null
+      kit_to_line_picked_by_user: string | null
+      kit_to_line_picked_date_time: string | null
+      kit_flag_type: string | null
+    }
+    const records = kitItems as KittingRecord[]
+
+    const firstRecord = records[0]
+
+    // Sanity check: the chosen kit must still be pickable. (Status can
+    // change between picker and submit.)
+    const validStatuses = ['pending', 'printed', 'in_progress']
+    if (
+      !validStatuses.includes(firstRecord.kit_build_status?.toLowerCase() || '')
+    ) {
+      logger.log(
+        `❌ RF Kitting Picking: Kit status not valid for picking: ${firstRecord.kit_build_status}`
+      )
+      return {
+        data: null,
+        error: `Kit ${firstRecord.kit_serial_number} is not ready for picking. Current status: ${firstRecord.kit_build_status}`,
       }
+    }
 
-      // Type the records for safe access
-      interface KittingRecord {
-        id: string
-        kit_po_number: string
-        kit_build_number: string
-        kit_serial_number: string
-        engine_program: string
-        kit_number: string
-        kit_build_status: string
-        due_date: string | null
-        transfer_order_number: string | null
-        material: string | null
-        material_description: string | null
-        source_storage_bin: string | null
-        dest_storage_bin: string | null
-        source_target_qty: string | null
-        batch: string | null
-        kit_to_line_picked_by_user: string | null
-        kit_to_line_picked_date_time: string | null
-        kit_flag_type: string | null
-      }
-      const records = kitItems as KittingRecord[]
+    // Check for active Black Hat flag (blocks picking due to missing
+    // BOM materials). Probe per-kit-serial first; fall back to a
+    // PO-scoped probe for legacy flag rows whose serial column was
+    // never backfilled. Sibling kits sharing a PO will not block each
+    // other once their flag rows are serial-scoped.
+    try {
+      let blockingNote: string | null | undefined
 
-      const firstRecord = records[0]
+      const { data: serialFlags } = await supabase
+        .from('kit_build_flags')
+        .select('id, notes')
+        .eq('kit_serial_number', firstRecord.kit_serial_number)
+        .eq('flag_type', 'black')
+        .eq('is_active', true)
+        .limit(1)
 
-      // Check if kit is in a valid status for picking
-      const validStatuses = ['pending', 'printed', 'in_progress']
-      if (
-        !validStatuses.includes(
-          firstRecord.kit_build_status?.toLowerCase() || ''
-        )
-      ) {
-        logger.log(
-          `❌ RF Kitting Picking: Kit status not valid for picking: ${firstRecord.kit_build_status}`
-        )
-        return {
-          data: null,
-          error: `Kit ${kitPoNumber} is not ready for picking. Current status: ${firstRecord.kit_build_status}`,
-        }
-      }
-
-      // Check for active Black Hat flag (blocks picking due to missing BOM materials)
-      try {
-        const { data: blackHatFlags, error: flagError } = await supabase
+      if (serialFlags && (serialFlags as { id: string }[]).length > 0) {
+        blockingNote = (
+          serialFlags as { id: string; notes: string | null }[]
+        )[0].notes
+      } else {
+        const { data: legacyPoFlags } = await supabase
           .from('kit_build_flags')
           .select('id, notes')
-          .eq('kit_po_number', kitPoNumber)
+          .eq('kit_po_number', firstRecord.kit_po_number)
+          .is('kit_serial_number', null)
           .eq('flag_type', 'black')
           .eq('is_active', true)
           .limit(1)
 
-        if (
-          !flagError &&
-          blackHatFlags &&
-          (blackHatFlags as { id: string }[]).length > 0
-        ) {
-          const note = (
-            blackHatFlags as { id: string; notes: string | null }[]
+        if (legacyPoFlags && (legacyPoFlags as { id: string }[]).length > 0) {
+          blockingNote = (
+            legacyPoFlags as { id: string; notes: string | null }[]
           )[0].notes
-          logger.log(
-            `❌ RF Kitting Picking: Kit blocked by Black Hat flag: ${kitPoNumber}`
-          )
-          return {
-            data: null,
-            error: `Kit ${kitPoNumber} is blocked from picking — missing BOM materials.${note ? ` (${note})` : ''} Resolve the Black Hat flag before picking.`,
-          }
-        }
-      } catch {
-        // Fallback: check legacy flag field on the record
-        if (firstRecord.kit_flag_type === 'black') {
-          return {
-            data: null,
-            error: `Kit ${kitPoNumber} is blocked from picking due to a Black Hat flag. Resolve it before picking.`,
-          }
         }
       }
 
-      // Get user names for picked_by users
-      const pickedByUserIds = new Set<string>()
-      records.forEach((r) => {
-        if (r.kit_to_line_picked_by_user) {
-          pickedByUserIds.add(r.kit_to_line_picked_by_user)
-        }
-      })
-
-      const userNameMap = new Map<string, string>()
-      if (pickedByUserIds.size > 0) {
-        const { data: profiles } = await supabase
-          .from('user_profiles')
-          .select('id, full_name, first_name, last_name, email')
-          .in('id', Array.from(pickedByUserIds))
-
-        if (profiles) {
-          for (const profile of profiles) {
-            const displayName =
-              profile.full_name ||
-              `${profile.first_name || ''} ${profile.last_name || ''}`.trim() ||
-              profile.email?.split('@')[0] ||
-              null
-            if (displayName) {
-              userNameMap.set(profile.id, displayName)
-            }
-          }
+      if (blockingNote !== undefined) {
+        logger.log(
+          `❌ RF Kitting Picking: Kit blocked by Black Hat flag: ${firstRecord.kit_serial_number}`
+        )
+        return {
+          data: null,
+          error: `Kit ${firstRecord.kit_serial_number} is blocked from picking — missing BOM materials.${blockingNote ? ` (${blockingNote})` : ''} Resolve the Black Hat flag before picking.`,
         }
       }
-
-      // Transform records to pick items and separate by bin type
-      const allItems: KittingPickItem[] = records
-        .filter((r) => r.transfer_order_number && r.source_storage_bin)
-        .map((r) => ({
-          id: r.id,
-          transfer_order_number: r.transfer_order_number!,
-          material: r.material || '',
-          material_description: r.material_description || null,
-          source_storage_bin: r.source_storage_bin!,
-          dest_storage_bin: r.dest_storage_bin || '',
-          source_target_qty: parseFloat(r.source_target_qty || '0'),
-          batch: r.batch || null,
-          picked: !!r.kit_to_line_picked_date_time,
-          picked_by_user: r.kit_to_line_picked_by_user || null,
-          picked_by_user_name: r.kit_to_line_picked_by_user
-            ? userNameMap.get(r.kit_to_line_picked_by_user) || null
-            : null,
-          picked_date_time: r.kit_to_line_picked_date_time || null,
-        }))
-
-      // Separate items by bin type:
-      // Floor picks: bins starting with K or S
-      // Rack picks: bins starting with R
-      const floorPickItems = allItems.filter((item) => {
-        const binStart = item.source_storage_bin.charAt(0).toUpperCase()
-        return binStart === 'K' || binStart === 'S'
-      })
-
-      const rackPickItems = allItems.filter((item) => {
-        const binStart = item.source_storage_bin.charAt(0).toUpperCase()
-        return binStart === 'R'
-      })
-
-      const floorPickedCount = floorPickItems.filter((i) => i.picked).length
-      const rackPickedCount = rackPickItems.filter((i) => i.picked).length
-
-      const pickData: KittingPickData = {
-        kit_po_number: firstRecord.kit_po_number,
-        kit_build_number: firstRecord.kit_build_number,
-        kit_serial_number: firstRecord.kit_serial_number || '',
-        engine_program: firstRecord.engine_program,
-        kit_number: firstRecord.kit_number,
-        kit_build_status: firstRecord.kit_build_status,
-        due_date: firstRecord.due_date,
-        total_lines: allItems.length,
-        floor_pick_items: floorPickItems,
-        rack_pick_items: rackPickItems,
-        floor_picked_count: floorPickedCount,
-        rack_picked_count: rackPickedCount,
-      }
-
-      logger.log(
-        `✅ RF Kitting Picking: Found kit ${kitPoNumber} with ${allItems.length} items`
-      )
-      logger.log(
-        `   Floor picks: ${floorPickItems.length} (${floorPickedCount} picked)`
-      )
-      logger.log(
-        `   Rack picks: ${rackPickItems.length} (${rackPickedCount} picked)`
-      )
-
-      return { data: pickData, error: null }
-    } catch (error: unknown) {
-      logger.error('❌ RF Kitting Picking: Unexpected error:', error)
-      return {
-        data: null,
-        error: error instanceof Error ? error.message : String(error),
+    } catch {
+      // Fallback: check legacy flag field on the record
+      if (firstRecord.kit_flag_type === 'black') {
+        return {
+          data: null,
+          error: `Kit ${firstRecord.kit_serial_number} is blocked from picking due to a Black Hat flag. Resolve it before picking.`,
+        }
       }
     }
+
+    const pickedByUserIds = new Set<string>()
+    records.forEach((r) => {
+      if (r.kit_to_line_picked_by_user) {
+        pickedByUserIds.add(r.kit_to_line_picked_by_user)
+      }
+    })
+
+    const userNameMap = new Map<string, string>()
+    if (pickedByUserIds.size > 0) {
+      const { data: profiles } = await supabase
+        .from('user_profiles')
+        .select('id, full_name, first_name, last_name, email')
+        .in('id', Array.from(pickedByUserIds))
+
+      if (profiles) {
+        for (const profile of profiles) {
+          const displayName =
+            profile.full_name ||
+            `${profile.first_name || ''} ${profile.last_name || ''}`.trim() ||
+            profile.email?.split('@')[0] ||
+            null
+          if (displayName) {
+            userNameMap.set(profile.id, displayName)
+          }
+        }
+      }
+    }
+
+    const allItems: KittingPickItem[] = records
+      .filter((r) => r.transfer_order_number && r.source_storage_bin)
+      .map((r) => ({
+        id: r.id,
+        transfer_order_number: r.transfer_order_number!,
+        material: r.material || '',
+        material_description: r.material_description || null,
+        source_storage_bin: r.source_storage_bin!,
+        dest_storage_bin: r.dest_storage_bin || '',
+        source_target_qty: parseFloat(r.source_target_qty || '0'),
+        batch: r.batch || null,
+        picked: !!r.kit_to_line_picked_date_time,
+        picked_by_user: r.kit_to_line_picked_by_user || null,
+        picked_by_user_name: r.kit_to_line_picked_by_user
+          ? userNameMap.get(r.kit_to_line_picked_by_user) || null
+          : null,
+        picked_date_time: r.kit_to_line_picked_date_time || null,
+      }))
+
+    // Floor picks: bins starting with K or S. Rack picks: bins
+    // starting with R.
+    const floorPickItems = allItems.filter((item) => {
+      const binStart = item.source_storage_bin.charAt(0).toUpperCase()
+      return binStart === 'K' || binStart === 'S'
+    })
+
+    const rackPickItems = allItems.filter((item) => {
+      const binStart = item.source_storage_bin.charAt(0).toUpperCase()
+      return binStart === 'R'
+    })
+
+    const floorPickedCount = floorPickItems.filter((i) => i.picked).length
+    const rackPickedCount = rackPickItems.filter((i) => i.picked).length
+
+    const pickData: KittingPickData = {
+      kit_po_number: firstRecord.kit_po_number,
+      kit_build_number: firstRecord.kit_build_number,
+      kit_serial_number: firstRecord.kit_serial_number || '',
+      engine_program: firstRecord.engine_program,
+      kit_number: firstRecord.kit_number,
+      kit_build_status: firstRecord.kit_build_status,
+      due_date: firstRecord.due_date,
+      total_lines: allItems.length,
+      floor_pick_items: floorPickItems,
+      rack_pick_items: rackPickItems,
+      floor_picked_count: floorPickedCount,
+      rack_picked_count: rackPickedCount,
+    }
+
+    logger.log(
+      `✅ RF Kitting Picking: Found kit ${firstRecord.kit_serial_number} (PO ${firstRecord.kit_po_number}) with ${allItems.length} items`
+    )
+    logger.log(
+      `   Floor picks: ${floorPickItems.length} (${floorPickedCount} picked)`
+    )
+    logger.log(
+      `   Rack picks: ${rackPickItems.length} (${rackPickedCount} picked)`
+    )
+
+    return { data: pickData, error: null }
   }
 
   /**
-   * Get the next item to pick for a specific pick type (floor or rack)
-   * Returns the first unpicked item sorted by bin location
-   * @param kitPoNumber - The Kit PO number
+   * Get the next item to pick for a specific pick type (floor or rack).
+   * @param kitPoNumber - Scanned Kit PO Number (used for the multi-kit
+   * disambiguation check inside verifyKitForPicking).
    * @param pickType - 'floor' or 'rack'
+   * @param kitSerialNumber - Required when the PO maps to multiple kits.
    */
   async getNextPickItem(
     kitPoNumber: string,
-    pickType: 'floor' | 'rack'
+    pickType: 'floor' | 'rack',
+    kitSerialNumber?: string
   ): Promise<{ data: KittingPickItem | null; error: string | null }> {
-    const { data: kitData, error } = await this.verifyKitForPicking(kitPoNumber)
+    const {
+      data: kitData,
+      error,
+      kits,
+    } = await this.verifyKitForPicking(kitPoNumber, kitSerialNumber)
+
+    if (kits && kits.length > 1) {
+      return {
+        data: null,
+        error:
+          'Multiple active kits share this Kit PO — pick a specific kit serial first.',
+      }
+    }
 
     if (error || !kitData) {
       return { data: null, error: error || 'Kit not found' }
@@ -359,7 +591,8 @@ class RFKittingPickingService {
   }
 
   /**
-   * Validate scanned material matches expected part number
+   * Validate scanned material matches expected part number.
+   * Strips common barcode label prefixes (e.g. "P/N R ") before comparing.
    */
   validateMaterial(
     scannedMaterial: string,
@@ -373,7 +606,7 @@ class RFKittingPickingService {
       }
     }
 
-    const scanned = scannedMaterial.trim().toUpperCase()
+    const scanned = cleanScannedPartNumber(scannedMaterial).toUpperCase()
     const expected = expectedMaterial.trim().toUpperCase()
 
     if (scanned !== expected) {
@@ -465,13 +698,18 @@ class RFKittingPickingService {
         return { success: false, error: 'User not authenticated' }
       }
 
-      // First, get the kit_po_number for this line so we can sync the kanban task
+      // Look up the kit identity for this line so we can sync the kanban
+      // task per-serial (PO-only sync would aggregate across sibling
+      // kits sharing the PO).
       const { data: lineData, error: lineError } = (await (supabase
         .from(RFKittingPickingService.TABLE_NAME as any)
-        .select('kit_po_number')
+        .select('kit_po_number, kit_serial_number')
         .eq('id', itemId)
         .single() as any)) as {
-        data: { kit_po_number: string } | null
+        data: {
+          kit_po_number: string
+          kit_serial_number: string | null
+        } | null
         error: any
       }
 
@@ -480,11 +718,10 @@ class RFKittingPickingService {
         return { success: false, error: 'Could not find the TO line' }
       }
 
-      const kitPoNumber = lineData.kit_po_number
+      const { kit_po_number: kitPoNumber, kit_serial_number: kitSerialNumber } =
+        lineData
       const now = new Date().toISOString()
 
-      // Update the specific TO line record
-      // Note: Using type assertion as RR_Kitting_DATA may not be in generated types
       const { error: updateError } = await (supabase
         .from(RFKittingPickingService.TABLE_NAME as any)
         .update({
@@ -504,8 +741,11 @@ class RFKittingPickingService {
         `✅ RF Kitting Picking: Line ${itemId} marked as picked${visuallyVerified ? ' (visual verification)' : ''}`
       )
 
-      // Sync progress to the kanban board
-      await KitKanbanService.syncKitProgressFromData(kitPoNumber)
+      if (kitSerialNumber) {
+        await KitKanbanService.syncKitProgressFromSerial(kitSerialNumber)
+      } else {
+        await KitKanbanService.syncKitProgressFromData(kitPoNumber)
+      }
 
       return { success: true, error: null }
     } catch (error: unknown) {
@@ -521,16 +761,18 @@ class RFKittingPickingService {
   }
 
   /**
-   * Update kit status to 'in_progress' if it's currently 'pending' or 'printed'
-   * Called when first pick is made
+   * Update kit status to 'in_progress' if it's currently 'pending' or
+   * 'printed'. Called when first pick is made. Filtered by
+   * kit_serial_number — a PO-only update would flip both kits sharing
+   * a PO into in_progress simultaneously (regression fix:
+   * 2026-05-12 KIT-001 / KIT-002).
    */
-  async updateKitStatusToInProgress(kitPoNumber: string): Promise<void> {
+  async updateKitStatusToInProgress(kitSerialNumber: string): Promise<void> {
     try {
-      // Note: Using type assertion as RR_Kitting_DATA may not be in generated types
       const { data: firstRecord } = (await (supabase
         .from(RFKittingPickingService.TABLE_NAME as any)
         .select('kit_build_status')
-        .eq('kit_po_number', kitPoNumber)
+        .eq('kit_serial_number', kitSerialNumber)
         .limit(1)
         .single() as any)) as { data: { kit_build_status: string } | null }
 
@@ -546,10 +788,10 @@ class RFKittingPickingService {
             kit_build_status: 'in_progress',
             updated_at: new Date().toISOString(),
           })
-          .eq('kit_po_number', kitPoNumber) as any)
+          .eq('kit_serial_number', kitSerialNumber) as any)
 
         logger.log(
-          `✅ RF Kitting Picking: Kit ${kitPoNumber} status updated to 'in_progress'`
+          `✅ RF Kitting Picking: Kit ${kitSerialNumber} status updated to 'in_progress'`
         )
       }
     } catch (error) {
@@ -559,15 +801,22 @@ class RFKittingPickingService {
   }
 
   /**
-   * Check if all picking is complete for a kit and update status accordingly
-   * If all TO lines are picked, status could advance (but kitting still needs to happen)
+   * Check if all picking is complete for a single kit and report which
+   * pick types are done. The verify call is scoped by kit_serial_number
+   * so sibling kits sharing a PO can finish independently.
    */
-  async checkAndUpdateKitPickingStatus(kitPoNumber: string): Promise<{
+  async checkAndUpdateKitPickingStatus(
+    kitPoNumber: string,
+    kitSerialNumber: string
+  ): Promise<{
     allFloorPicked: boolean
     allRackPicked: boolean
     allPicked: boolean
   }> {
-    const { data: kitData, error } = await this.verifyKitForPicking(kitPoNumber)
+    const { data: kitData, error } = await this.verifyKitForPicking(
+      kitPoNumber,
+      kitSerialNumber
+    )
 
     if (error || !kitData) {
       return { allFloorPicked: false, allRackPicked: false, allPicked: false }
@@ -702,8 +951,11 @@ class RFKittingPickingService {
         }
       }
 
-      // 2. Update the TO line with missing part information
-      const { error: updateError } = await (supabase
+      // 2. Update the TO line with missing part information. Pull the
+      //    kit_serial_number back so all the per-kit fan-out below
+      //    (status flip, kanban sync, purple flag) stays scoped to this
+      //    specific kit instead of every kit sharing the PO.
+      const { data: updatedRow, error: updateError } = (await (supabase
         .from(RFKittingPickingService.TABLE_NAME as any)
         .update({
           // Mark as picked with zero quantity
@@ -718,25 +970,36 @@ class RFKittingPickingService {
           missing_part_notes: notes || null,
           updated_at: now,
         })
-        .eq('id', itemId) as any)
+        .eq('id', itemId)
+        .select('kit_serial_number')
+        .single() as any)) as {
+        data: { kit_serial_number: string | null } | null
+        error: any
+      }
 
       if (updateError) {
         logger.error('❌ RF Kitting Picking: Error updating line:', updateError)
         return { success: false, error: updateError.message }
       }
 
-      // 3. Add purple hat flag to the kit
+      const kitSerialNumber = updatedRow?.kit_serial_number ?? null
+
+      // 3. Add purple hat flag — scoped to the specific kit serial.
       await this.addPurpleHatFlag(
         kitPoNumber,
         user.id,
-        `Missing part reported for item ${itemId}`
+        `Missing part reported for item ${itemId}`,
+        kitSerialNumber
       )
 
-      // 4. Update kit status to in_progress if needed
-      await this.updateKitStatusToInProgress(kitPoNumber)
-
-      // 5. Sync progress to the kanban board
-      await KitKanbanService.syncKitProgressFromData(kitPoNumber)
+      // 4. Update kit status to in_progress if needed (per serial).
+      if (kitSerialNumber) {
+        await this.updateKitStatusToInProgress(kitSerialNumber)
+        await KitKanbanService.syncKitProgressFromSerial(kitSerialNumber)
+      } else {
+        // Legacy fallback for any pre-2026-05-12 row without a serial.
+        await KitKanbanService.syncKitProgressFromData(kitPoNumber)
+      }
 
       logger.log(
         `✅ RF Kitting Picking: Missing part reported for line ${itemId}`
@@ -755,52 +1018,63 @@ class RFKittingPickingService {
   }
 
   /**
-   * Add a purple hat flag to a kit (Inventory Issue)
-   * @param kitPoNumber - The Kit PO number
-   * @param userId - The user adding the flag
-   * @param notes - Notes about the flag
+   * Add a purple hat flag to a kit (Inventory Issue). Scoped to a
+   * specific kit_serial_number so two kits sharing a PO can carry
+   * independent flags. The PO is still recorded for legacy join paths
+   * and forensic reporting.
    */
   private async addPurpleHatFlag(
     kitPoNumber: string,
     userId: string,
-    notes: string
+    notes: string,
+    kitSerialNumber: string | null
   ): Promise<void> {
     try {
       const now = new Date().toISOString()
 
-      // Check if kit_build_flags table exists and add flag
-      // First, try to insert into kit_build_flags table
-      const { error: flagError } = await supabase
-        .from('kit_build_flags')
-        .insert({
-          kit_po_number: kitPoNumber,
-          flag_type: 'purple',
-          set_by_user: userId,
-          set_date_time: now,
-          notes: notes,
-          is_active: true,
-        })
+      const insertPayload: Record<string, unknown> = {
+        kit_po_number: kitPoNumber,
+        flag_type: 'purple',
+        set_by_user: userId,
+        set_date_time: now,
+        notes: notes,
+        is_active: true,
+      }
+      if (kitSerialNumber) {
+        insertPayload.kit_serial_number = kitSerialNumber
+      }
+
+      const { error: flagError } = await (
+        supabase.from('kit_build_flags') as any
+      ).insert(insertPayload)
 
       if (flagError) {
-        // If table doesn't exist or other error, try updating legacy flag on RR_Kitting_DATA
+        // If table doesn't exist or other error, try updating legacy
+        // flag on RR_Kitting_DATA. Scope by serial when we have one so
+        // legacy fallback also stays per-kit.
         logger.log(
           '⚠️ kit_build_flags insert failed, trying legacy update:',
           flagError.message
         )
 
-        await (supabase
+        const update = supabase
           .from(RFKittingPickingService.TABLE_NAME as any)
           .update({
             kit_flag_type: 'purple',
             kit_flag_set_by_user: userId,
             kit_flag_set_date_time: now,
             updated_at: now,
-          })
-          .eq('kit_po_number', kitPoNumber) as any)
+          }) as any
+
+        if (kitSerialNumber) {
+          await update.eq('kit_serial_number', kitSerialNumber)
+        } else {
+          await update.eq('kit_po_number', kitPoNumber)
+        }
       }
 
       logger.log(
-        `✅ RF Kitting Picking: Purple hat flag added for kit ${kitPoNumber}`
+        `✅ RF Kitting Picking: Purple hat flag added for kit ${kitSerialNumber ?? kitPoNumber}`
       )
     } catch (error) {
       logger.error(
@@ -810,6 +1084,58 @@ class RFKittingPickingService {
       // Non-critical error, don't throw
     }
   }
+}
+
+/**
+ * Clean a scanned part number by stripping common barcode label prefixes.
+ * Warehouse barcodes may encode leading text such as "P/N R ", "P/N ", "PN ", etc.
+ * before the actual part number. This normalizes the scan so it matches the
+ * material number stored in the kit build plan.
+ */
+export function cleanScannedPartNumber(scannedValue: string): string {
+  if (!scannedValue) return ''
+
+  let cleaned = scannedValue.trim()
+
+  // Strip known barcode label prefixes (case-insensitive, longest match first)
+  const prefixPatterns = [
+    /^P\/N\s*R\s+/i,
+    /^P\/N\s*:\s*/i,
+    /^P\/N\s+/i,
+    /^PN\s*:\s*/i,
+    /^PN\s+/i,
+    /^PART\s+NO\.?\s*:?\s*/i,
+    /^PART\s*#?\s*:?\s*/i,
+    /^MAT(?:ERIAL)?\s*#?\s*:?\s*/i,
+  ]
+
+  for (const pattern of prefixPatterns) {
+    if (pattern.test(cleaned)) {
+      cleaned = cleaned.replace(pattern, '')
+      break
+    }
+  }
+
+  return cleaned.trim()
+}
+
+/**
+ * Detect a scanned `kit_serial_number` by its canonical prefix.
+ *
+ * Kit serials are generated by `RRKittingDataService.createKitBuildPlan`
+ * with the format `KIT-YYYYMMDD-NNN` (e.g. `KIT-20260515-001`), so a
+ * `KIT-` prefix is the simplest reliable smart-detect for the RF scan
+ * input. Case-insensitive to tolerate uppercased scanner input.
+ *
+ * Returns `false` for the bare `KIT` token (without a hyphen) so that
+ * legacy PO labels like `KIT12345` continue to route through the
+ * PO path inside {@link isPotentialKitPoNumber}.
+ */
+export function isPotentialKitSerialNumber(inputValue: string): boolean {
+  if (!inputValue || inputValue.trim().length === 0) {
+    return false
+  }
+  return inputValue.trim().toUpperCase().startsWith('KIT-')
 }
 
 /**
@@ -849,24 +1175,35 @@ export function isPotentialKitPoNumber(inputValue: string): boolean {
 }
 
 /**
- * Validate Kit PO Number format
- * @param kitPoNumber - The Kit PO number to validate
+ * Validate the scan input for the RF Kit Picking entry step. The
+ * input is permissive — it accepts EITHER a `kit_serial_number`
+ * (`KIT-YYYYMMDD-NNN`) OR a `kit_po_number`. The detection of which
+ * shape was scanned is the caller's responsibility (see
+ * {@link isPotentialKitSerialNumber}); this validator just guards
+ * against empty / impossibly short input.
+ *
+ * Retains the historical name so external callers that imported it
+ * before the serial-number entry path was added keep working.
+ *
+ * @param kitIdentifier - The scanned / entered kit identifier.
  */
-export function validateKitPoNumber(kitPoNumber: string): {
+export function validateKitPoNumber(kitIdentifier: string): {
   isValid: boolean
   message?: string
 } {
-  if (!kitPoNumber || kitPoNumber.trim().length === 0) {
-    return { isValid: false, message: 'Kit PO number is required' }
+  if (!kitIdentifier || kitIdentifier.trim().length === 0) {
+    return { isValid: false, message: 'Kit serial number or PO is required' }
   }
 
-  const trimmed = kitPoNumber.trim()
+  const trimmed = kitIdentifier.trim()
 
-  // Kit PO validation - minimum 6 characters
+  // Minimum 6 chars — short enough to let an early-typed serial like
+  // `KIT-20…` start the auto-advance debounce, long enough to reject
+  // obvious mis-scans.
   if (trimmed.length < 6) {
     return {
       isValid: false,
-      message: 'Kit PO number must be at least 6 characters',
+      message: 'Kit serial number or PO must be at least 6 characters',
     }
   }
 
@@ -875,4 +1212,5 @@ export function validateKitPoNumber(kitPoNumber: string): {
 
 // Export singleton instance
 export const rfKittingPickingService = new RFKittingPickingService()
-// Developer and Creator: Jai Singh
+
+// Created and developed by Jai Singh

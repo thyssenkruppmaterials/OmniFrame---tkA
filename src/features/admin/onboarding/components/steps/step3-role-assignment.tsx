@@ -1,3 +1,4 @@
+// Created and developed by Jai Singh
 /**
  * Step 3: Role & Permissions Assignment
  * Select role and configure access level
@@ -50,7 +51,7 @@ export function Step3RoleAssignment() {
   })
 
   const form = useForm<RoleAssignmentData>({
-    resolver: zodResolver(roleAssignmentSchema),
+    resolver: zodResolver(roleAssignmentSchema) as never,
     defaultValues: state.roleAssignment || {
       role_id: '',
       role_name: '',
@@ -281,3 +282,5 @@ export function Step3RoleAssignment() {
 }
 
 export default Step3RoleAssignment
+
+// Created and developed by Jai Singh

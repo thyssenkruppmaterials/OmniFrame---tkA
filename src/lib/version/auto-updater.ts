@@ -1,3 +1,4 @@
+// Created and developed by Jai Singh
 /**
  * Auto-Updater Service - Enterprise Smart Reload Coordinator
  *
@@ -368,3 +369,5 @@ export class AutoUpdater {
 
 // Export singleton accessor
 export const autoUpdater = AutoUpdater.getInstance()
+
+// Created and developed by Jai Singh

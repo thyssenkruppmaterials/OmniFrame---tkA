@@ -1,3 +1,4 @@
+// Created and developed by Jai Singh
 import { useRef, useState } from 'react'
 import {
   AlertTriangle,
@@ -63,7 +64,7 @@ export function ThemeImportExport({
     const url = URL.createObjectURL(blob)
     const a = document.createElement('a')
     a.href = url
-    a.download = `omniframe-theme-${Date.now()}.json`
+    a.download = `onebox-theme-${Date.now()}.json`
     a.click()
     URL.revokeObjectURL(url)
     toast.success('Theme file downloaded.')
@@ -125,7 +126,9 @@ export function ThemeImportExport({
       <Card className={className}>
         <CardHeader>
           <CardTitle className='text-base'>Import & Export</CardTitle>
-          <CardDescription>Share or back up your theme settings</CardDescription>
+          <CardDescription>
+            Share or back up your theme settings
+          </CardDescription>
         </CardHeader>
         <CardContent className='space-y-6'>
           {/* Export */}
@@ -140,11 +143,7 @@ export function ThemeImportExport({
                 <Clipboard className='mr-1.5 h-3.5 w-3.5' />
                 Copy to Clipboard
               </Button>
-              <Button
-                variant='outline'
-                size='sm'
-                onClick={handleDownloadFile}
-              >
+              <Button variant='outline' size='sm' onClick={handleDownloadFile}>
                 <Download className='mr-1.5 h-3.5 w-3.5' />
                 Download File
               </Button>
@@ -253,9 +252,13 @@ function computeDiffSummary(
       if (cur[key] !== inc[key]) tokenChanges++
     }
     if (tokenChanges > 0) {
-      changes.push(`${mode} palette: ${tokenChanges} color${tokenChanges > 1 ? 's' : ''} changed`)
+      changes.push(
+        `${mode} palette: ${tokenChanges} color${tokenChanges > 1 ? 's' : ''} changed`
+      )
     }
   }
 
   return changes
 }
+
+// Created and developed by Jai Singh

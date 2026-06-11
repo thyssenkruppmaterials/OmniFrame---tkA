@@ -51,7 +51,7 @@ out/
 *.swo
 *~
 
-# IDE config files
+# AI assistant files
 .claude/
 .notes/
 .mdnotes/

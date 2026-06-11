@@ -1,3 +1,4 @@
+// Created and developed by Jai Singh
 import { logger } from '@/lib/utils/logger'
 import { supabase } from './client'
 import type { Tables } from './database.types'
@@ -212,4 +213,5 @@ export class LocationQueryService {
 
 // Export singleton instance
 export const locationQueryService = LocationQueryService.getInstance()
-// Developer and Creator: Jai Singh
+
+// Created and developed by Jai Singh

@@ -1,3 +1,4 @@
+// Created and developed by Jai Singh
 import type { HTMLAttributes } from 'react'
 import QR from 'qrcode'
 import { cn } from '@/lib/utils'
@@ -40,3 +41,5 @@ export const QRCode = async ({
     />
   )
 }
+
+// Created and developed by Jai Singh

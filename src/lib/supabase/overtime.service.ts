@@ -1,3 +1,4 @@
+// Created and developed by Jai Singh
 /**
  * Overtime Management Service
  * Service for managing overtime requests and approvals
@@ -1848,4 +1849,5 @@ export default {
   getOvertimeStatusText,
   getOvertimeStatusColor,
 }
-// Developer and Creator: Jai Singh
+
+// Created and developed by Jai Singh

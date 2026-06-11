@@ -1,6 +1,10 @@
+// Created and developed by Jai Singh
 /**
- * Builder Canvas Component
- * Main drag-and-drop canvas for arranging items
+ * Builder Canvas
+ *
+ * Section list + drop target for the template builder. Sections use UUID-
+ * based ids (see `generateSectionId`) so two human-readable names that slug
+ * to the same string don't collide as React keys or droppable ids.
  */
 import { useState } from 'react'
 import { useDroppable } from '@dnd-kit/core'
@@ -11,24 +15,38 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { SectionEditor } from './section-editor'
-import type { Section } from './types'
+import { generateSectionId, type Section } from './types'
 
 interface BuilderCanvasProps {
   sections: Section[]
   selectedItemId: string | null
+  /**
+   * Structural changes (add / rename / delete section, item moves). Parent
+   * marks the template as having pending order changes when this fires.
+   */
   onSectionsChange: (sections: Section[]) => void
+  /**
+   * UI-only updates (collapse / expand). Parent updates state WITHOUT
+   * dirtying the "Order pending" indicator — collapsed-ness is not persisted.
+   */
+  onSectionsUIChange: (sections: Section[]) => void
   onItemClick: (item: StandardWorkItem) => void
   onDeleteItem: (itemId: string) => void
+  onDuplicateItem?: (itemId: string) => void
   className?: string
+  readOnly?: boolean
 }
 
 export function BuilderCanvas({
   sections,
   selectedItemId,
   onSectionsChange,
+  onSectionsUIChange,
   onItemClick,
   onDeleteItem,
+  onDuplicateItem,
   className,
+  readOnly = false,
 }: BuilderCanvasProps) {
   const [isAddingSection, setIsAddingSection] = useState(false)
   const [newSectionName, setNewSectionName] = useState('')
@@ -43,7 +61,7 @@ export function BuilderCanvas({
   const handleAddSection = () => {
     if (newSectionName.trim()) {
       const newSection: Section = {
-        id: `section-${Date.now()}`,
+        id: generateSectionId(),
         name: newSectionName.trim(),
         items: [],
         isCollapsed: false,
@@ -61,13 +79,11 @@ export function BuilderCanvas({
   }
 
   const handleDeleteSection = (sectionId: string) => {
-    // Move items to first section or remove them
     const sectionToDelete = sections.find((s) => s.id === sectionId)
     if (!sectionToDelete) return
 
     const firstSection = sections.find((s) => s.id !== sectionId)
     if (firstSection && sectionToDelete.items.length > 0) {
-      // Move items to first section
       onSectionsChange(
         sections
           .filter((s) => s.id !== sectionId)
@@ -82,13 +98,18 @@ export function BuilderCanvas({
     }
   }
 
+  // Toggle collapse routes through onSectionsUIChange so this doesn't flag
+  // the template as having unsaved structural changes — collapsed-ness is a
+  // local UI affordance, never persisted.
   const handleToggleCollapse = (sectionId: string) => {
-    onSectionsChange(
+    onSectionsUIChange(
       sections.map((s) =>
         s.id === sectionId ? { ...s, isCollapsed: !s.isCollapsed } : s
       )
     )
   }
+
+  const totalItems = sections.reduce((acc, s) => acc + s.items.length, 0)
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === 'Enter') {
@@ -101,31 +122,29 @@ export function BuilderCanvas({
 
   return (
     <div className={cn('flex h-full flex-col', className)}>
-      {/* Header */}
       <div className='mb-4 flex items-center justify-between'>
         <div>
           <h3 className='text-muted-foreground text-sm font-semibold tracking-wider uppercase'>
-            Checklist Items
+            {readOnly ? 'Preview' : 'Checklist Items'}
           </h3>
           <p className='text-muted-foreground text-xs'>
-            {sections.reduce((acc, s) => acc + s.items.length, 0)} items in{' '}
-            {sections.length} sections
+            {totalItems} item{totalItems === 1 ? '' : 's'} in {sections.length}{' '}
+            section{sections.length === 1 ? '' : 's'}
           </p>
         </div>
-        {!isAddingSection && (
+        {!isAddingSection && !readOnly && (
           <Button
             variant='outline'
             size='sm'
             onClick={() => setIsAddingSection(true)}
             className='gap-2'
           >
-            <FolderPlus className='h-4 w-4' />
+            <FolderPlus className='h-4 w-4' aria-hidden='true' />
             Add Section
           </Button>
         )}
       </div>
 
-      {/* Add Section Input */}
       {isAddingSection && (
         <div className='mb-4 flex items-center gap-2'>
           <Input
@@ -134,6 +153,7 @@ export function BuilderCanvas({
             onKeyDown={handleKeyDown}
             placeholder='Section name...'
             className='flex-1'
+            aria-label='New section name'
             autoFocus
           />
           <Button size='sm' onClick={handleAddSection}>
@@ -152,18 +172,17 @@ export function BuilderCanvas({
         </div>
       )}
 
-      {/* Canvas Area */}
       <ScrollArea className='flex-1'>
         <div
           ref={setNodeRef}
           className={cn(
             'min-h-[400px] space-y-4 p-1',
-            isOver && 'bg-primary/5 rounded-lg'
+            isOver && !readOnly && 'bg-primary/5 rounded-lg'
           )}
         >
           {sections.length === 0 ? (
             <div className='text-muted-foreground flex h-[400px] flex-col items-center justify-center rounded-lg border-2 border-dashed'>
-              <Plus className='mb-2 h-8 w-8 opacity-50' />
+              <Plus className='mb-2 h-8 w-8 opacity-50' aria-hidden='true' />
               <p className='text-sm'>Add a section to get started</p>
               <p className='mt-1 text-xs'>or drag items from the palette</p>
             </div>
@@ -177,8 +196,10 @@ export function BuilderCanvas({
                 onToggleCollapse={handleToggleCollapse}
                 onItemClick={onItemClick}
                 onDeleteItem={onDeleteItem}
+                onDuplicateItem={onDuplicateItem}
                 selectedItemId={selectedItemId}
                 isFirst={index === 0}
+                readOnly={readOnly}
               />
             ))
           )}
@@ -187,3 +208,5 @@ export function BuilderCanvas({
     </div>
   )
 }
+
+// Created and developed by Jai Singh

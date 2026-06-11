@@ -1,3 +1,4 @@
+// Created and developed by Jai Singh
 /**
  * shadcn/ui Theme Color Generator
  *
@@ -10,7 +11,14 @@
  * @see https://ui.shadcn.com/themes - shadcn/ui Theme Gallery
  * @see https://ui.shadcn.com/colors - Color System Documentation
  */
-import { formatCss, formatHex, oklch, parse, parseHex, type Oklch } from 'culori'
+import {
+  formatCss,
+  formatHex,
+  oklch,
+  parse,
+  parseHex,
+  type Oklch,
+} from 'culori'
 import {
   normalizePresetToThemeTokens,
   type ThemeTokens,
@@ -346,9 +354,10 @@ export function shadcnThemeToCustomColors(
  * Convert shadcn theme to dual ThemeTokens (V2 format).
  * Returns full 15-token palettes for both light and dark modes.
  */
-export function shadcnThemeToDualTokens(
-  theme: ShadcnTheme
-): { light: ThemeTokens; dark: ThemeTokens } {
+export function shadcnThemeToDualTokens(theme: ShadcnTheme): {
+  light: ThemeTokens
+  dark: ThemeTokens
+} {
   const lightColors = {
     background: oklchCssToHex(theme.colors.light.background),
     foreground: oklchCssToHex(theme.colors.light.foreground),
@@ -438,3 +447,5 @@ export function applyShadcnBaseColorTheme(baseColor: ShadcnBaseColor) {
 
   return theme
 }
+
+// Created and developed by Jai Singh

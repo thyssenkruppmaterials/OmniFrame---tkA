@@ -1,5 +1,6 @@
+// Created and developed by Jai Singh
 import { useUnifiedAuth } from '@/lib/auth/unified-auth-provider'
-import { OmniFrameLogo } from '@/components/ui/omniframe-logo'
+import { CinematicLogo } from '@/components/ui/cinematic-logo'
 import { Typewriter } from '@/components/ui/typewriter'
 import { Header } from '@/components/layout/header'
 import { Main } from '@/components/layout/main'
@@ -47,12 +48,8 @@ export default function Dashboard() {
       {/* ===== Main Welcome Content ===== */}
       <Main>
         <div className='flex min-h-[calc(100vh-8rem)] flex-col items-center justify-center space-y-8 px-4'>
-          {/* Spinning OmniFrame Logo */}
           <div className='flex justify-center'>
-            <OmniFrameLogo
-              className='size-32 drop-shadow-lg lg:size-40'
-              alt='OmniFrame - Your Single Solution Provider'
-            />
+            <CinematicLogo />
           </div>
 
           {/* Typewriter Welcome Message */}
@@ -83,3 +80,5 @@ export default function Dashboard() {
     </>
   )
 }
+
+// Created and developed by Jai Singh

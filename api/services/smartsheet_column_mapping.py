@@ -1,3 +1,4 @@
+# Created and developed by Jai Singh
 """
 Column mapping configuration for Smartsheet ticket management.
 Maps application fields to Smartsheet column IDs for sheet 2987059899748228.
@@ -213,5 +214,4 @@ def reset_column_mapper():
     global _column_mapper
     _column_mapper = None
 
-# Developer and Creator: Jai Singh
-
+# Created and developed by Jai Singh

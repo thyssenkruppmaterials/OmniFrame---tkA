@@ -1,3 +1,4 @@
+// Created and developed by Jai Singh
 import React, { useState } from 'react'
 import useDialogState from '@/hooks/use-dialog-state'
 import { Task } from '../data/schema'
@@ -36,3 +37,5 @@ export const useTasks = () => {
 
   return tasksContext
 }
+
+// Created and developed by Jai Singh

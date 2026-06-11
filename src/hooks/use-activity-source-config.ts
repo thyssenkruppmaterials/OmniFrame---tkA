@@ -1,9 +1,11 @@
+// Created and developed by Jai Singh
 /**
  * Activity Source Configuration Hook
  * Provides state management for activity source configurations
  * Created: January 4, 2026
  */
 import { useCallback, useEffect, useState } from 'react'
+import { useQueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
 import { useUnifiedAuth } from '@/lib/auth/unified-auth-provider'
 import ActivitySourceConfigService, {
@@ -58,6 +60,21 @@ export function useActivitySourceConfig(): UseActivitySourceConfigReturn {
   const { authState } = useUnifiedAuth()
   const { profile } = authState
   const organizationId = profile?.organization_id || ''
+  const queryClient = useQueryClient()
+
+  const notifyRuntimeConfigChanged = useCallback(() => {
+    queryClient.invalidateQueries({
+      queryKey: ['team-performance', organizationId],
+    })
+    queryClient.invalidateQueries({
+      queryKey: ['activity-config', organizationId],
+    })
+    window.dispatchEvent(
+      new CustomEvent('shift-productivity:activity-config-updated', {
+        detail: { organizationId },
+      })
+    )
+  }, [organizationId, queryClient])
 
   // Activity Sources State
   const [activitySources, setActivitySources] = useState<
@@ -139,6 +156,7 @@ export function useActivitySourceConfig(): UseActivitySourceConfigReturn {
         setActivitySources((prev) =>
           [...prev, newConfig].sort((a, b) => a.display_order - b.display_order)
         )
+        notifyRuntimeConfigChanged()
         toast.success('Activity source created successfully')
         return newConfig
       } catch (error) {
@@ -150,7 +168,7 @@ export function useActivitySourceConfig(): UseActivitySourceConfigReturn {
         return null
       }
     },
-    [organizationId]
+    [organizationId, notifyRuntimeConfigChanged]
   )
 
   // Update activity source
@@ -171,6 +189,7 @@ export function useActivitySourceConfig(): UseActivitySourceConfigReturn {
             .map((config) => (config.id === id ? updatedConfig : config))
             .sort((a, b) => a.display_order - b.display_order)
         )
+        notifyRuntimeConfigChanged()
         toast.success('Activity source updated successfully')
         return updatedConfig
       } catch (error) {
@@ -186,7 +205,7 @@ export function useActivitySourceConfig(): UseActivitySourceConfigReturn {
         return null
       }
     },
-    []
+    [notifyRuntimeConfigChanged]
   )
 
   // Delete activity source
@@ -195,6 +214,7 @@ export function useActivitySourceConfig(): UseActivitySourceConfigReturn {
       try {
         await ActivitySourceConfigService.deleteActivitySourceConfig(id)
         setActivitySources((prev) => prev.filter((config) => config.id !== id))
+        notifyRuntimeConfigChanged()
         toast.success('Activity source deleted successfully')
         return true
       } catch (error) {
@@ -210,7 +230,7 @@ export function useActivitySourceConfig(): UseActivitySourceConfigReturn {
         return false
       }
     },
-    []
+    [notifyRuntimeConfigChanged]
   )
 
   // Toggle active status
@@ -229,6 +249,7 @@ export function useActivitySourceConfig(): UseActivitySourceConfigReturn {
         setActivitySources((prev) =>
           prev.map((config) => (config.id === id ? updatedConfig : config))
         )
+        notifyRuntimeConfigChanged()
         toast.success(
           `Activity source ${isActive ? 'enabled' : 'disabled'} successfully`
         )
@@ -246,7 +267,7 @@ export function useActivitySourceConfig(): UseActivitySourceConfigReturn {
         return null
       }
     },
-    []
+    [notifyRuntimeConfigChanged]
   )
 
   // Get table columns
@@ -305,3 +326,5 @@ export function useActivitySourceConfig(): UseActivitySourceConfigReturn {
     refreshActivitySources,
   }
 }
+
+// Created and developed by Jai Singh

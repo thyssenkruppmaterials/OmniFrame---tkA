@@ -1,3 +1,4 @@
+// Created and developed by Jai Singh
 import React from 'react'
 import { cn } from '@/lib/utils'
 
@@ -11,8 +12,8 @@ export const Main = ({ fixed, className, ...props }: MainProps) => {
     <main
       className={cn(
         'peer-[.header-fixed]/header:mt-16',
-        'px-4 py-6',
-        fixed && 'fixed-main flex grow flex-col overflow-hidden',
+        'min-w-0 px-4 py-6',
+        fixed && 'fixed-main flex min-h-0 grow flex-col overflow-hidden',
         className
       )}
       {...props}
@@ -21,3 +22,5 @@ export const Main = ({ fixed, className, ...props }: MainProps) => {
 }
 
 Main.displayName = 'Main'
+
+// Created and developed by Jai Singh

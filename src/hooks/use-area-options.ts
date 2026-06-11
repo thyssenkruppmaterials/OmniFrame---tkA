@@ -1,3 +1,4 @@
+// Created and developed by Jai Singh
 /**
  * Area Options Hook
  * React Query hook for managing area types and departments
@@ -219,3 +220,5 @@ export function useAreaOptions() {
     seedDefaults: seedDefaultsMutation.mutateAsync,
   }
 }
+
+// Created and developed by Jai Singh

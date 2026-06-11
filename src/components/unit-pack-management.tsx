@@ -1,3 +1,4 @@
+// Created and developed by Jai Singh
 import { useTabSearchParam } from '@/hooks/use-tab-search-param'
 import { TabMenu } from '@/components/ui/tab-menu'
 import { Header } from '@/components/layout/header'
@@ -112,3 +113,5 @@ export default function UnitPackManagement() {
     </>
   )
 }
+
+// Created and developed by Jai Singh

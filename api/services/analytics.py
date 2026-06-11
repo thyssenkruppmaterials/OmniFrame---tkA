@@ -1,3 +1,4 @@
+# Created and developed by Jai Singh
 """
 Analytics service for advanced data processing and metrics.
 Provides analytics capabilities that complement the existing TypeScript frontend.
@@ -22,9 +23,25 @@ logger = logging.getLogger(__name__)
 
 class AnalyticsService:
     """Service for generating advanced analytics and insights."""
-    
-    def __init__(self, supabase_client: Client):
+
+    def __init__(
+        self,
+        supabase_client: Client,
+        read_client: Optional[Client] = None,
+    ):
+        """Construct an analytics service.
+
+        :param supabase_client: Primary Supabase client used for any path that
+            must hit the primary (currently none — this service is read-only —
+            but kept for backwards compatibility and future mutations).
+        :param read_client: Optional read-replica client. When provided, all
+            SELECT/RPC traffic from this service routes to the Supabase
+            load-balanced endpoint (primary + replicas). When omitted, the
+            ``supabase_client`` arg is reused so nothing breaks for legacy
+            call sites that haven't been updated yet.
+        """
         self.client = supabase_client
+        self.read_client = read_client or supabase_client
     
     async def get_outbound_analytics(
         self, 
@@ -40,8 +57,8 @@ class AnalyticsService:
             if not date_to:
                 date_to = datetime.now()
             
-            # Build query with date filter
-            query = self.client.table("outbound_to_data").select(
+            # Build query with date filter. Read-only — route to replica.
+            query = self.read_client.table("outbound_to_data").select(
                 "id, delivery, material, material_description, status, "
                 "created_at, packed_at, final_packed_at, shipped_at, "
                 "source_target_qty"
@@ -132,8 +149,9 @@ class AnalyticsService:
                 WHERE d.organization_id = %s
             """
             
-            # Execute raw SQL query (using RPC would be better in production)
-            result = self.client.rpc('get_delivery_status_summary', {
+            # Execute raw SQL query (using RPC would be better in production).
+            # Read-only RPC — route to replica.
+            result = self.read_client.rpc('get_delivery_status_summary', {
                 'org_id': organization_id
             }).execute()
             
@@ -178,9 +196,9 @@ class AnalyticsService:
             
         except Exception as e:
             logger.error(f"Error generating delivery status summary: {str(e)}")
-            # Fallback to basic query if RPC fails
+            # Fallback to basic query if RPC fails (still read-only).
             try:
-                result = self.client.table("rr_all_deliveries").select(
+                result = self.read_client.table("rr_all_deliveries").select(
                     "id, delivery, actual_goods_movement_date"
                 ).eq("organization_id", organization_id).execute()
                 
@@ -220,7 +238,7 @@ class AnalyticsService:
         # Get data for the last 7 days
         date_from = datetime.now() - timedelta(days=7)
         
-        result = self.client.table("outbound_to_data").select(
+        result = self.read_client.table("outbound_to_data").select(
             "created_at, packed_at, final_packed_at, shipped_at"
         ).eq("organization_id", organization_id).gte(
             "created_at", date_from.isoformat()
@@ -243,7 +261,7 @@ class AnalyticsService:
     
     async def _get_quality_metrics(self, organization_id: str) -> Dict[str, Any]:
         """Calculate quality metrics based on 8130-3 compliance and errors."""
-        result = self.client.table("outbound_to_data").select(
+        result = self.read_client.table("outbound_to_data").select(
             "requires_8130_3, has_8130_3, is_8130_3_signed, status"
         ).eq("organization_id", organization_id).execute()
         
@@ -275,7 +293,7 @@ class AnalyticsService:
     
     async def _get_efficiency_metrics(self, organization_id: str) -> Dict[str, Any]:
         """Calculate efficiency metrics based on processing times."""
-        result = self.client.table("outbound_to_data").select(
+        result = self.read_client.table("outbound_to_data").select(
             "created_at, packed_at, final_packed_at, shipped_at"
         ).eq("organization_id", organization_id).limit(1000).execute()
         
@@ -312,5 +330,4 @@ class AnalyticsService:
             "total_analyzed": len(df)
         }
 
-# Developer and Creator: Jai Singh
-
+# Created and developed by Jai Singh

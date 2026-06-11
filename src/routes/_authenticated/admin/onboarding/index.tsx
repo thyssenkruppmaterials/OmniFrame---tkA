@@ -1,3 +1,4 @@
+// Created and developed by Jai Singh
 /**
  * Employee Onboarding Route
  * /admin/onboarding
@@ -46,4 +47,5 @@ function OnboardingPage() {
 }
 
 export default OnboardingPage
-// Developer and Creator: Jai Singh
+
+// Created and developed by Jai Singh

@@ -1,3 +1,4 @@
+// Created and developed by Jai Singh
 import type { MdmCommandType } from '../types/device-manager.types'
 
 export interface CommandDefinition {
@@ -221,3 +222,5 @@ export function getCommandDefinition(
 ): CommandDefinition | undefined {
   return MDM_COMMAND_DEFINITIONS.find((c) => c.type === type)
 }
+
+// Created and developed by Jai Singh

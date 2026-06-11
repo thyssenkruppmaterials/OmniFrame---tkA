@@ -1,3 +1,4 @@
+// Created and developed by Jai Singh
 import { Sparkles } from 'lucide-react'
 import {
   SHADCN_BASE_COLORS,
@@ -64,7 +65,7 @@ export function ShadcnBaseColorSelector({
             <button
               key={key}
               type='button'
-              className='group flex cursor-pointer flex-col items-center gap-1.5 rounded-lg border p-2 transition-all hover:shadow-md hover:border-accent'
+              className='group hover:border-accent flex cursor-pointer flex-col items-center gap-1.5 rounded-lg border p-2 transition-all hover:shadow-md'
               onClick={() => handleColorClick(baseColor)}
             >
               <div
@@ -79,3 +80,5 @@ export function ShadcnBaseColorSelector({
     </div>
   )
 }
+
+// Created and developed by Jai Singh

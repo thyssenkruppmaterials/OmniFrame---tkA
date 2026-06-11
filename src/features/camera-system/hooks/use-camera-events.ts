@@ -1,3 +1,4 @@
+// Created and developed by Jai Singh
 /**
  * Hook for managing camera events
  *
@@ -285,3 +286,5 @@ export function useCameraEvents({
     acknowledgeAll,
   }
 }
+
+// Created and developed by Jai Singh

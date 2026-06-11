@@ -1,5 +1,5 @@
 /**
- * Admin Account Creation Script for OmniFrame
+ * Admin Account Creation Script for j.AI OneBox
  * 
  * This script creates an admin user account programmatically using Supabase Admin API.
  * 
@@ -19,7 +19,7 @@ const supabaseServiceKey = process.argv[2] || process.env.API_SUPABASE_SERVICE_R
 
 // Admin account configuration
 const ADMIN_CONFIG = {
-  email: 'admin@omniframe.app',
+  email: 'admin@j.ai',
   password: 'AdminPassword123!',
   firstName: 'Admin',
   lastName: 'User'
@@ -29,7 +29,7 @@ async function createAdminAccount() {
   if (!supabaseServiceKey) {
     console.error('❌ API_SUPABASE_SERVICE_ROLE_KEY environment variable is required')
     console.log('\n📖 To get your service role key:')
-    console.log('1. Go to https://supabase.com/dashboard/project/YOUR_PROJECT_ID/settings/api')
+    console.log('1. Go to https://supabase.com/dashboard/project/wncpqxwmbxjgxvrpcake/settings/api')
     console.log('2. Copy the "service_role" key (secret)')
     console.log('3. Set API_SUPABASE_SERVICE_ROLE_KEY=your_key_here in your environment')
     console.log('4. Run this script again')
@@ -45,7 +45,7 @@ async function createAdminAccount() {
   })
 
   try {
-    console.log('🚀 Creating admin account for OmniFrame...')
+    console.log('🚀 Creating admin account for j.AI OneBox...')
     
     // Get organization ID
     console.log('📋 Fetching organization...')

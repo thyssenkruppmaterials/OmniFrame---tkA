@@ -1,3 +1,4 @@
+// Created and developed by Jai Singh
 /**
  * API client for customer ticket operations
  * Integrates with Smartsheet-backed ticketing system
@@ -508,3 +509,5 @@ export function useAttachUrl() {
     },
   })
 }
+
+// Created and developed by Jai Singh

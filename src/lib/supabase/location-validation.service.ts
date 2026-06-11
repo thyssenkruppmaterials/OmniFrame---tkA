@@ -1,3 +1,4 @@
+// Created and developed by Jai Singh
 import { logger } from '@/lib/utils/logger'
 import { supabase } from './client'
 import { locationQueryService } from './location-query.service'
@@ -226,4 +227,5 @@ export class LocationValidationService {
 
 // Export singleton instance
 export const locationValidationService = LocationValidationService.getInstance()
-// Developer and Creator: Jai Singh
+
+// Created and developed by Jai Singh

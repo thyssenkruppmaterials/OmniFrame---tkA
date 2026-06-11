@@ -1,3 +1,4 @@
+// Created and developed by Jai Singh
 import { useState } from 'react'
 
 /**
@@ -16,3 +17,5 @@ export default function useDialogState<T extends string | boolean>(
 
   return [open, setOpen] as const
 }
+
+// Created and developed by Jai Singh

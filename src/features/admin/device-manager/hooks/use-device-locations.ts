@@ -1,3 +1,4 @@
+// Created and developed by Jai Singh
 import { useState, useCallback, useEffect, useRef } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { supabase } from '@/lib/supabase/client'
@@ -120,3 +121,5 @@ export function useLatestLocations() {
     refetchInterval: 60_000,
   })
 }
+
+// Created and developed by Jai Singh

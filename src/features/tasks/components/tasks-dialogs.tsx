@@ -1,3 +1,4 @@
+// Created and developed by Jai Singh
 import { showSubmittedData } from '@/utils/show-submitted-data'
 import { ConfirmDialog } from '@/components/confirm-dialog'
 import { useTasks } from '../context/tasks-context'
@@ -70,3 +71,5 @@ export function TasksDialogs() {
     </>
   )
 }
+
+// Created and developed by Jai Singh

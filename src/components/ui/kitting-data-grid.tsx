@@ -1,3 +1,4 @@
+// Created and developed by Jai Singh
 /**
  * Kitting Data Grid
  * Draggable data grid for RR_Kitting_DATA table
@@ -36,7 +37,7 @@ import {
   verticalListSortingStrategy,
 } from '@dnd-kit/sortable'
 import { CSS } from '@dnd-kit/utilities'
-import { GripVertical, Loader2 } from 'lucide-react'
+import { GripVertical, Loader2, MessageSquareDot } from 'lucide-react'
 import { HardHat } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { Badge } from '@/components/ui/badge'
@@ -107,6 +108,16 @@ export interface KittingGridRow {
   kit_added_by_user_name: string | null
   kit_added_create_date_time: string | null
   kit_build_status: string | null
+  // Derived granular stage for the Status column (falls back to kit_build_status).
+  kit_stage_status: string | null
+  // Engine program. Stand-alone single-part expedites are stamped 'EXPEDITE'.
+  engine_program: string | null
+  // Authorized to Ship Short part numbers attached to this kit
+  authorized_ship_short_items: Array<{
+    lineNumber: number
+    partNumber: string
+    description: string
+  }>
   // Multiple flags support
   active_flags: ActiveFlag[]
   // Legacy single flag (for backward compatibility)
@@ -114,12 +125,34 @@ export interface KittingGridRow {
   kit_flag_set_by_user_name: string | null
 }
 
+// Extra context handed to column cells via TanStack table `meta`. Lets the
+// module-level column defs read the per-user unread set without re-creating
+// the columns array on every render.
+interface KittingGridMeta {
+  unreadKitSerials?: Set<string>
+}
+
 interface KittingDataGridProps {
   data: KittingGridRow[]
   isLoading?: boolean
+  /** Kit serials with an unread operator note for the current user. */
+  unreadKitSerials?: Set<string>
   onRowReorder?: (rows: KittingGridRow[]) => void
-  onRowClick?: (row: KittingGridRow) => void
+  /**
+   * Fires on row click. `displayPriority` is the row's rendered position
+   * (`index + 1`), i.e. the same `#n` shown in the Priority column — pass it
+   * through so detail dialogs show the same positional priority.
+   */
+  onRowClick?: (row: KittingGridRow, displayPriority: number) => void
   onPriorityChange?: (rows: KittingGridRow[]) => Promise<void>
+  /**
+   * When false, renders a read-only table with no drag-to-reorder affordances.
+   * Used for terminal-state views (e.g. completed kits) where priority is
+   * meaningless. Default: true.
+   */
+  reorderable?: boolean
+  /** Message shown when there are no rows to display. */
+  emptyMessage?: string
 }
 
 // Priority display component - shows position number
@@ -170,6 +203,21 @@ function StatusBadge({ status }: { status: string | null }) {
       className:
         'bg-cyan-100 dark:bg-cyan-900/30 text-cyan-700 dark:text-cyan-400 border-cyan-500/20',
       label: 'In Progress',
+    },
+    picking: {
+      className:
+        'bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-400 border-blue-500/20',
+      label: 'Picking',
+    },
+    picking_complete: {
+      className:
+        'bg-sky-100 dark:bg-sky-900/30 text-sky-700 dark:text-sky-400 border-sky-500/20',
+      label: 'Picking Complete',
+    },
+    kitting: {
+      className:
+        'bg-teal-100 dark:bg-teal-900/30 text-teal-700 dark:text-teal-400 border-teal-500/20',
+      label: 'Kitting',
     },
     kit_built: {
       className:
@@ -288,6 +336,44 @@ function FlagBadge({
   )
 }
 
+// Ship Short authorization cell — lists the authorized part numbers as amber
+// badges (with the description on hover). Renders a muted dash when the kit
+// has no ship-short authorization.
+function ShipShortCell({
+  items,
+}: {
+  items: Array<{ lineNumber: number; partNumber: string; description: string }>
+}) {
+  const authorized = (items || []).filter((item) => item.partNumber?.trim())
+
+  if (authorized.length === 0)
+    return <span className='text-muted-foreground'>—</span>
+
+  return (
+    <div className='flex flex-wrap items-center gap-1'>
+      {authorized.map((item) => (
+        <TooltipProvider key={`${item.lineNumber}-${item.partNumber}`}>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Badge
+                variant='outline'
+                className='cursor-help border-amber-500/30 bg-amber-500/10 font-mono text-[11px] text-amber-700 dark:text-amber-400'
+              >
+                {item.partNumber}
+              </Badge>
+            </TooltipTrigger>
+            {item.description && (
+              <TooltipContent side='top' className='max-w-[220px]'>
+                <p className='text-sm'>{item.description}</p>
+              </TooltipContent>
+            )}
+          </Tooltip>
+        </TooltipProvider>
+      ))}
+    </div>
+  )
+}
+
 // Format date for display
 function formatDate(dateString: string | null): string {
   if (!dateString) return '—'
@@ -309,12 +395,29 @@ function formatDateTime(dateString: string | null): string {
 }
 
 // Column definitions
+// Order (left→right): Priority · Date Added · Due Date · Kit Serial # ·
+// Kit PO Number · Kit Number · Status · Ship Short · Flags.
 const columns: ColumnDef<KittingGridRow>[] = [
   {
     id: 'drag',
     header: '',
     cell: () => null, // Handled in SortableRow
     size: 40,
+  },
+  {
+    accessorKey: 'kit_priority',
+    header: 'Priority',
+    cell: ({ row }) => <PriorityDisplay priority={row.index + 1} />,
+  },
+  {
+    accessorKey: 'kit_added_create_date_time',
+    header: 'Date Added',
+    cell: ({ row }) => formatDateTime(row.original.kit_added_create_date_time),
+  },
+  {
+    accessorKey: 'due_date',
+    header: 'Due Date',
+    cell: ({ row }) => formatDate(row.original.due_date),
   },
   {
     accessorKey: 'kit_serial_number',
@@ -342,29 +445,45 @@ const columns: ColumnDef<KittingGridRow>[] = [
     ),
   },
   {
-    accessorKey: 'kit_priority',
-    header: 'Priority',
-    cell: ({ row }) => <PriorityDisplay priority={row.index + 1} />,
-  },
-  {
-    accessorKey: 'due_date',
-    header: 'Due Date',
-    cell: ({ row }) => formatDate(row.original.due_date),
-  },
-  {
-    accessorKey: 'kit_added_by_user_name',
-    header: 'Added By',
-    cell: ({ row }) => row.original.kit_added_by_user_name || '—',
-  },
-  {
-    accessorKey: 'kit_added_create_date_time',
-    header: 'Added Date/Time',
-    cell: ({ row }) => formatDateTime(row.original.kit_added_create_date_time),
-  },
-  {
     accessorKey: 'kit_build_status',
     header: 'Status',
-    cell: ({ row }) => <StatusBadge status={row.original.kit_build_status} />,
+    cell: ({ row }) => (
+      <StatusBadge
+        status={row.original.kit_stage_status ?? row.original.kit_build_status}
+      />
+    ),
+  },
+  {
+    accessorKey: 'authorized_ship_short_items',
+    header: 'Ship Short',
+    cell: ({ row }) => (
+      <ShipShortCell items={row.original.authorized_ship_short_items || []} />
+    ),
+  },
+  {
+    id: 'unread_messages',
+    header: 'Messages',
+    cell: ({ row, table }) => {
+      const meta = table.options.meta as KittingGridMeta | undefined
+      const hasUnread =
+        meta?.unreadKitSerials?.has(row.original.kit_serial_number) ?? false
+      if (!hasUnread) return <span className='text-muted-foreground'>—</span>
+      return (
+        <TooltipProvider>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <span className='inline-flex items-center gap-1 rounded-md border border-blue-500/30 bg-blue-500/10 px-1.5 py-0.5 text-[11px] font-semibold text-blue-700 dark:text-blue-400'>
+                <MessageSquareDot className='h-3.5 w-3.5' />
+                New
+              </span>
+            </TooltipTrigger>
+            <TooltipContent side='top'>
+              New message — open the kit to read it
+            </TooltipContent>
+          </Tooltip>
+        </TooltipProvider>
+      )
+    },
   },
   {
     accessorKey: 'active_flags',
@@ -386,7 +505,7 @@ function SortableRow({
   isDragOverlay = false,
 }: {
   row: Row<KittingGridRow>
-  onRowClick?: (row: KittingGridRow) => void
+  onRowClick?: (row: KittingGridRow, displayPriority: number) => void
   isDragOverlay?: boolean
 }) {
   const {
@@ -417,7 +536,7 @@ function SortableRow({
 
   const handleRowClick = () => {
     if (!isDragOverlay) {
-      onRowClick?.(row.original)
+      onRowClick?.(row.original, row.index + 1)
     }
   }
 
@@ -458,6 +577,32 @@ function SortableRow({
   )
 }
 
+// Read-only row — used when the grid is non-reorderable (e.g. completed kits).
+// No drag handle and no useSortable hook, so it renders outside a DndContext.
+function StaticRow({
+  row,
+  onRowClick,
+}: {
+  row: Row<KittingGridRow>
+  onRowClick?: (row: KittingGridRow, displayPriority: number) => void
+}) {
+  return (
+    <TableRow
+      onClick={() => onRowClick?.(row.original, row.index + 1)}
+      className='hover:bg-muted/50 cursor-pointer transition-colors'
+    >
+      {row.getVisibleCells().map((cell: Cell<KittingGridRow, unknown>) => {
+        if (cell.column.id === 'drag') return null
+        return (
+          <TableCell key={cell.id}>
+            {flexRender(cell.column.columnDef.cell, cell.getContext())}
+          </TableCell>
+        )
+      })}
+    </TableRow>
+  )
+}
+
 // Static row for drag overlay
 function DragOverlayRow({ row }: { row: KittingGridRow; index: number }) {
   return (
@@ -482,9 +627,12 @@ function DragOverlayRow({ row }: { row: KittingGridRow; index: number }) {
 export function KittingDataGrid({
   data,
   isLoading = false,
+  unreadKitSerials,
   onRowReorder,
   onRowClick,
   onPriorityChange,
+  reorderable = true,
+  emptyMessage = 'No kit build plans found. Click "Add to Kit Build Plan" to create one.',
 }: KittingDataGridProps) {
   const [rows, setRows] = React.useState<KittingGridRow[]>(data)
   const [isSaving, setIsSaving] = React.useState(false)
@@ -518,6 +666,7 @@ export function KittingDataGrid({
     data: rows,
     columns,
     getCoreRowModel: getCoreRowModel(),
+    meta: { unreadKitSerials } satisfies KittingGridMeta,
   })
 
   const handleDragStart = (event: DragStartEvent) => {
@@ -571,51 +720,42 @@ export function KittingDataGrid({
   if (rows.length === 0) {
     return (
       <div className='border-muted-foreground/30 rounded-md border border-dashed py-12 text-center'>
-        <p className='text-muted-foreground'>
-          No kit build plans found. Click "Add to Kit Build Plan" to create one.
-        </p>
+        <p className='text-muted-foreground'>{emptyMessage}</p>
       </div>
     )
   }
 
-  return (
-    <DndContext
-      sensors={sensors}
-      collisionDetection={closestCenter}
-      modifiers={[restrictToVerticalAxis, restrictToParentElement]}
-      onDragStart={handleDragStart}
-      onDragEnd={handleDragEnd}
-      onDragCancel={handleDragCancel}
-    >
-      <div className='border-border overflow-hidden rounded-md border'>
-        <Table>
-          <TableHeader>
-            {table.getHeaderGroups().map((headerGroup) => (
-              <TableRow
-                key={headerGroup.id}
-                className='bg-muted/50 hover:bg-muted/50'
-              >
-                <TableHead className='w-10 px-2' />
-                {headerGroup.headers.map((header) => {
-                  if (header.id === 'drag') return null
-                  return (
-                    <TableHead
-                      key={header.id}
-                      className='text-foreground font-medium'
-                    >
-                      {header.isPlaceholder
-                        ? null
-                        : flexRender(
-                            header.column.columnDef.header,
-                            header.getContext()
-                          )}
-                    </TableHead>
-                  )
-                })}
-              </TableRow>
-            ))}
-          </TableHeader>
-          <TableBody>
+  const gridTable = (
+    <div className='border-border min-w-0 rounded-md border'>
+      <Table>
+        <TableHeader>
+          {table.getHeaderGroups().map((headerGroup) => (
+            <TableRow
+              key={headerGroup.id}
+              className='bg-muted/50 hover:bg-muted/50'
+            >
+              {reorderable && <TableHead className='w-10 px-2' />}
+              {headerGroup.headers.map((header) => {
+                if (header.id === 'drag') return null
+                return (
+                  <TableHead
+                    key={header.id}
+                    className='text-foreground font-medium'
+                  >
+                    {header.isPlaceholder
+                      ? null
+                      : flexRender(
+                          header.column.columnDef.header,
+                          header.getContext()
+                        )}
+                  </TableHead>
+                )
+              })}
+            </TableRow>
+          ))}
+        </TableHeader>
+        <TableBody>
+          {reorderable ? (
             <SortableContext
               items={rows.map((row) => row.id)}
               strategy={verticalListSortingStrategy}
@@ -628,9 +768,44 @@ export function KittingDataGrid({
                 />
               ))}
             </SortableContext>
-          </TableBody>
-        </Table>
-      </div>
+          ) : (
+            table
+              .getRowModel()
+              .rows.map((row) => (
+                <StaticRow
+                  key={row.original.id}
+                  row={row}
+                  onRowClick={onRowClick}
+                />
+              ))
+          )}
+        </TableBody>
+      </Table>
+    </div>
+  )
+
+  // Read-only mode (e.g. completed kits) — no DnD context, no priority hints.
+  if (!reorderable) {
+    return (
+      <>
+        {gridTable}
+        <div className='text-muted-foreground mt-2 text-xs'>
+          {rows.length} completed kit{rows.length === 1 ? '' : 's'}
+        </div>
+      </>
+    )
+  }
+
+  return (
+    <DndContext
+      sensors={sensors}
+      collisionDetection={closestCenter}
+      modifiers={[restrictToVerticalAxis, restrictToParentElement]}
+      onDragStart={handleDragStart}
+      onDragEnd={handleDragEnd}
+      onDragCancel={handleDragCancel}
+    >
+      {gridTable}
 
       {/* Drag overlay for smooth visual feedback */}
       <DragOverlay
@@ -662,3 +837,5 @@ export function KittingDataGrid({
     </DndContext>
   )
 }
+
+// Created and developed by Jai Singh

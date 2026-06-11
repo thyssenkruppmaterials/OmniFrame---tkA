@@ -1,3 +1,4 @@
+// Created and developed by Jai Singh
 import { useState, useEffect, useCallback, useMemo } from 'react'
 import {
   useQuery,
@@ -10,7 +11,7 @@ import { useUnifiedAuth } from '@/lib/auth/unified-auth-provider'
 import { supabase } from '@/lib/supabase/client'
 import {
   inboundScanService,
-  type InboundScansWithUser,
+  type InboundScanWithTransfer,
   type InboundScanStatistics,
   type ImportProgress,
   type InboundScanData,
@@ -28,8 +29,8 @@ export interface UseInboundScansProps {
 
 export interface UseInboundScansReturn {
   // Data
-  data: InboundScansWithUser
-  filteredData: InboundScansWithUser
+  data: InboundScanWithTransfer[]
+  filteredData: InboundScanWithTransfer[]
   statistics: InboundScanStatistics | null
 
   // Pagination info (NEW)
@@ -149,7 +150,10 @@ export function useInboundScans({
   })
 
   // Extract data from paginated result
-  const rawData = useMemo(() => paginatedResult?.data || [], [paginatedResult])
+  const rawData = useMemo<InboundScanWithTransfer[]>(
+    () => (paginatedResult?.data || []) as InboundScanWithTransfer[],
+    [paginatedResult]
+  )
   const totalRecords = paginatedResult?.total || 0
   const totalPages = paginatedResult?.totalPages || 0
 
@@ -183,6 +187,16 @@ export function useInboundScans({
 
     logger.log('🔄 Setting up real-time subscription for inbound scans')
 
+    const invalidateAll = () => {
+      queryClient.invalidateQueries({ queryKey: [INBOUND_SCANS_QUERY_KEY] })
+      queryClient.invalidateQueries({
+        queryKey: [INBOUND_SCANS_PAGINATED_QUERY_KEY],
+      })
+      queryClient.invalidateQueries({
+        queryKey: [INBOUND_STATISTICS_QUERY_KEY],
+      })
+    }
+
     const channel = supabase
       .channel('inbound-scans-changes')
       .on(
@@ -195,13 +209,8 @@ export function useInboundScans({
         (payload) => {
           logger.log('📡 Inbound scan real-time update:', payload)
 
-          // Invalidate and refetch queries on any change
-          queryClient.invalidateQueries({ queryKey: [INBOUND_SCANS_QUERY_KEY] })
-          queryClient.invalidateQueries({
-            queryKey: [INBOUND_STATISTICS_QUERY_KEY],
-          })
+          invalidateAll()
 
-          // Show toast notifications for changes
           if (payload.eventType === 'INSERT') {
             toast.success('New inbound scan added')
           } else if (payload.eventType === 'UPDATE') {
@@ -209,6 +218,18 @@ export function useInboundScans({
           } else if (payload.eventType === 'DELETE') {
             toast.info('Inbound scan deleted')
           }
+        }
+      )
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'rr_inbound_part_transfers',
+        },
+        (payload) => {
+          logger.log('📡 Inbound part transfer real-time update:', payload)
+          invalidateAll()
         }
       )
       .subscribe()
@@ -238,6 +259,9 @@ export function useInboundScans({
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: [INBOUND_SCANS_QUERY_KEY] })
       queryClient.invalidateQueries({
+        queryKey: [INBOUND_SCANS_PAGINATED_QUERY_KEY],
+      })
+      queryClient.invalidateQueries({
         queryKey: [INBOUND_STATISTICS_QUERY_KEY],
       })
       toast.success('Inbound scan created successfully')
@@ -265,6 +289,9 @@ export function useInboundScans({
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: [INBOUND_SCANS_QUERY_KEY] })
       queryClient.invalidateQueries({
+        queryKey: [INBOUND_SCANS_PAGINATED_QUERY_KEY],
+      })
+      queryClient.invalidateQueries({
         queryKey: [INBOUND_STATISTICS_QUERY_KEY],
       })
       toast.success('Inbound scan updated successfully')
@@ -287,6 +314,9 @@ export function useInboundScans({
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: [INBOUND_SCANS_QUERY_KEY] })
+      queryClient.invalidateQueries({
+        queryKey: [INBOUND_SCANS_PAGINATED_QUERY_KEY],
+      })
       queryClient.invalidateQueries({
         queryKey: [INBOUND_STATISTICS_QUERY_KEY],
       })
@@ -340,6 +370,9 @@ export function useInboundScans({
 
           // Refresh data after successful import
           queryClient.invalidateQueries({ queryKey: [INBOUND_SCANS_QUERY_KEY] })
+          queryClient.invalidateQueries({
+            queryKey: [INBOUND_SCANS_PAGINATED_QUERY_KEY],
+          })
           queryClient.invalidateQueries({
             queryKey: [INBOUND_STATISTICS_QUERY_KEY],
           })
@@ -478,3 +511,5 @@ export function useInboundScans({
     isUsingRust: inboundScanService.isUsingRust(),
   }
 }
+
+// Created and developed by Jai Singh

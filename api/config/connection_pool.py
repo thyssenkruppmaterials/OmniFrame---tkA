@@ -1,3 +1,4 @@
+# Created and developed by Jai Singh
 """
 Database Connection Pool Manager
 Enterprise-grade PostgreSQL connection pooling using asyncpg
@@ -8,7 +9,7 @@ Designed to handle 100+ concurrent connections with:
 - Connection retry with exponential backoff
 - Graceful degradation
 
-Author: Jai Singh
+Author: OneBox AI Team
 Date: October 29, 2025
 Version: 1.0.0
 """
@@ -156,7 +157,7 @@ class ConnectionPoolManager:
         """Initialize each new connection"""
         # Set application name for tracking
         await conn.execute(
-            "SET application_name = 'omniframe-api-pool'"
+            "SET application_name = 'onebox-api-pool'"
         )
         
         # Set reasonable statement timeout
@@ -452,3 +453,4 @@ async def close_pool():
         await _pool_manager.close()
         _pool_manager = None
 
+# Created and developed by Jai Singh

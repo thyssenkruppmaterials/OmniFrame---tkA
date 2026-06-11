@@ -1,3 +1,4 @@
+# Created and developed by Jai Singh
 """
 Redis Cache Service for FastAPI Backend
 
@@ -10,7 +11,7 @@ Redis service is retained only for:
 - Application-specific caching (non-auth)
 - Health checks
 
-Author: Jai Singh
+Author: OneBox AI Team
 Date: October 29, 2025
 Updated: January 2026 - Removed auth caching (moved to Rust)
 Version: 2.0.0
@@ -21,7 +22,14 @@ from typing import Optional, Any, Dict
 import json
 import logging
 
-from ...config.settings import settings
+try:
+    # Relative import when loaded as `api.lib.cache.redis_service`
+    from ...config.settings import settings
+except ImportError:
+    # Absolute fallback when loaded as `lib.cache.redis_service`
+    # (this is how api/main.py imports us at runtime on Railway, where the
+    # top-level package is `lib`, not `api`).
+    from config.settings import settings
 
 logger = logging.getLogger(__name__)
 
@@ -403,3 +411,5 @@ async def close_redis():
         await _redis_service.disconnect()
         _redis_service = None
     await RedisService.reset()
+
+# Created and developed by Jai Singh

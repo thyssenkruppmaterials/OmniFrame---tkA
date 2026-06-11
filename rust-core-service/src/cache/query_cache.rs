@@ -1,3 +1,4 @@
+// Created and developed by Jai Singh
 //! Query result caching
 
 use super::redis_pool::CacheService;
@@ -110,3 +111,5 @@ impl Clone for QueryCache {
         }
     }
 }
+
+// Created and developed by Jai Singh

@@ -1,3 +1,4 @@
+// Created and developed by Jai Singh
 /**
  * @deprecated This service is deprecated and will be removed in a future release.
  * Use the rust-work-service API via src/lib/work-service/client.ts instead.
@@ -942,4 +943,5 @@ class RFCycleCountService {
 
 // Export singleton instance
 export const rfCycleCountService = new RFCycleCountService()
-// Developer and Creator: Jai Singh
+
+// Created and developed by Jai Singh

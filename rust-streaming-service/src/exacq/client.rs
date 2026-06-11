@@ -1,3 +1,4 @@
+// Created and developed by Jai Singh
 //! ExacqVision HTTP client
 //!
 //! Provides low-level HTTP operations for ExacqVision API.
@@ -366,3 +367,5 @@ impl ExacqClient {
         )
     }
 }
+
+// Created and developed by Jai Singh

@@ -1,3 +1,4 @@
+// Created and developed by Jai Singh
 import { toast } from 'sonner'
 
 export function showSubmittedData(
@@ -13,3 +14,5 @@ export function showSubmittedData(
     ),
   })
 }
+
+// Created and developed by Jai Singh

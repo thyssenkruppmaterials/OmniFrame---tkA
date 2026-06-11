@@ -1,3 +1,4 @@
+// Created and developed by Jai Singh
 /**
  * Simple Work Queue Context Provider
  * Simplified state management for work queue administration interface
@@ -416,3 +417,5 @@ export function useWorkQueue() {
   }
   return context
 }
+
+// Created and developed by Jai Singh

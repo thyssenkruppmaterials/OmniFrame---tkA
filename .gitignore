@@ -8,14 +8,23 @@ pnpm-debug.log*
 lerna-debug.log*
 
 node_modules
+tests/e2e/.auth/
+.mdnotes
 dist
+dist-ssr
 *.local
+
+# Intro video capture output (scripts/record-intro.mjs)
+intro-capture/
+intro-capture-*/
 
 .env
 
 # SAP NW RFC SDK (proprietary - do not commit)
+# Keep the folder but ignore SDK contents
 api/nwrfcsdk/*
 !api/nwrfcsdk/.gitkeep
+nwrfcsdk/
 *.so
 *.dll
 
@@ -30,12 +39,15 @@ __pycache__/
 .Python
 venv/
 .venv/
-.pytest_cache/
 pytest-cache-files-*/
 
+# Generated / transient
+dev-dist/
+
+# Local database backups (supabase db dump output)
+backups/
+
 # Editor directories and files
-.vscode/*
-!.vscode/extensions.json
 .idea
 .DS_Store
 *.suo
@@ -45,13 +57,44 @@ pytest-cache-files-*/
 *.sw?
 nul
 
+CLAUDE.md
+
 # Transient artifacts and scratch files
 *.new
 *.temp
 *.backup
 *.bak
 *.orig
-lint-output.txt
+env.local.temp
+.env_temp
+.env_clean
+node_modules_old/
+supabase/.temp/
 
-# OpenMemory - IDE/Assistant specific rules
-.cursor\rules\openmemory.mdc
+# IDE, agent tooling, and local-only directories
+.agents/
+.claude/
+.cursor/
+.docs/
+.notes/
+.playwright-mcp/
+.pytest_cache/
+.tanstack/
+.tmp/
+.vscode/
+!.vscode/extensions.json
+
+# Phase 10 — Agent service keys. Plaintext credentials. NEVER commit.
+# These files hold long-lived `omni_sk_*` tokens that the omni-agent
+# trades at boot for a 15-min `kind: "agent"` JWT via
+# `rust-work-service /api/v1/agent-identity/exchange`. Each Citrix box
+# gets its own per-agent key — sharing or distributing them via git
+# would leak production credentials and short-circuit the per-agent
+# audit trail (`agent_service_keys.last_used_at`, the
+# `agent_service_key.exchanged` tracing event). See
+# `memorybank/OmniFrame/Implementations/Implement-Phase10-Service-Key-First-Rollout.md`
+# §"Repository hygiene" for the operator-side pairing.
+agent_service_key.txt
+*.agent_service_key.txt
+omni_sk_*.txt
+.omniframe/

@@ -1,3 +1,4 @@
+// Created and developed by Jai Singh
 /**
  * Add Event Dialog Component
  * Form dialog for creating timeline events (meetings, planned downtime, etc.)
@@ -207,7 +208,7 @@ export function AddEventDialog({
 
   // Form with default values
   const form = useForm<EventFormData>({
-    resolver: zodResolver(eventSchema),
+    resolver: zodResolver(eventSchema) as never,
     defaultValues: {
       event_name: '',
       category_id: '',
@@ -917,3 +918,5 @@ export function AddEventDialog({
 }
 
 export default AddEventDialog
+
+// Created and developed by Jai Singh

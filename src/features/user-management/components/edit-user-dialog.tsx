@@ -1,3 +1,4 @@
+// Created and developed by Jai Singh
 import { useEffect, useState } from 'react'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
@@ -180,7 +181,7 @@ export function EditUserDialog({
               {/* Basic Information */}
               <div className='space-y-4'>
                 <h3 className='text-lg font-medium'>Basic Information</h3>
-                <div className='grid grid-cols-2 gap-4'>
+                <div className='grid grid-cols-1 gap-4 md:grid-cols-2'>
                   <FormField
                     control={form.control}
                     name='first_name'
@@ -209,7 +210,7 @@ export function EditUserDialog({
                   />
                 </div>
 
-                <div className='grid grid-cols-2 gap-4'>
+                <div className='grid grid-cols-1 gap-4 md:grid-cols-2'>
                   <FormField
                     control={form.control}
                     name='username'
@@ -242,7 +243,7 @@ export function EditUserDialog({
               {/* Role and Status */}
               <div className='space-y-4'>
                 <h3 className='text-lg font-medium'>Role & Status</h3>
-                <div className='grid grid-cols-2 gap-4'>
+                <div className='grid grid-cols-1 gap-4 md:grid-cols-2'>
                   <FormField
                     control={form.control}
                     name='role'
@@ -374,3 +375,5 @@ export function EditUserDialog({
     </Dialog>
   )
 }
+
+// Created and developed by Jai Singh

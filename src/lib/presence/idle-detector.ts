@@ -1,3 +1,4 @@
+// Created and developed by Jai Singh
 /**
  * Idle Detection Service
  * Monitors user activity (mouse, keyboard, touch) and detects idle state.
@@ -137,3 +138,5 @@ export class IdleDetector {
     }, this.idleTimeout)
   }
 }
+
+// Created and developed by Jai Singh

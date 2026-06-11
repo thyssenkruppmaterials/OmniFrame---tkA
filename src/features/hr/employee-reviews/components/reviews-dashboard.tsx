@@ -1,3 +1,4 @@
+// Created and developed by Jai Singh
 /**
  * Reviews Dashboard Component
  * HR Employee Reviews - Overview dashboard with metrics, cycle progress, and upcoming reviews
@@ -391,3 +392,5 @@ function ReviewsDashboard() {
 }
 
 export default ReviewsDashboard
+
+// Created and developed by Jai Singh

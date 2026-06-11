@@ -1,3 +1,4 @@
+// Created and developed by Jai Singh
 //! Authentication middleware for rust-dashboard-service
 
 use axum::{
@@ -99,3 +100,5 @@ pub async fn get_current_user(
         .cloned()
         .ok_or(AuthError::MissingAuth)
 }
+
+// Created and developed by Jai Singh

@@ -1,3 +1,4 @@
+// Created and developed by Jai Singh
 /**
  * Enterprise Performance Tracking for OmniFrame RBAC System
  * Comprehensive performance monitoring, metrics collection, and alerting
@@ -969,4 +970,5 @@ export type {
   AlertThreshold,
   PerformanceAlert,
 }
-// Developer and Creator: Jai Singh
+
+// Created and developed by Jai Singh

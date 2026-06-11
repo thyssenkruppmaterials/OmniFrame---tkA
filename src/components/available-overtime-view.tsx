@@ -1,3 +1,4 @@
+// Created and developed by Jai Singh
 import { useCallback, useEffect, useState } from 'react'
 import { format, startOfDay, addDays, endOfDay } from 'date-fns'
 import {
@@ -685,3 +686,5 @@ function OvertimeCard({
     </Card>
   )
 }
+
+// Created and developed by Jai Singh

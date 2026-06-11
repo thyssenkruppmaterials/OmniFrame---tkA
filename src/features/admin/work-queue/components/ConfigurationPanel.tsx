@@ -1,3 +1,4 @@
+// Created and developed by Jai Singh
 /**
  * Configuration Panel Component
  * Admin interface for configuring work queue system settings
@@ -568,3 +569,5 @@ export function ConfigurationPanel() {
     </div>
   )
 }
+
+// Created and developed by Jai Singh

@@ -1,3 +1,4 @@
+// Created and developed by Jai Singh
 /**
  * RF GRS Cycle Count Form Component
  *
@@ -9,7 +10,6 @@ import { AnimatePresence, motion } from 'framer-motion'
 import {
   AlertCircle,
   CheckCircle,
-  ChevronLeft,
   Loader2,
   MapPin,
   Package,
@@ -31,6 +31,7 @@ import { ConfirmDialog } from '@/components/ui/confirm-dialog'
 import { Label } from '@/components/ui/label'
 import { RFUnknownBatchDialog } from '@/components/ui/rf-unknown-batch-dialog'
 import { ScannerInput } from '@/components/ui/scanner-input'
+import { RFScreenHeader } from '@/features/rf-interface/_shell'
 
 // Enhanced state management for GRS cycle count
 interface GRSCycleCountState {
@@ -551,26 +552,13 @@ const RFGRSCycleCountForm: React.FC<RFGRSCycleCountFormProps> = ({
   return (
     <div className='mx-auto flex h-full max-w-md flex-col'>
       {/* Header */}
-      <div className='bg-card flex items-center justify-between border-b p-4'>
-        <div className='flex items-center space-x-2'>
-          <Button
-            variant='ghost'
-            size='sm'
-            onClick={handleBack}
-            disabled={state.isProcessing}
-          >
-            <ChevronLeft className='h-4 w-4' />
-          </Button>
-          <div>
-            <h1 className='text-lg font-semibold'>GRS Cycle Count</h1>
-            <p className='text-muted-foreground text-xs'>
-              {state.scannedLocation || 'Location-based batch scanning'}
-            </p>
-          </div>
-        </div>
-        <div className='flex items-center space-x-2'>
-          <Scan className='text-muted-foreground h-5 w-5' />
-        </div>
+      <div className='border-b p-4'>
+        <RFScreenHeader
+          title='GRS Cycle Count'
+          subtitle={state.scannedLocation || 'Goods receipt'}
+          onBack={handleBack}
+          right={<Scan className='text-muted-foreground h-5 w-5' />}
+        />
       </div>
 
       {/* Stepper */}
@@ -918,3 +906,5 @@ const RFGRSCycleCountForm: React.FC<RFGRSCycleCountFormProps> = ({
 }
 
 export default RFGRSCycleCountForm
+
+// Created and developed by Jai Singh

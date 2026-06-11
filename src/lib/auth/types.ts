@@ -1,3 +1,4 @@
+// Created and developed by Jai Singh
 /**
  * Unified Authentication and Authorization Types
  * Comprehensive type definitions for the new unified auth system
@@ -578,3 +579,5 @@ export interface AuthGuardProps {
 }
 
 // Re-export commonly used types for convenience (namespace removed in favor of direct imports)
+
+// Created and developed by Jai Singh

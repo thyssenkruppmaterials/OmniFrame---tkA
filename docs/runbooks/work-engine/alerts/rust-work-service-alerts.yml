@@ -1,0 +1,188 @@
+# Prometheus alert rules for rust-work-service.
+#
+# Phase 2 of the Rust Work Service Full Integration plan
+# (`memorybank/OmniFrame/Implementations/Implement-Rust-Work-Service-Phase2.md`)
+# ships the telemetry foundation that makes Phase 4 (the on-prem agent
+# cutover onto rust-work-service /ws) monitorable. These four alerts are
+# the non-negotiable minimum that an on-call engineer needs to see when
+# they're paged at 3am because the SAP automation pipeline is wedged.
+#
+# Each alert pairs with a runbook under
+# `docs/runbooks/work-engine/`. The runbook URL is rendered into the
+# alert annotations so PagerDuty / Slack notifications carry the click-
+# through link directly.
+#
+# Severity convention:
+#   critical → page on-call (cross-tenant leak, sustained 5xx, SLO burn)
+#   warning  → ticket / Slack notification (lagged events, baseline drift)
+#
+# How to load:
+#   1. Drop this file into the Prometheus rules directory
+#      (e.g. /etc/prometheus/rules/) and add it to the
+#      `rule_files:` list in `prometheus.yml`.
+#   2. Reload Prometheus: `kill -HUP $(pidof prometheus)` or via the
+#      `/-/reload` admin endpoint.
+#   3. Confirm load via the Prometheus UI → Status → Rules.
+#
+# How to dry-run a query before tweaking thresholds:
+#   curl -G --data-urlencode 'query=<the expr>' \
+#        http://prometheus.internal:9090/api/v1/query
+#
+# Related:
+#   - Roadmap: memorybank/OmniFrame/Decisions/Roadmap-Rust-WS-Unlocks.md
+#   - SLO ADR: memorybank/OmniFrame/Decisions/ADR-Rust-Work-Service-Availability-SLO.md
+#   - Dashboard: docs/runbooks/work-engine/dashboards/rust-work-service.json
+
+groups:
+  - name: rust-work-service
+    interval: 30s
+    rules:
+
+      # ───────────────────────────────────────────────────────────
+      # 1. WS lagged events sustained
+      #
+      # The `work_ws_lagged_events_total` counter increments by `n` per
+      # `tokio::sync::broadcast::RecvError::Lagged(n)` tick on the
+      # per-socket WS receiver. Non-zero ⇒ a slow consumer overran the
+      # `broadcast::channel(1000)` buffer and silently lost events. The
+      # receiver auto-resyncs but the dropped events are gone for good.
+      #
+      # Threshold: any increase over 5min sustained for 5min. We choose
+      # `for: 5m` (rather than firing on the very first lagged event) so
+      # transient bursts during deploy traffic don't page; sustained
+      # pressure does.
+      # ───────────────────────────────────────────────────────────
+      - alert: WorkWsLaggedEventsSustained
+        expr: increase(work_ws_lagged_events_total[5m]) > 0
+        for: 5m
+        labels:
+          severity: warning
+          service: rust-work-service
+          component: websocket
+        annotations:
+          summary: >-
+            rust-work-service WS broadcast lag sustained for 5min
+            (org_hash={{ $labels.org_hash }})
+          description: >-
+            `work_ws_lagged_events_total{org_hash="{{ $labels.org_hash }}"}`
+            has been incrementing for the last 5min. A slow consumer
+            overran the broadcast channel buffer; events were dropped.
+            See the runbook for triage queries and consumer-side vs
+            server-side mitigation steps.
+          runbook_url: https://github.com/onebox-ai/OneBoxFullStack/blob/main/docs/runbooks/work-engine/ws-lagged-events.md
+          dashboard_url: https://grafana.internal/d/rust-work-service/rust-work-service?var-org_hash={{ $labels.org_hash }}
+
+      # ───────────────────────────────────────────────────────────
+      # 2. WS auth failure — org_mismatch
+      #
+      # `work_ws_auth_failure_total{reason="org_mismatch"}` fires when a
+      # client connects with a `WS-Subscribe-Token` minted for org A
+      # then sends a `Subscribe { organization_id: B }` message. ANY
+      # increment ⇒ either (a) a bug in the FE token-mint flow, or (b)
+      # an actual cross-tenant attempt. Either way the on-call needs to
+      # see it within seconds — page on the FIRST occurrence.
+      # ───────────────────────────────────────────────────────────
+      - alert: WorkWsAuthFailureOrgMismatch
+        expr: increase(work_ws_auth_failure_total{reason="org_mismatch"}[1m]) > 0
+        labels:
+          severity: critical
+          service: rust-work-service
+          component: websocket
+          security: cross-tenant
+        annotations:
+          summary: >-
+            rust-work-service WS upgrade rejected for cross-tenant
+            org_mismatch — possible cross-tenant attempt
+          description: >-
+            `work_ws_auth_failure_total{reason="org_mismatch"}` was
+            incremented in the last 1min. The WS handshake completed
+            with a token minted for one org but the Subscribe message
+            asked for a different org. The handler closes the socket
+            without delivering events (defence-in-depth holds), but the
+            attempt itself is a security event.
+          runbook_url: https://github.com/onebox-ai/OneBoxFullStack/blob/main/docs/runbooks/work-engine/auth-failure-org-mismatch.md
+
+      # ───────────────────────────────────────────────────────────
+      # 3. Service health failing — sustained 5xx rate
+      #
+      # `work_http_requests_total{route, method, status}` is incremented
+      # by the `track_http_metrics` middleware after every served
+      # request. >1% 5xx rate sustained 5min ⇒ pull the on-call in.
+      #
+      # The denominator clamps to 1 if no traffic is flowing so the
+      # ratio is well-defined; in practice the metrics scrape itself
+      # generates `/metrics` traffic so the denominator is never 0.
+      # ───────────────────────────────────────────────────────────
+      - alert: WorkServiceHealthFailing
+        expr: |
+          (
+            sum(rate(work_http_requests_total{status=~"5.."}[5m]))
+            /
+            clamp_min(sum(rate(work_http_requests_total[5m])), 1)
+          ) > 0.01
+        for: 5m
+        labels:
+          severity: critical
+          service: rust-work-service
+          component: http
+        annotations:
+          summary: >-
+            rust-work-service HTTP 5xx rate above 1% sustained for 5min
+          description: >-
+            More than 1% of HTTP requests are returning 5xx for the
+            last 5min. The runbook contains triage queries for
+            isolating which route + status code are driving the rate
+            and the rollback / mitigation playbook.
+          runbook_url: https://github.com/onebox-ai/OneBoxFullStack/blob/main/docs/runbooks/work-engine/service-health-failing.md
+          dashboard_url: https://grafana.internal/d/rust-work-service/rust-work-service
+
+      # ───────────────────────────────────────────────────────────
+      # 4. Idempotency replay-hit baseline drift
+      #
+      # `work_idempotency_hits_total{route}` increments on each request
+      # that replayed a stored response (matched (org_id, key) ⇒ same
+      # hash). The baseline is mostly steady — clients retry on the
+      # same well-known cadence. A drift outside ±50% of the prior
+      # week's same-hour rate suggests either (a) a client started
+      # retrying aggressively (network issue), (b) the FE broke its
+      # idempotency-key generation, or (c) a buggy hash-collision
+      # regression. None of those are emergencies, but they warrant a
+      # ticket so the team can investigate within business hours.
+      # ───────────────────────────────────────────────────────────
+      - alert: WorkIdempotencyReplayDrift
+        expr: |
+          (
+            (
+              rate(work_idempotency_hits_total[10m])
+              -
+              rate(work_idempotency_hits_total[1h] offset 1h)
+            )
+            /
+            clamp_min(rate(work_idempotency_hits_total[1h] offset 1h), 0.001)
+          ) > 0.5
+          or
+          (
+            (
+              rate(work_idempotency_hits_total[1h] offset 1h)
+              -
+              rate(work_idempotency_hits_total[10m])
+            )
+            /
+            clamp_min(rate(work_idempotency_hits_total[1h] offset 1h), 0.001)
+          ) > 0.5
+        for: 15m
+        labels:
+          severity: warning
+          service: rust-work-service
+          component: idempotency
+        annotations:
+          summary: >-
+            rust-work-service idempotency replay-hit rate outside ±50%
+            of last hour's baseline ({{ $labels.route }})
+          description: >-
+            The idempotency replay-hit rate (10m window) has drifted
+            more than 50% from the same-hour-yesterday baseline (1h
+            window offset 1h). This is a soft signal — see the runbook
+            for likely causes and the SQL queries that distinguish
+            "client retry storm" from "FE key-generation regression".
+          runbook_url: https://github.com/onebox-ai/OneBoxFullStack/blob/main/docs/runbooks/work-engine/idempotency-replay-drift.md

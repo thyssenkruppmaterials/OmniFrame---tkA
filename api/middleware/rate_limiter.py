@@ -1,8 +1,9 @@
+# Created and developed by Jai Singh
 """
 Rate Limiting Middleware
 Protects API endpoints from abuse using Redis
 
-Author: Jai Singh
+Author: OneBox AI Team
 Date: October 29, 2025
 Version: 1.0.0
 """
@@ -16,6 +17,30 @@ import logging
 from ..lib.cache.redis_service import get_redis_service
 
 logger = logging.getLogger(__name__)
+
+
+# Paths that should never be rate-limited at the middleware layer.
+#
+# Two distinct groups, but both treated identically (skip the rate-limit check
+# and pass through to the next middleware):
+#
+# 1. Health probes — must succeed even when Redis is down (fail-open).
+# 2. Static frontend assets — served by `frontend_static.py` for the SPA and
+#    PWA scaffolding. These are polled by every browser tab on a schedule
+#    (e.g. `/build-info.json` every 60s by version-checker.ts) and tripping
+#    the 100 req/min/IP cap on them produces user-visible failures + ASGI
+#    middleware-stack 500s that masquerade as server errors. None of these
+#    paths are abuse-prone — they're either static JSON or cache-busted
+#    immutable assets.
+_HEALTH_EXEMPT_PREFIXES = ('/health',)
+_STATIC_EXEMPT_EXACT = frozenset({
+    '/build-info.json',
+    '/manifest.webmanifest',
+    '/sw.js',
+    '/favicon.ico',
+    '/robots.txt',
+})
+_STATIC_EXEMPT_PREFIXES = ('/assets/', '/avatars/', '/workbox-')
 
 
 class RateLimitMiddleware(BaseHTTPMiddleware):
@@ -40,85 +65,104 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
             'public_ticket': {'requests': 12, 'window': 60},    # 12 req/min for public ticket endpoints
         }
     
-    # Paths exempt from fail-closed behavior (health checks must work even when Redis is down)
-    EXEMPT_PATHS = ('/health', '/health/')
+    # Legacy alias — retained because tests / external imports may reference it.
+    EXEMPT_PATHS = _HEALTH_EXEMPT_PREFIXES
     
     def _is_exempt_path(self, path: str) -> bool:
-        """Check if the request path is exempt from fail-closed rate limiting."""
-        return path == '/health' or path.startswith('/health/')
+        """Return True when the path should bypass rate limiting entirely.
+
+        Covers both health probes (fail-open under Redis outage) and static
+        SPA/PWA assets that are polled aggressively by every browser tab.
+        """
+        if any(path.startswith(prefix) for prefix in _HEALTH_EXEMPT_PREFIXES):
+            return True
+        if path in _STATIC_EXEMPT_EXACT:
+            return True
+        if any(path.startswith(prefix) for prefix in _STATIC_EXEMPT_PREFIXES):
+            return True
+        return False
     
     async def dispatch(self, request: Request, call_next: Callable):
         """Process request with rate limiting"""
-        
+
         endpoint_path = request.url.path
-        
+
+        # Skip rate limiting entirely for exempt paths (health + static SPA
+        # assets). We bail BEFORE touching Redis so a Redis outage doesn't
+        # block /build-info.json polling or PWA service-worker fetches.
+        if self._is_exempt_path(endpoint_path):
+            return await call_next(request)
+
         # Initialize Redis service if needed
         if self.redis_service is None:
             try:
                 self.redis_service = await get_redis_service()
             except Exception as e:
                 logger.error(f"Redis unavailable for rate limiting: {e}")
-                # Allow health checks through even when Redis is down
-                if self._is_exempt_path(endpoint_path):
-                    return await call_next(request)
                 # Fail-closed: return 503 when rate limiting backend is unavailable
                 return JSONResponse(
                     status_code=503,
                     content={"detail": "Service temporarily unavailable - rate limiting backend error"},
                     headers={"Retry-After": "30"},
                 )
-        
+
         # Get client identifier (IP address)
         client_ip = self._get_client_ip(request)
-        
+
         # Determine rate limit based on endpoint
         limit_config = self._get_limit_config(endpoint_path)
-        
+
         # Check rate limit
         identifier = f"{client_ip}:{endpoint_path}"
-        
+
         try:
             is_allowed = await self.redis_service.check_rate_limit(
                 identifier=identifier,
                 max_requests=limit_config['requests'],
                 window_seconds=limit_config['window']
             )
-            
-            if not is_allowed:
-                logger.warning(
-                    f"Rate limit exceeded for {client_ip} on {endpoint_path}"
-                )
-                raise HTTPException(
-                    status_code=status.HTTP_429_TOO_MANY_REQUESTS,
-                    detail={
-                        "error": "Rate limit exceeded",
-                        "message": f"Too many requests. Please try again later.",
-                        "retry_after": limit_config['window']
-                    }
-                )
-            
-            # Process request
-            response = await call_next(request)
-            
-            # Track failed auth attempts
-            if endpoint_path.startswith('/auth/') and response.status_code == 401:
-                await self._track_failed_auth(client_ip)
-            
-            return response
-            
-        except HTTPException:
-            raise
         except Exception as e:
             logger.error(f"Rate limiter error: {e}")
-            # Allow health checks through even on rate limiter errors
-            if self._is_exempt_path(endpoint_path):
-                return await call_next(request)
-            # Fail-closed: return 503 when rate limiting backend errors
+            # Fail-closed: return 503 when rate limiting backend errors.
+            # NOTE: we deliberately return a Response here (not raise) — see
+            # the 429 path below for the rationale.
             return JSONResponse(
                 status_code=503,
                 content={"detail": "Service temporarily unavailable - rate limiting backend error"},
                 headers={"Retry-After": "30"},
             )
+
+        if not is_allowed:
+            logger.warning(
+                f"Rate limit exceeded for {client_ip} on {endpoint_path}"
+            )
+            # IMPORTANT: return a Response — do NOT `raise HTTPException`.
+            # Raising HTTPException inside a `BaseHTTPMiddleware.dispatch`
+            # propagates through Starlette's `anyio.create_task_group()` in
+            # `call_next`, where FastAPI's exception_handler chain cannot
+            # catch it. It surfaces as `ExceptionGroup: unhandled errors in
+            # a TaskGroup` and the user gets a HTTP 500 instead of HTTP 429,
+            # which (a) breaks client back-off logic and (b) floods the
+            # error logs with a 140-line ASGI traceback per request.
+            retry_after = limit_config['window']
+            return JSONResponse(
+                status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+                content={
+                    "error": "Rate limit exceeded",
+                    "message": "Too many requests. Please try again later.",
+                    "retry_after": retry_after,
+                },
+                headers={"Retry-After": str(retry_after)},
+            )
+
+        # Process request
+        response = await call_next(request)
+
+        # Track failed auth attempts
+        if endpoint_path.startswith('/auth/') and response.status_code == 401:
+            await self._track_failed_auth(client_ip)
+
+        return response
     
     def _get_client_ip(self, request: Request) -> str:
         """Extract client IP address from request"""
@@ -227,3 +271,4 @@ async def check_rate_limit_dependency(
             detail="Service temporarily unavailable",
         )
 
+# Created and developed by Jai Singh

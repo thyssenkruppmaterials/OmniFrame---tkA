@@ -1,3 +1,4 @@
+// Created and developed by Jai Singh
 //! Redis configuration
 
 use serde::Deserialize;
@@ -85,3 +86,5 @@ impl RedisConfig {
         Duration::from_secs(self.default_ttl_secs)
     }
 }
+
+// Created and developed by Jai Singh

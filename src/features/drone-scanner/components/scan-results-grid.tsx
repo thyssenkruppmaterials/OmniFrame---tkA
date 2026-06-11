@@ -1,3 +1,4 @@
+// Created and developed by Jai Singh
 /**
  * Scan Results Grid Component
  *
@@ -225,3 +226,5 @@ function ScanCard({ scan, onClick }: ScanCardProps) {
     </Card>
   )
 }
+
+// Created and developed by Jai Singh

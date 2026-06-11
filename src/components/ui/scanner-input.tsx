@@ -1,3 +1,4 @@
+// Created and developed by Jai Singh
 import * as React from 'react'
 import { cn } from '@/lib/utils'
 
@@ -54,3 +55,5 @@ function ScannerInput({
 }
 
 export { ScannerInput }
+
+// Created and developed by Jai Singh

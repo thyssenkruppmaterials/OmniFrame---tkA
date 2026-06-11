@@ -1,3 +1,4 @@
+// Created and developed by Jai Singh
 /**
  * Shift Productivity Settings React Hook
  * Provides state management for shift productivity settings
@@ -8,6 +9,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
 import { useUnifiedAuth } from '@/lib/auth/unified-auth-provider'
 import shiftProductivitySettingsService, {
+  DEFAULT_SETTINGS,
   type ShiftProductivitySettings,
   type GeneralSettingsForm,
   type KPISettingsForm,
@@ -24,6 +26,32 @@ export function useShiftProductivitySettings() {
   const { authState } = useUnifiedAuth()
   const organizationId = authState.profile?.organization_id || ''
   const queryClient = useQueryClient()
+
+  const ensureOrganizationId = () => {
+    if (!organizationId) {
+      throw new Error('Organization not found. Settings cannot be saved.')
+    }
+    return organizationId
+  }
+
+  const invalidateSettings = () => {
+    queryClient.invalidateQueries({ queryKey: [QUERY_KEY, organizationId] })
+  }
+
+  const invalidatePerformanceRuntime = () => {
+    queryClient.invalidateQueries({
+      queryKey: ['team-performance', organizationId],
+    })
+    queryClient.invalidateQueries({
+      queryKey: ['team-performance-weekly', organizationId],
+    })
+    queryClient.invalidateQueries({
+      queryKey: ['timeline-events', organizationId],
+    })
+    queryClient.invalidateQueries({
+      queryKey: ['overtime-requests', organizationId],
+    })
+  }
 
   // ===== MAIN SETTINGS QUERY =====
   const {
@@ -42,11 +70,12 @@ export function useShiftProductivitySettings() {
   const updateGeneralMutation = useMutation({
     mutationFn: (data: GeneralSettingsForm) =>
       shiftProductivitySettingsService.updateGeneralSettings(
-        organizationId,
+        ensureOrganizationId(),
         data
       ),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: [QUERY_KEY, organizationId] })
+      invalidateSettings()
+      invalidatePerformanceRuntime()
       toast.success('General settings saved successfully')
     },
     onError: (error: Error) => {
@@ -58,9 +87,13 @@ export function useShiftProductivitySettings() {
   // ===== KPI SETTINGS MUTATION =====
   const updateKPIMutation = useMutation({
     mutationFn: (data: KPISettingsForm) =>
-      shiftProductivitySettingsService.updateKPISettings(organizationId, data),
+      shiftProductivitySettingsService.updateKPISettings(
+        ensureOrganizationId(),
+        data
+      ),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: [QUERY_KEY, organizationId] })
+      invalidateSettings()
+      invalidatePerformanceRuntime()
       toast.success('KPI settings saved successfully')
     },
     onError: (error: Error) => {
@@ -73,11 +106,11 @@ export function useShiftProductivitySettings() {
   const updateNotificationMutation = useMutation({
     mutationFn: (data: NotificationSettingsForm) =>
       shiftProductivitySettingsService.updateNotificationSettings(
-        organizationId,
+        ensureOrganizationId(),
         data
       ),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: [QUERY_KEY, organizationId] })
+      invalidateSettings()
       toast.success('Notification settings saved successfully')
     },
     onError: (error: Error) => {
@@ -89,9 +122,13 @@ export function useShiftProductivitySettings() {
   // ===== TEAM SETTINGS MUTATION =====
   const updateTeamMutation = useMutation({
     mutationFn: (data: TeamSettingsForm) =>
-      shiftProductivitySettingsService.updateTeamSettings(organizationId, data),
+      shiftProductivitySettingsService.updateTeamSettings(
+        ensureOrganizationId(),
+        data
+      ),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: [QUERY_KEY, organizationId] })
+      invalidateSettings()
+      invalidatePerformanceRuntime()
       toast.success('Team settings saved successfully')
     },
     onError: (error: Error) => {
@@ -104,11 +141,12 @@ export function useShiftProductivitySettings() {
   const updateAdvancedMutation = useMutation({
     mutationFn: (data: AdvancedSettingsForm) =>
       shiftProductivitySettingsService.updateAdvancedSettings(
-        organizationId,
+        ensureOrganizationId(),
         data
       ),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: [QUERY_KEY, organizationId] })
+      invalidateSettings()
+      invalidatePerformanceRuntime()
       toast.success('Advanced settings saved successfully')
     },
     onError: (error: Error) => {
@@ -143,10 +181,20 @@ export function useShiftProductivitySettings() {
     [settings]
   )
 
+  const effectiveSettings = useMemo<ShiftProductivitySettings>(
+    () => ({
+      organization_id: organizationId,
+      ...DEFAULT_SETTINGS,
+      ...(settings ?? {}),
+    }),
+    [organizationId, settings]
+  )
+
   // ===== RETURN VALUES =====
   return {
     // Raw settings data
     settings,
+    effectiveSettings,
     isLoading,
     error,
     refetch,
@@ -194,3 +242,5 @@ export type {
   TeamSettingsForm,
   AdvancedSettingsForm,
 }
+
+// Created and developed by Jai Singh

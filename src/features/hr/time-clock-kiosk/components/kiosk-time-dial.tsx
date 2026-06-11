@@ -1,3 +1,4 @@
+// Created and developed by Jai Singh
 /**
  * iOS-style scroll-wheel time picker for kiosk touch devices.
  * Three independently scrollable columns: Hour, Minute, AM/PM.
@@ -181,3 +182,5 @@ export default function KioskTimeDial({ value, onChange }: KioskTimeDialProps) {
     </div>
   )
 }
+
+// Created and developed by Jai Singh

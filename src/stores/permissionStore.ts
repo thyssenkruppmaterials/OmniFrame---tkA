@@ -1,3 +1,4 @@
+// Created and developed by Jai Singh
 import { create } from 'zustand'
 import { persist, createJSONStorage } from 'zustand/middleware'
 import { rbacCacheManager } from '@/lib/auth/cache-manager'
@@ -77,6 +78,22 @@ const permissionCache = new Map<string, PermissionCache>()
 const tabPermissionCache = new Map<string, TabPermissionCache>()
 const quickPermissionCache = new Map<string, QuickPermissionCache>()
 const globalLoadingState = new Map<string, boolean>()
+
+const mergeTabPermissionsByResource = (
+  existing: TabPermission[],
+  incoming: TabPermission[],
+  pageResource?: string
+): TabPermission[] => {
+  if (!pageResource) {
+    return incoming
+  }
+
+  const preservedPermissions = existing.filter(
+    (tp) => tp.page_resource !== pageResource
+  )
+
+  return [...preservedPermissions, ...incoming]
+}
 
 export const usePermissionStore = create<PermissionState>()(
   persist(
@@ -357,6 +374,7 @@ export const usePermissionStore = create<PermissionState>()(
           lastTabLoadTime: 0,
         })
         tabPermissionCache.clear()
+        quickPermissionCache.clear()
       },
 
       // Quick permission check (synchronous)
@@ -499,11 +517,16 @@ export const usePermissionStore = create<PermissionState>()(
           const cached = tabPermissionCache.get(cacheKey)
           if (cached && now - cached.timestamp < TAB_PERMISSION_CACHE_TTL) {
             logger.log('Using cached tab permissions for user:', userId)
-            set({
-              tabPermissions: cached.tabPermissions,
+            quickPermissionCache.clear()
+            set((state) => ({
+              tabPermissions: mergeTabPermissionsByResource(
+                state.tabPermissions,
+                cached.tabPermissions,
+                pageResource
+              ),
               lastTabLoadTime: cached.timestamp,
               error: null,
-            })
+            }))
             return
           }
         }
@@ -567,7 +590,6 @@ export const usePermissionStore = create<PermissionState>()(
               '🔄 Graceful degradation: Using empty tab permissions due to profile error'
             )
             set({
-              tabPermissions: [],
               isTabLoading: false,
               error: profileError?.message || 'Profile not found',
             })
@@ -596,7 +618,6 @@ export const usePermissionStore = create<PermissionState>()(
               '🔄 Graceful degradation: Using empty tab permissions due to RPC error'
             )
             set({
-              tabPermissions: [],
               isTabLoading: false,
               error: tabError?.message || 'RPC call failed',
             })
@@ -631,11 +652,16 @@ export const usePermissionStore = create<PermissionState>()(
           }
 
           // Update state
-          set({
-            tabPermissions,
+          quickPermissionCache.clear()
+          set((state) => ({
+            tabPermissions: mergeTabPermissionsByResource(
+              state.tabPermissions,
+              tabPermissions,
+              pageResource
+            ),
             isTabLoading: false,
             error: null,
-          })
+          }))
 
           // Cache the results
           tabPermissionCache.set(cacheKey, {
@@ -892,3 +918,5 @@ export const useRBAC = () => {
     getAllowedTabs: state.getAllowedTabs,
   }
 }
+
+// Created and developed by Jai Singh

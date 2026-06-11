@@ -1,3 +1,4 @@
+// Created and developed by Jai Singh
 use axum::{
     extract::{Request, State, Query},
     http::StatusCode,
@@ -162,3 +163,5 @@ pub async fn require_telemetry_auth(
         }
     }
 }
+
+// Created and developed by Jai Singh

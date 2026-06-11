@@ -1,3 +1,4 @@
+// Created and developed by Jai Singh
 import Cookies from 'js-cookie'
 import { Outlet } from '@tanstack/react-router'
 import { cn } from '@/lib/utils'
@@ -12,7 +13,9 @@ import { SessionExpiryModal } from '@/components/auth/session-expiry-modal'
 import { AppBreadcrumbs } from '@/components/layout/breadcrumbs'
 import { CommandPalette } from '@/components/layout/command-palette'
 import { OptimizedAppSidebar } from '@/components/layout/optimized-app-sidebar'
+import { NotificationsPanel } from '@/components/notifications/notifications-panel'
 import SkipToMain from '@/components/skip-to-main'
+import { ClaimBlockedRibbon } from '@/components/work-distribution/claim-blocked-ribbon'
 
 interface Props {
   children?: React.ReactNode
@@ -55,15 +58,36 @@ export function AuthenticatedLayout({ children }: Props) {
           <div
             id='content'
             className={cn(
-              'ml-auto w-full max-w-full',
+              'ml-auto w-full max-w-full min-w-0',
               'peer-data-[state=collapsed]:w-[calc(100%-var(--sidebar-width-icon)-1rem)]',
               'peer-data-[state=expanded]:w-[calc(100%-var(--sidebar-width))]',
               'sm:transition-[width] sm:duration-200 sm:ease-linear',
-              'flex h-svh flex-col',
+              'flex h-svh flex-col overflow-x-clip',
               'group-data-[scroll-locked=1]/body:h-full',
               'has-[main.fixed-main]:group-data-[scroll-locked=1]/body:h-svh'
             )}
           >
+            {/*
+             * Tier 2 #2 — top action bar. Currently just hosts the
+             * NotificationsPanel bell, but kept as its own row so
+             * future top-right actions (search shortcut, presence
+             * count, etc.) can land alongside without restructuring
+             * the layout. Sits above the breadcrumbs so it's a
+             * stable anchor across routes that don't render
+             * breadcrumbs at all (e.g. `/`).
+             */}
+            <div className='flex items-center justify-end px-4 pt-2'>
+              <NotificationsPanel />
+            </div>
+            {/*
+             * T-3 (2026-05-18) admin-only persistent ribbon — surfaces when
+             * `claim_next_task` returns None while real work exists for the
+             * org (the zone-mutual-exclusion cascade class).
+             * Gated by `inventory_apps:view`; renders nothing for
+             * non-admins. See
+             * `Decisions/ADR-Work-Distribution-Pipeline-Architecture-Review-2026-05-18.md`.
+             */}
+            <ClaimBlockedRibbon />
             <AppBreadcrumbs />
             {children ? children : <Outlet />}
           </div>
@@ -83,3 +107,5 @@ export function AuthenticatedLayout({ children }: Props) {
     </ProtectedRoute>
   )
 }
+
+// Created and developed by Jai Singh

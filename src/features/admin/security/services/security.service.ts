@@ -1,3 +1,4 @@
+// Created and developed by Jai Singh
 import { supabase } from '@/lib/supabase/client'
 import { logger } from '@/lib/utils/logger'
 import type {
@@ -498,3 +499,5 @@ export class SecurityService {
     }
   }
 }
+
+// Created and developed by Jai Singh

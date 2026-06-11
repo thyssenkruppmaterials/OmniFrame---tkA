@@ -1,3 +1,4 @@
+// Created and developed by Jai Singh
 /**
  * Step 7: Certifications & Training
  * Add employee certifications and training records
@@ -384,3 +385,5 @@ export function Step7Certifications() {
 }
 
 export default Step7Certifications
+
+// Created and developed by Jai Singh

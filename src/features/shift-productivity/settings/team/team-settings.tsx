@@ -1,9 +1,9 @@
+// Created and developed by Jai Singh
 import { useEffect } from 'react'
 import { z } from 'zod'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { useShiftProductivitySettings } from '@/hooks/use-shift-productivity-settings'
-import { Button } from '@/components/ui/button'
 import {
   Card,
   CardContent,
@@ -32,6 +32,10 @@ import { Separator } from '@/components/ui/separator'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Switch } from '@/components/ui/switch'
 import ContentSection from '../components/content-section'
+import {
+  SettingsErrorState,
+  SettingsSaveBar,
+} from '../components/settings-primitives'
 import { ShiftScheduleManagement } from './components/shift-schedule-management'
 import { UnassignedUsersManagement } from './components/unassigned-users-management'
 
@@ -48,11 +52,18 @@ const teamSettingsSchema = z.object({
 type TeamSettingsValues = z.infer<typeof teamSettingsSchema>
 
 export function TeamSettings() {
-  const { isLoading, teamFormValues, updateTeamSettings, isUpdatingTeam } =
-    useShiftProductivitySettings()
+  const {
+    isLoading,
+    teamFormValues,
+    updateTeamSettings,
+    isUpdatingTeam,
+    error,
+    refetch,
+    organizationId,
+  } = useShiftProductivitySettings()
 
   const form = useForm<TeamSettingsValues>({
-    resolver: zodResolver(teamSettingsSchema),
+    resolver: zodResolver(teamSettingsSchema) as never,
     defaultValues: teamFormValues,
   })
 
@@ -65,6 +76,8 @@ export function TeamSettings() {
   function onSubmit(data: TeamSettingsValues) {
     updateTeamSettings(data)
   }
+
+  const teamTrackingEnabled = form.watch('enableTeamTracking')
 
   if (isLoading) {
     return (
@@ -81,10 +94,35 @@ export function TeamSettings() {
     )
   }
 
+  if (error || !organizationId) {
+    return (
+      <ContentSection
+        title='Team & Schedules'
+        desc='Configure team visibility, shift schedules, and assignment workflows.'
+      >
+        <SettingsErrorState
+          title={
+            !organizationId
+              ? 'Organization required'
+              : 'Unable to load settings'
+          }
+          description={
+            !organizationId
+              ? 'Team settings require an organization before they can be saved.'
+              : error instanceof Error
+                ? error.message
+                : 'Team settings failed to load.'
+          }
+          onRetry={organizationId ? () => void refetch() : undefined}
+        />
+      </ContentSection>
+    )
+  }
+
   return (
     <ContentSection
-      title='Team Settings'
-      desc='Configure team-wide productivity settings and collaboration features.'
+      title='Team & Schedules'
+      desc='Configure team visibility, shift schedules, and assignment workflows.'
     >
       <div className='space-y-8'>
         <Form {...form}>
@@ -127,7 +165,11 @@ export function TeamSettings() {
                     <FormItem>
                       <FormLabel>Average Team Size</FormLabel>
                       <FormControl>
-                        <Input type='number' {...field} />
+                        <Input
+                          type='number'
+                          disabled={!teamTrackingEnabled}
+                          {...field}
+                        />
                       </FormControl>
                       <FormDescription>
                         Typical number of workers per shift.
@@ -145,7 +187,8 @@ export function TeamSettings() {
                       <FormLabel>Shift Rotation Type</FormLabel>
                       <Select
                         onValueChange={field.onChange}
-                        defaultValue={field.value}
+                        value={field.value}
+                        disabled={!teamTrackingEnabled}
                       >
                         <FormControl>
                           <SelectTrigger>
@@ -196,6 +239,7 @@ export function TeamSettings() {
                         <Switch
                           checked={field.value}
                           onCheckedChange={field.onChange}
+                          disabled={!teamTrackingEnabled}
                         />
                       </FormControl>
                     </FormItem>
@@ -217,6 +261,7 @@ export function TeamSettings() {
                         <Switch
                           checked={field.value}
                           onCheckedChange={field.onChange}
+                          disabled={!teamTrackingEnabled}
                         />
                       </FormControl>
                     </FormItem>
@@ -238,6 +283,7 @@ export function TeamSettings() {
                         <Switch
                           checked={field.value}
                           onCheckedChange={field.onChange}
+                          disabled={!teamTrackingEnabled}
                         />
                       </FormControl>
                     </FormItem>
@@ -260,6 +306,7 @@ export function TeamSettings() {
                         <Switch
                           checked={field.value}
                           onCheckedChange={field.onChange}
+                          disabled={!teamTrackingEnabled}
                         />
                       </FormControl>
                     </FormItem>
@@ -268,9 +315,12 @@ export function TeamSettings() {
               </CardContent>
             </Card>
 
-            <Button type='submit' disabled={isUpdatingTeam}>
-              {isUpdatingTeam ? 'Saving...' : 'Save Team Settings'}
-            </Button>
+            <SettingsSaveBar
+              isDirty={form.formState.isDirty}
+              isSaving={isUpdatingTeam}
+              submitLabel='Save team settings'
+              savingLabel='Saving team settings...'
+            />
           </form>
         </Form>
 
@@ -287,3 +337,5 @@ export function TeamSettings() {
     </ContentSection>
   )
 }
+
+// Created and developed by Jai Singh

@@ -1,3 +1,4 @@
+// Created and developed by Jai Singh
 /**
  * Work Service WebSocket Client
  * Handles real-time communication with the Rust work service
@@ -480,3 +481,5 @@ export class WorkServiceWebSocket {
  * Use this for app-wide real-time updates
  */
 export const workServiceWs = new WorkServiceWebSocket()
+
+// Created and developed by Jai Singh

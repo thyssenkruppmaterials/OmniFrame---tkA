@@ -1,3 +1,4 @@
+// Created and developed by Jai Singh
 /**
  * Bulk Import Labor Standards Dialog Component
  * CSV/Excel import functionality for labor standards
@@ -407,3 +408,5 @@ export function BulkImportStandardsDialog({
     </Dialog>
   )
 }
+
+// Created and developed by Jai Singh

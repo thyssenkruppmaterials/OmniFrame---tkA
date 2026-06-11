@@ -1,3 +1,4 @@
+// Created and developed by Jai Singh
 import { create } from 'zustand'
 import { persist, createJSONStorage } from 'zustand/middleware'
 import { rbacCacheManager } from '@/lib/auth/cache-manager'
@@ -27,6 +28,11 @@ interface NavigationState {
   currentRoleName: string | null
   lastLoadTime: number
   expandedGroups: Record<string, boolean>
+  // Per-user pin state. When `pinnedGroups[groupId]` is true, the group's
+  // open/closed state is locked (sourced from `expandedGroups[groupId]`)
+  // and does NOT auto-toggle based on the active route. When undefined,
+  // the group falls back to route-driven auto-open behavior.
+  pinnedGroups: Record<string, boolean>
 
   // Actions
   loadNavigationPermissions: (role: string, useCache?: boolean) => Promise<void>
@@ -39,6 +45,16 @@ interface NavigationState {
   setGroupExpanded: (groupId: string, expanded: boolean) => void
   initializeExpandedGroups: (userId: string) => void
   saveExpandedGroups: (userId: string) => void
+  // Pin a section to lock its current open/closed state. Pass the
+  // `currentOpen` you want locked in — typically the value the UI is
+  // currently showing. Pass `pinned=false` to unpin (returns the group
+  // to route-driven auto-open behavior and clears any explicit override).
+  setGroupPinned: (
+    groupId: string,
+    pinned: boolean,
+    currentOpen?: boolean
+  ) => void
+  initializePinnedGroups: (userId: string) => void
 }
 
 // Constants
@@ -56,7 +72,9 @@ const globalNavigationLoadingState = new Map<string, boolean>()
 
 // Track the current user ID for expanded-groups auto-save (Step 16)
 let _expandedGroupsUserId: string | null = null
-const EXPANDED_GROUPS_KEY_PREFIX = 'omniframe-nav-expanded-'
+const EXPANDED_GROUPS_KEY_PREFIX = 'onebox-nav-expanded-'
+// Per-user pinned-section persistence (sidebar lock feature)
+const PINNED_GROUPS_KEY_PREFIX = 'onebox-nav-pinned-'
 
 export const useNavigationStore = create<NavigationState>()(
   persist(
@@ -69,6 +87,7 @@ export const useNavigationStore = create<NavigationState>()(
       currentRoleName: null,
       lastLoadTime: 0,
       expandedGroups: {},
+      pinnedGroups: {},
 
       // Load navigation permissions for a role
       loadNavigationPermissions: async (role: string, useCache = true) => {
@@ -625,6 +644,69 @@ export const useNavigationStore = create<NavigationState>()(
           logger.warn('Failed to save expanded groups to localStorage:', e)
         }
       },
+
+      // Lock/unlock a sidebar section. Pinning captures the section's
+      // CURRENT open/closed state so that subsequent route changes won't
+      // flip it. Unpinning clears both the pin AND the explicit override,
+      // returning the section to route-driven auto-open behavior.
+      setGroupPinned: (
+        groupId: string,
+        pinned: boolean,
+        currentOpen?: boolean
+      ) => {
+        const prevExpanded = get().expandedGroups
+        const prevPinned = get().pinnedGroups
+        const nextPinned = { ...prevPinned }
+        const nextExpanded = { ...prevExpanded }
+
+        if (pinned) {
+          nextPinned[groupId] = true
+          if (currentOpen !== undefined) {
+            nextExpanded[groupId] = currentOpen
+          }
+        } else {
+          delete nextPinned[groupId]
+          delete nextExpanded[groupId]
+        }
+
+        set({ pinnedGroups: nextPinned, expandedGroups: nextExpanded })
+
+        if (_expandedGroupsUserId) {
+          try {
+            localStorage.setItem(
+              `${PINNED_GROUPS_KEY_PREFIX}${_expandedGroupsUserId}`,
+              JSON.stringify(nextPinned)
+            )
+            localStorage.setItem(
+              `${EXPANDED_GROUPS_KEY_PREFIX}${_expandedGroupsUserId}`,
+              JSON.stringify(nextExpanded)
+            )
+          } catch (e) {
+            logger.warn('Failed to save pinned groups to localStorage:', e)
+          }
+        }
+      },
+
+      initializePinnedGroups: (userId: string) => {
+        // Note: _expandedGroupsUserId is shared with initializeExpandedGroups
+        // since both save against the same userId; setting it here is a
+        // no-op when both initializers run together but keeps this action
+        // safe to call standalone.
+        _expandedGroupsUserId = userId
+        try {
+          const stored = localStorage.getItem(
+            `${PINNED_GROUPS_KEY_PREFIX}${userId}`
+          )
+          if (stored) {
+            set({ pinnedGroups: JSON.parse(stored) })
+          } else {
+            set({ pinnedGroups: {} })
+          }
+        } catch (e) {
+          logger.warn('Failed to load pinned groups from localStorage:', e)
+          set({ pinnedGroups: {} })
+        }
+      },
     }),
     {
       name: 'navigation-store',
@@ -685,3 +767,5 @@ export const useNavigation = () => {
     refreshNavigationPermissions: state.refreshNavigationPermissions,
   }
 }
+
+// Created and developed by Jai Singh

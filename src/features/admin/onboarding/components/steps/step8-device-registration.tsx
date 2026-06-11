@@ -1,3 +1,4 @@
+// Created and developed by Jai Singh
 /**
  * Step 8: Device Registration
  * Assign equipment and devices to the employee
@@ -416,3 +417,5 @@ export function Step8DeviceRegistration() {
 }
 
 export default Step8DeviceRegistration
+
+// Created and developed by Jai Singh

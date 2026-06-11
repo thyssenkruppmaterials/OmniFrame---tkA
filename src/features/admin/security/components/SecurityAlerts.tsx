@@ -1,3 +1,4 @@
+// Created and developed by Jai Singh
 import { useState } from 'react'
 import { format } from 'date-fns'
 import {
@@ -189,7 +190,7 @@ export function SecurityAlerts({
             </div>
           </div>
           <Select value={filterSeverity} onValueChange={setFilterSeverity}>
-            <SelectTrigger className='w-40'>
+            <SelectTrigger className='w-40 max-w-full min-w-0'>
               <IconFilter className='mr-2 h-4 w-4' />
               <SelectValue placeholder='Severity' />
             </SelectTrigger>
@@ -202,7 +203,7 @@ export function SecurityAlerts({
             </SelectContent>
           </Select>
           <Select value={filterStatus} onValueChange={setFilterStatus}>
-            <SelectTrigger className='w-40'>
+            <SelectTrigger className='w-40 max-w-full min-w-0'>
               <IconFilter className='mr-2 h-4 w-4' />
               <SelectValue placeholder='Status' />
             </SelectTrigger>
@@ -384,3 +385,5 @@ export function SecurityAlerts({
     </div>
   )
 }
+
+// Created and developed by Jai Singh

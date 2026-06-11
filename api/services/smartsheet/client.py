@@ -1,3 +1,4 @@
+# Created and developed by Jai Singh
 """SmartsheetService base class -- initialisation, auth, sheets, rows, and utilities."""
 
 import asyncio
@@ -793,4 +794,4 @@ class _SmartsheetBase:
         except:
             pass
 
-# Developer and Creator: Jai Singh
+# Created and developed by Jai Singh

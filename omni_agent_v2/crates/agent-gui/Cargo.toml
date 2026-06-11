@@ -1,0 +1,55 @@
+[package]
+name = "agent-gui"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "OmniAgent v2 desktop GUI shell (Tauri 2)."
+
+# The library carries the dependency-light helpers (typed snapshot
+# structs, in-process AgentCore command stubs) that the bin AND any
+# future Tauri-free integration test can share.
+[lib]
+path = "src/lib.rs"
+
+# The bin is the actual Tauri 2 application. We gate it behind the
+# `gui` feature so a `cargo check --workspace` from a macOS dev box
+# (without the WebView2 / WebKit toolchain) doesn't try to link Tauri.
+# Worker C flips `--features gui` on for the production build.
+[[bin]]
+name = "omni-agent-gui"
+path = "src/main.rs"
+required-features = ["gui"]
+
+[build-dependencies]
+tauri-build = { workspace = true }
+
+[dependencies]
+agent-types = { path = "../agent-types" }
+agent-core = { path = "../agent-core", optional = true }
+agent-rpc = { path = "../agent-rpc", optional = true }
+tokio = { workspace = true }
+reqwest = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+chrono = { workspace = true }
+anyhow = { workspace = true }
+thiserror = { workspace = true }
+tracing = { workspace = true }
+tracing-subscriber = { workspace = true }
+parking_lot = { workspace = true }
+once_cell = { workspace = true }
+url = { workspace = true }
+futures-util = { workspace = true }
+
+[dependencies.tauri]
+workspace = true
+optional = true
+
+[features]
+default = []
+# Worker C flips this on in CI / production. Pulls in the Tauri 2
+# runtime + the in-process AgentCore Arc.
+gui = ["tauri", "in-process"]
+# Reserved: when on, command handlers route through the in-process
+# AgentCore Arc instead of HTTP-loopback'ing through 127.0.0.1:8765.
+in-process = ["agent-core", "agent-rpc"]

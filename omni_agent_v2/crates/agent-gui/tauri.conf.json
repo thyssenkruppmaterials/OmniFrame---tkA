@@ -1,0 +1,53 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "OmniAgent",
+  "version": "2.0.0-alpha",
+  "identifier": "ai.omniframe.agent",
+  "app": {
+    "windows": [
+      {
+        "label": "main",
+        "title": "OmniAgent — Master Control",
+        "width": 1440,
+        "height": 920,
+        "minWidth": 1120,
+        "minHeight": 720,
+        "resizable": true,
+        "fullscreen": false,
+        "center": true,
+        "decorations": true,
+        "transparent": false,
+        "shadow": true,
+        "alwaysOnTop": false,
+        "skipTaskbar": false,
+        "theme": "Dark"
+      }
+    ],
+    "security": {
+      "csp": "default-src 'self' tauri:; img-src 'self' tauri: data: blob: https:; style-src 'self' 'unsafe-inline'; script-src 'self'; connect-src 'self' ipc: http://127.0.0.1:8765 ws://127.0.0.1:8765; font-src 'self' data:"
+    },
+    "withGlobalTauri": false
+  },
+  "build": {
+    "frontendDist": "../../gui/dist",
+    "devUrl": "http://localhost:1420"
+  },
+  "bundle": {
+    "active": true,
+    "targets": ["msi", "nsis", "dmg", "app", "deb", "appimage"],
+    "icon": [
+      "icons/icon.png",
+      "icons/icon.ico"
+    ],
+    "publisher": "OmniFrame",
+    "copyright": "© 2026 OmniFrame",
+    "category": "DeveloperTool",
+    "shortDescription": "OmniAgent master control panel for SAP session orchestration.",
+    "longDescription": "OmniAgent is the desktop control panel for the OmniFrame multi-session SAP agent. It supervises up to six concurrent SAP GUI sessions, surfaces live job telemetry, streams console output, and dispatches quick actions against the local agent runtime.",
+    "windows": {
+      "wix": {
+        "language": ["en-US"]
+      }
+    }
+  }
+}

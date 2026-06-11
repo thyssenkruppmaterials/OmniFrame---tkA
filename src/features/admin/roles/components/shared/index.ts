@@ -1,3 +1,4 @@
+// Created and developed by Jai Singh
 // Shared components for Role Management
 export {
   PermissionSelector,
@@ -26,3 +27,5 @@ export type {
   RoleTemplate,
   RoleSummaryData,
 } from './types'
+
+// Created and developed by Jai Singh

@@ -1,3 +1,4 @@
+// Created and developed by Jai Singh
 /**
  * Associate Performance Row Component
  * Displays individual associate metrics with efficiency and status
@@ -54,6 +55,34 @@ function formatDuration(minutes: number): string {
   return mins > 0 ? `${hours}h ${mins}m` : `${hours}h`
 }
 
+// Format an ISO timestamp as a localized clock time in the configured TIMEZONE
+function formatClockTime(timestamp: string): string {
+  const date = new Date(timestamp)
+  return date.toLocaleTimeString('en-US', {
+    hour: 'numeric',
+    minute: '2-digit',
+    hour12: true,
+    timeZone: TIMEZONE,
+  })
+}
+
+// Determine presence label/state for an associate when they have no activity today
+type Presence =
+  | { kind: 'working' }
+  | { kind: 'off-shift'; label: string }
+  | { kind: 'inactive'; label: string }
+
+function getPresence(
+  associate: AssociateProductivity,
+  hasTimeline: boolean
+): Presence {
+  if (associate.total_tasks > 0 || hasTimeline) return { kind: 'working' }
+  if (associate.status === 'offline') {
+    return { kind: 'off-shift', label: 'Off shift' }
+  }
+  return { kind: 'inactive', label: 'No activity' }
+}
+
 interface AssociatePerformanceRowProps {
   associate: AssociateProductivity
   showArea?: boolean
@@ -65,6 +94,7 @@ interface AssociatePerformanceRowProps {
   onClick?: () => void
   timelineEvents?: import('@/lib/supabase/timeline-events.service').TimelineEventWithCategory[]
   approvedOvertime?: ApprovedOvertimeForTimeline[]
+  timezone?: string
   className?: string
 }
 
@@ -79,6 +109,7 @@ export function AssociatePerformanceRow({
   onClick,
   timelineEvents = [],
   approvedOvertime = [],
+  timezone = TIMEZONE,
   className,
 }: AssociatePerformanceRowProps) {
   const [isExpanded, setIsExpanded] = useState(defaultExpanded)
@@ -123,9 +154,10 @@ export function AssociatePerformanceRow({
   }
 
   const hasTimeline =
-    associate.timeline && associate.timeline.activityBlocks.length > 0
+    !!associate.timeline && associate.timeline.activityBlocks.length > 0
   const hasBreakdown =
-    associate.taskBreakdown && associate.taskBreakdown.length > 0
+    !!associate.taskBreakdown && associate.taskBreakdown.length > 0
+  const presence = getPresence(associate, hasTimeline)
 
   // Merge timeline events into the activity blocks, splitting idle blocks around events
   const enhancedTimeline: DailyTimeline | undefined = useMemo(() => {
@@ -175,7 +207,7 @@ export function AssociatePerformanceRow({
     const timestampToMinutes = (timestamp: string): number => {
       const date = new Date(timestamp)
       const estTimeStr = date.toLocaleString('en-US', {
-        timeZone: TIMEZONE,
+        timeZone: timezone,
         hour: 'numeric',
         minute: 'numeric',
         hour12: false,
@@ -188,7 +220,7 @@ export function AssociatePerformanceRow({
     // This correctly handles DST transitions (2nd Sunday of March, 1st Sunday of November)
     const isDateInDST = (date: Date): boolean => {
       const formatter = new Intl.DateTimeFormat('en-US', {
-        timeZone: TIMEZONE,
+        timeZone: timezone,
         timeZoneName: 'short',
       })
       const parts = formatter.formatToParts(date)
@@ -360,6 +392,7 @@ export function AssociatePerformanceRow({
     timelineEvents,
     associate.user_id,
     associate.working_area_id,
+    timezone,
   ])
 
   const hasEnhancedTimeline =
@@ -370,21 +403,20 @@ export function AssociatePerformanceRow({
       <Collapsible open={isExpanded} onOpenChange={setIsExpanded}>
         <div
           className={cn(
-            'bg-muted/50 relative rounded-lg transition-all duration-200',
-            isExpanded && 'bg-muted/70 ring-border/50 z-10 ring-1',
+            'bg-muted/50 relative rounded-lg transition-colors duration-200',
+            isExpanded && 'bg-muted/60',
             className
           )}
         >
           {/* Main row */}
           <CollapsibleTrigger asChild disabled={!expandable}>
-            <motion.div
+            <div
               className={cn(
-                'hover:bg-muted flex items-center justify-between transition-all duration-200',
+                'hover:bg-muted/70 flex items-center justify-between transition-colors duration-200',
                 compact ? 'gap-2 p-2' : 'gap-4 p-3',
-                expandable && 'cursor-pointer hover:shadow-sm',
+                expandable && 'cursor-pointer',
                 !expandable && onClick && 'cursor-pointer'
               )}
-              whileHover={{ x: expandable ? 2 : 0 }}
               onClick={!expandable ? onClick : undefined}
             >
               {/* Expand indicator */}
@@ -459,184 +491,43 @@ export function AssociatePerformanceRow({
               </div>
 
               {/* Mini timeline indicator (when collapsed) */}
-              {!isExpanded && hasTimeline && !compact && (
-                <MiniGanttTimeline timeline={associate.timeline!} />
-              )}
+              {!isExpanded &&
+                !compact &&
+                (hasTimeline ? (
+                  <MiniGanttTimeline timeline={associate.timeline!} />
+                ) : (
+                  <MiniTimelinePlaceholder />
+                ))}
 
-              {/* Middle - Task count */}
-              <div
-                className={cn(
-                  'text-center',
-                  compact ? 'min-w-[60px]' : 'min-w-[80px]'
-                )}
-              >
-                <p
-                  className={cn(
-                    'font-semibold',
-                    compact ? 'text-lg' : 'text-xl'
-                  )}
-                >
-                  {associate.total_tasks}
-                </p>
-                <p className='text-muted-foreground text-xs'>tasks</p>
-              </div>
-
-              {/* Right - Efficiency */}
-              <div
-                className={cn(
-                  'text-right',
-                  compact ? 'min-w-[60px]' : 'min-w-[80px]'
-                )}
-              >
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <div>
-                      <p
-                        className={cn(
-                          'font-bold',
-                          compact ? 'text-lg' : 'text-xl',
-                          efficiencyColor
-                        )}
-                      >
-                        {associate.efficiency}%
-                      </p>
-                      <p className='text-muted-foreground text-xs'>
-                        efficiency
-                      </p>
-                    </div>
-                  </TooltipTrigger>
-                  <TooltipContent side='left' className='max-w-[200px] text-xs'>
-                    <p>
-                      Status:{' '}
-                      <span className='capitalize'>{efficiencyStatus}</span>
-                    </p>
-                    <p>Tasks: {associate.total_tasks} completed</p>
-                    <p className='text-muted-foreground mt-1'>
-                      Based on Labor Standards
-                    </p>
-                    <p className='text-muted-foreground/80 border-border/50 mt-1 border-t pt-1 text-[10px]'>
-                      Capped at 150% to maintain meaningful team comparisons
-                    </p>
-                  </TooltipContent>
-                </Tooltip>
-              </div>
+              <PresenceCell
+                associate={associate}
+                presence={presence}
+                efficiencyColor={efficiencyColor}
+                efficiencyStatus={efficiencyStatus}
+                compact={compact}
+              />
 
               {/* Optional efficiency badge for compact view */}
-              {compact && (
+              {compact && presence.kind === 'working' && (
                 <Badge variant={badgeVariant} className='ml-2'>
                   {efficiencyStatus}
                 </Badge>
               )}
-            </motion.div>
+            </div>
           </CollapsibleTrigger>
 
           {/* Expanded content - using CSS grid animation for reliable height transitions */}
           <CollapsibleContent>
-            <div className='border-border/50 border-t'>
-              <div className='space-y-4 p-4'>
-                {/* Gantt Timeline */}
-                {hasEnhancedTimeline && enhancedTimeline && (
-                  <div className='space-y-2'>
-                    <div className='flex items-center justify-between'>
-                      <h4 className='text-muted-foreground text-sm font-medium'>
-                        Activity Timeline
-                      </h4>
-                      {userOvertime && (
-                        <Badge
-                          variant='outline'
-                          className='border-orange-300 text-xs text-orange-600'
-                        >
-                          +{formatDuration(userOvertime.overtimeMinutes)}{' '}
-                          Overtime
-                        </Badge>
-                      )}
-                    </div>
-                    <ActivityGantt
-                      timeline={enhancedTimeline}
-                      height={40}
-                      showLabels={true}
-                      overtimeMarker={userOvertime}
-                    />
-                  </div>
-                )}
-
-                {/* Task Breakdown by Area */}
-                {hasBreakdown && (
-                  <div className='space-y-2'>
-                    <h4 className='text-muted-foreground flex items-center gap-2 text-sm font-medium'>
-                      <MapPin className='h-4 w-4' />
-                      Tasks by Area
-                    </h4>
-                    <div className='grid grid-cols-1 gap-2 md:grid-cols-2 lg:grid-cols-3'>
-                      {associate.taskBreakdown!.map((breakdown, idx) => (
-                        <TaskBreakdownCard key={idx} breakdown={breakdown} />
-                      ))}
-                    </div>
-                  </div>
-                )}
-
-                {/* Task Type Summary - Dynamic, only shows non-zero values */}
-                {(() => {
-                  const taskMetrics = [
-                    {
-                      label: 'Scans',
-                      value: associate.inbound_scans,
-                      color: 'blue',
-                    },
-                    {
-                      label: 'Putaway',
-                      value: associate.put_aways,
-                      color: 'purple',
-                    },
-                    {
-                      label: 'Picking',
-                      value: associate.picking,
-                      color: 'green',
-                    },
-                    { label: 'Pack', value: associate.packed, color: 'orange' },
-                    { label: 'Ship', value: associate.shipped, color: 'teal' },
-                    {
-                      label: 'Final Pack',
-                      value: associate.final_packed,
-                      color: 'amber',
-                    },
-                    {
-                      label: 'Putback',
-                      value: associate.putbacks,
-                      color: 'rose',
-                    },
-                    {
-                      label: 'Counts',
-                      value: associate.cycle_counts,
-                      color: 'indigo',
-                    },
-                  ].filter((m) => m.value > 0)
-
-                  if (taskMetrics.length === 0) return null
-
-                  return (
-                    <div className='space-y-2'>
-                      <h4 className='text-muted-foreground text-sm font-medium'>
-                        Task Summary
-                      </h4>
-                      <div className='flex flex-wrap gap-2'>
-                        {taskMetrics.map((metric) => (
-                          <TaskDetail
-                            key={metric.label}
-                            label={metric.label}
-                            value={metric.value}
-                            color={metric.color}
-                          />
-                        ))}
-                      </div>
-                    </div>
-                  )
-                })()}
-
-                {/* Activity Legend */}
-                <ActivityLegend className='border-border/30 border-t pt-2' />
-              </div>
-            </div>
+            <ExpandedRowContent
+              associate={associate}
+              enhancedTimeline={enhancedTimeline}
+              hasEnhancedTimeline={!!hasEnhancedTimeline}
+              hasBreakdown={hasBreakdown}
+              userOvertime={userOvertime}
+              efficiencyLabel={efficiencyStatus}
+              efficiencyAccent={efficiencyColor}
+              timezone={timezone}
+            />
           </CollapsibleContent>
         </div>
 
@@ -655,6 +546,11 @@ export function AssociatePerformanceRow({
               { label: 'Shipped', value: associate.shipped },
               { label: 'Putbacks', value: associate.putbacks },
               { label: 'Counts', value: associate.cycle_counts },
+              // Kit workflow stages — migration 310
+              { label: 'Kit Pick', value: associate.kit_picking ?? 0 },
+              { label: 'Kit Build', value: associate.kit_building ?? 0 },
+              { label: 'Kit Insp', value: associate.kit_inspection ?? 0 },
+              { label: 'Dock Stage', value: associate.kit_dock_staging ?? 0 },
               { label: 'Work Queue', value: associate.work_queue_tasks },
             ].filter((m) => m.value > 0)
 
@@ -682,7 +578,8 @@ export function AssociatePerformanceRow({
   )
 }
 
-// Task Breakdown Card Component
+// Task Breakdown Row - compact pill row replacement for the previous card
+// Renders a single horizontal row per area: icon + name + colored task pills + total badge
 interface TaskBreakdownCardProps {
   breakdown: TaskBreakdownByArea
 }
@@ -697,25 +594,29 @@ function TaskBreakdownCard({ breakdown }: TaskBreakdownCardProps) {
     { label: 'Final', value: breakdown.final_packed, color: 'bg-amber-500' },
     { label: 'Putback', value: breakdown.putbacks, color: 'bg-rose-500' },
     { label: 'Count', value: breakdown.cycle_counts, color: 'bg-indigo-500' },
+    // Kit workflow stages — migration 310
+    { label: 'Kit Pick', value: breakdown.kit_picking, color: 'bg-lime-500' },
+    { label: 'Kit Build', value: breakdown.kit_building, color: 'bg-cyan-500' },
+    {
+      label: 'Kit Insp',
+      value: breakdown.kit_inspection,
+      color: 'bg-fuchsia-500',
+    },
+    { label: 'Dock', value: breakdown.kit_dock_staging, color: 'bg-sky-500' },
   ].filter((t) => t.value > 0)
 
   return (
-    <div className='bg-background border-border/50 rounded-lg border p-2.5'>
-      <div className='mb-2 flex items-center justify-between'>
-        <div className='flex items-center gap-1.5'>
-          <MapPin className='text-muted-foreground h-3 w-3' />
-          <span className='truncate text-sm font-medium'>{breakdown.area}</span>
-        </div>
-        <Badge variant='secondary' className='px-1.5 text-xs'>
-          {breakdown.total}
-        </Badge>
-      </div>
-      <div className='flex flex-wrap gap-1'>
+    <div className='border-border/40 bg-background/60 hover:bg-background flex items-center gap-2 rounded-md border px-2 py-1.5 text-xs transition-colors'>
+      <MapPin className='text-muted-foreground h-3 w-3 shrink-0' />
+      <span className='min-w-0 flex-1 truncate font-medium'>
+        {breakdown.area}
+      </span>
+      <div className='flex flex-wrap items-center justify-end gap-1'>
         {taskTypes.map((task, idx) => (
           <Tooltip key={idx}>
             <TooltipTrigger asChild>
-              <div className='bg-muted flex items-center gap-1 rounded px-1.5 py-0.5 text-xs'>
-                <div className={cn('h-2 w-2 rounded-full', task.color)} />
+              <div className='bg-muted/70 inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-[11px] tabular-nums'>
+                <span className={cn('h-1.5 w-1.5 rounded-full', task.color)} />
                 <span>{task.value}</span>
               </div>
             </TooltipTrigger>
@@ -725,6 +626,296 @@ function TaskBreakdownCard({ breakdown }: TaskBreakdownCardProps) {
           </Tooltip>
         ))}
       </div>
+      <Badge
+        variant='secondary'
+        className='ml-1 px-1.5 text-[11px] tabular-nums'
+      >
+        {breakdown.total}
+      </Badge>
+    </div>
+  )
+}
+
+// Stat chip used in the new horizontal stat strip beneath the Activity Timeline
+function StatChip({
+  label,
+  value,
+  accent,
+}: {
+  label: string
+  value: string
+  accent?: string
+}) {
+  return (
+    <div className='border-border/40 bg-background/60 inline-flex items-center gap-1.5 rounded-md border px-2 py-1 text-[11px]'>
+      <span className={cn('font-medium', accent ?? 'text-foreground')}>
+        {label}
+      </span>
+      <span className='text-muted-foreground tabular-nums'>{value}</span>
+    </div>
+  )
+}
+
+// Compact stat strip rendered directly below the Gantt: First/Last/Work/Break/Idle/Efficiency
+function ActivityStatStrip({
+  timeline,
+  efficiency,
+  efficiencyLabel,
+  efficiencyAccent,
+  overtime,
+}: {
+  timeline: DailyTimeline
+  efficiency: number
+  efficiencyLabel: string
+  efficiencyAccent: string
+  overtime?: OvertimeMarker
+}) {
+  return (
+    <div className='flex flex-wrap items-center gap-1.5'>
+      {timeline.firstActivity && (
+        <StatChip
+          label='First'
+          value={formatClockTime(timeline.firstActivity)}
+        />
+      )}
+      {timeline.lastActivity && (
+        <StatChip label='Last' value={formatClockTime(timeline.lastActivity)} />
+      )}
+      <StatChip
+        label='Work'
+        accent='text-emerald-600 dark:text-emerald-400'
+        value={formatDuration(timeline.totalWorkMinutes)}
+      />
+      {timeline.totalBreakMinutes > 0 && (
+        <StatChip
+          label='Break'
+          accent='text-yellow-600 dark:text-yellow-400'
+          value={formatDuration(timeline.totalBreakMinutes)}
+        />
+      )}
+      <StatChip
+        label='Idle'
+        accent='text-muted-foreground'
+        value={formatDuration(timeline.totalIdleMinutes)}
+      />
+      <StatChip
+        label='Efficiency'
+        accent={efficiencyAccent}
+        value={`${efficiency}% • ${efficiencyLabel}`}
+      />
+      {overtime && (
+        <StatChip
+          label='OT'
+          accent='text-orange-600 dark:text-orange-400'
+          value={`+${formatDuration(overtime.overtimeMinutes)}`}
+        />
+      )}
+    </div>
+  )
+}
+
+// Shared expanded-row body used by both AssociatePerformanceRow variants
+// Renders: full-width Gantt -> stat strip -> 2-col grid (Tasks by Area | filtered Legend)
+function ExpandedRowContent({
+  associate,
+  enhancedTimeline,
+  hasEnhancedTimeline,
+  hasBreakdown,
+  userOvertime,
+  efficiencyLabel,
+  efficiencyAccent,
+  timezone,
+}: {
+  associate: AssociateProductivity
+  enhancedTimeline: DailyTimeline | undefined
+  hasEnhancedTimeline: boolean
+  hasBreakdown: boolean
+  userOvertime?: OvertimeMarker
+  efficiencyLabel: string
+  efficiencyAccent: string
+  timezone: string
+}) {
+  return (
+    <div className='border-border/50 border-t'>
+      <div className='space-y-3 p-3'>
+        {hasEnhancedTimeline && enhancedTimeline && (
+          <div className='space-y-2'>
+            <div className='flex items-center justify-between'>
+              <h4 className='text-muted-foreground text-xs font-medium tracking-wide uppercase'>
+                Activity Timeline
+              </h4>
+            </div>
+            <ActivityGantt
+              timeline={enhancedTimeline}
+              height={36}
+              showLabels={true}
+              showSummary={false}
+              overtimeMarker={userOvertime}
+              timezone={timezone}
+            />
+            <ActivityStatStrip
+              timeline={enhancedTimeline}
+              efficiency={associate.efficiency}
+              efficiencyLabel={efficiencyLabel}
+              efficiencyAccent={efficiencyAccent}
+              overtime={userOvertime}
+            />
+          </div>
+        )}
+
+        <div
+          className={cn(
+            'grid gap-3',
+            hasBreakdown
+              ? 'grid-cols-1 lg:grid-cols-[minmax(0,1fr)_auto]'
+              : 'grid-cols-1'
+          )}
+        >
+          {hasBreakdown && (
+            <div className='space-y-1.5'>
+              <h4 className='text-muted-foreground flex items-center gap-1.5 text-xs font-medium tracking-wide uppercase'>
+                <MapPin className='h-3.5 w-3.5' />
+                Tasks by Area
+              </h4>
+              <div className='space-y-1'>
+                {associate.taskBreakdown!.map((breakdown, idx) => (
+                  <TaskBreakdownCard key={idx} breakdown={breakdown} />
+                ))}
+              </div>
+            </div>
+          )}
+
+          <div className='space-y-1.5'>
+            <h4 className='text-muted-foreground text-xs font-medium tracking-wide uppercase'>
+              Legend
+            </h4>
+            <ActivityLegend
+              timeline={enhancedTimeline}
+              compact
+              className='max-w-full lg:max-w-[260px]'
+            />
+          </div>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// Right-side cell of the trigger row.
+// When the associate has activity (or completed tasks), shows tasks + efficiency.
+// When idle/off-shift, shows a single muted presence badge with full numbers in a tooltip.
+function PresenceCell({
+  associate,
+  presence,
+  efficiencyColor,
+  efficiencyStatus,
+  compact,
+}: {
+  associate: AssociateProductivity
+  presence: Presence
+  efficiencyColor: string
+  efficiencyStatus: string
+  compact: boolean
+}) {
+  if (presence.kind === 'working') {
+    return (
+      <>
+        <div
+          className={cn(
+            'text-center',
+            compact ? 'min-w-[60px]' : 'min-w-[80px]'
+          )}
+        >
+          <p
+            className={cn(
+              'font-semibold tabular-nums',
+              compact ? 'text-lg' : 'text-xl'
+            )}
+          >
+            {associate.total_tasks}
+          </p>
+          <p className='text-muted-foreground text-xs'>tasks</p>
+        </div>
+        <div
+          className={cn(
+            'text-right',
+            compact ? 'min-w-[60px]' : 'min-w-[80px]'
+          )}
+        >
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <div>
+                <p
+                  className={cn(
+                    'font-bold tabular-nums',
+                    compact ? 'text-lg' : 'text-xl',
+                    efficiencyColor
+                  )}
+                >
+                  {associate.efficiency}%
+                </p>
+                <p className='text-muted-foreground text-xs'>efficiency</p>
+              </div>
+            </TooltipTrigger>
+            <TooltipContent side='left' className='max-w-[200px] text-xs'>
+              <p>
+                Status: <span className='capitalize'>{efficiencyStatus}</span>
+              </p>
+              <p>Tasks: {associate.total_tasks} completed</p>
+              <p className='text-muted-foreground mt-1'>
+                Based on Labor Standards
+              </p>
+              <p className='text-muted-foreground/80 border-border/50 mt-1 border-t pt-1 text-[10px]'>
+                Capped at 150% to maintain meaningful team comparisons
+              </p>
+            </TooltipContent>
+          </Tooltip>
+        </div>
+      </>
+    )
+  }
+
+  return (
+    <div className='flex min-w-[140px] justify-end'>
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <Badge
+            variant='outline'
+            className={cn(
+              'border-border/60 text-muted-foreground gap-1.5 px-2 py-1 text-[11px] font-normal',
+              presence.kind === 'off-shift' && 'bg-muted/40'
+            )}
+          >
+            <span
+              className={cn(
+                'h-1.5 w-1.5 rounded-full',
+                presence.kind === 'off-shift'
+                  ? 'bg-muted-foreground/40'
+                  : 'bg-muted-foreground/60'
+              )}
+            />
+            {presence.label}
+          </Badge>
+        </TooltipTrigger>
+        <TooltipContent side='left' className='max-w-[200px] text-xs'>
+          <p>Tasks: {associate.total_tasks}</p>
+          <p>Efficiency: {associate.efficiency}%</p>
+          <p className='text-muted-foreground/80 mt-1'>
+            No activity recorded for this view
+          </p>
+        </TooltipContent>
+      </Tooltip>
+    </div>
+  )
+}
+
+// Thin placeholder rendered in the middle column when no timeline is available,
+// keeps the row visually aligned with rows that do have a mini-Gantt
+function MiniTimelinePlaceholder() {
+  return (
+    <div className='hidden w-[180px] items-center gap-2 md:flex'>
+      <Clock className='text-muted-foreground/40 h-3 w-3 shrink-0' />
+      <div className='bg-muted/40 h-1 flex-1 rounded' />
     </div>
   )
 }
@@ -789,7 +980,7 @@ function MiniGanttTimeline({ timeline }: MiniGanttTimelineProps) {
     <TooltipProvider>
       <Tooltip>
         <TooltipTrigger asChild>
-          <div className='hidden w-[200px] cursor-pointer items-center gap-2 lg:flex'>
+          <div className='hidden w-[180px] cursor-pointer items-center gap-2 md:flex'>
             <Clock className='text-muted-foreground h-3 w-3 flex-shrink-0' />
             <div className='bg-muted relative h-3 flex-1 overflow-hidden rounded'>
               {/* Work day highlight (6 AM - 6 PM) */}
@@ -907,13 +1098,15 @@ interface AssociateListProps {
   onSelectAssociate?: (associate: AssociateProductivity) => void
   timelineEvents?: import('@/lib/supabase/timeline-events.service').TimelineEventWithCategory[]
   approvedOvertime?: ApprovedOvertimeForTimeline[]
+  timezone?: string
   className?: string
 }
 
 // Threshold for enabling virtualization (below this count, render all items normally)
-// Set to 50 to disable virtualization for typical team sizes where expandable rows
-// cause height estimation issues. Virtualization is only beneficial for very large lists.
-const VIRTUALIZATION_THRESHOLD = 50
+// Bumped to 100 so typical team dashboards stay non-virtualized — this avoids the
+// height-estimation gap that virtualization can introduce when expanded rows shrink
+// after the redesign. ResizeObserver still measures real heights when virtualized.
+const VIRTUALIZATION_THRESHOLD = 100
 
 export function AssociateList({
   associates,
@@ -925,6 +1118,7 @@ export function AssociateList({
   onSelectAssociate,
   timelineEvents = [],
   approvedOvertime = [],
+  timezone = TIMEZONE,
   className,
 }: AssociateListProps) {
   const parentRef = useRef<HTMLDivElement>(null)
@@ -936,66 +1130,66 @@ export function AssociateList({
   const shouldVirtualize = associates.length >= VIRTUALIZATION_THRESHOLD
 
   // Estimate row height based on expanded state
-  // This provides initial estimates; ResizeObserver handles real-time measurement for accuracy
-  // Accounts for all expanded sections: timeline, breakdown grid, task summary, legend
-  // IMPORTANT: Always overestimate to prevent overlap - ResizeObserver will correct if needed
+  // ResizeObserver in VirtualizedRowWrapper measures real heights once the row paints,
+  // so this only needs to be a close-enough seed — over-estimating leaves visible gaps,
+  // under-estimating causes brief overlap that the observer fixes within a frame.
+  // Heights below correspond to the redesigned expanded layout: full-width Gantt,
+  // single horizontal stat strip, then a 2-col grid (Tasks by Area | filtered Legend).
   const estimateSize = useCallback(
     (index: number) => {
       const associate = associates[index]
       const isExpanded = expandedRows.has(associate.user_id)
 
-      // Base row height + bottom padding (pb-3 = 12px)
+      // Base row height + bottom padding (pb-3 = 12px on virtualized wrapper)
       const baseHeight = (compact ? 64 : 72) + 12
 
-      if (isExpanded) {
-        // Content padding (p-4 = 16px top+bottom) + border-t (1px)
-        const contentPadding = 33
-        const sectionGap = 16 // space-y-4 gap between sections
+      if (!isExpanded) return baseHeight
 
-        // Activity Timeline section: header(28) + gantt(48) + work metrics row(24) + overtime badge area(24)
-        const hasTimeline =
-          (associate.timeline?.activityBlocks?.length ?? 0) > 0
-        const timelineHeight = hasTimeline ? 124 : 0
+      const hasTimeline = (associate.timeline?.activityBlocks?.length ?? 0) > 0
+      const breakdownItems = associate.taskBreakdown?.length ?? 0
+      const hasBreakdown = breakdownItems > 0
 
-        // Task Breakdown grid - estimate based on responsive columns
-        // On mobile: single column, on larger screens: 2-3 columns
-        // Each card is ~80px tall, use conservative single-column estimate
-        const hasBreakdown =
-          associate.taskBreakdown && associate.taskBreakdown.length > 0
-        const breakdownItems = hasBreakdown
-          ? associate.taskBreakdown!.length
-          : 0
-        // Header(32px) + items * 88px (card height + gap + padding)
-        const breakdownHeight = hasBreakdown ? 36 + breakdownItems * 88 : 0
+      // Timeline section: header (24) + gantt (~36) + stat strip (~28) + inner space-y-2 (8)
+      const timelineHeight = hasTimeline ? 24 + 36 + 28 + 8 : 0
 
-        // Task Summary: header(28px) + flex-wrap badges which can span 2 rows(~48px)
-        const taskSummaryHeight = 76
+      // Tasks by Area section: header (24) + items rows (~36 each) + space-y-1 (4 each)
+      // Compact pill rows are denser than the old card grid.
+      const breakdownHeight = hasBreakdown ? 24 + breakdownItems * 36 + 4 : 0
 
-        // Activity Legend: border-t pt-2(8px) + legend content
-        // Legend has 15 items that wrap across 2-3 rows depending on viewport width
-        // Each row ~28px, assume 3 rows worst case = 84px + header/padding
-        const legendHeight = 100
+      // Filtered legend: header (24) + 1-2 lines of compact swatches (~22-44)
+      const presentActivityCount = hasTimeline
+        ? new Set(
+            associate
+              .timeline!.activityBlocks.filter(
+                (b) => b.type !== 'break' && b.type !== 'event'
+              )
+              .map((b) => b.type)
+          ).size
+        : 0
+      const legendChips = Math.max(presentActivityCount + 2, 3) // + idle + maybe break
+      const legendHeight = 24 + Math.min(2, Math.ceil(legendChips / 6)) * 22
 
-        // Sum all sections
-        let height =
-          baseHeight +
-          contentPadding +
-          timelineHeight +
-          breakdownHeight +
-          taskSummaryHeight +
-          legendHeight
+      // Bottom grid takes the max of breakdown vs legend column when on lg, else stacks.
+      // Estimate conservatively as the larger of the two so layout doesn't overshoot.
+      const bottomGridHeight = Math.max(breakdownHeight, legendHeight)
 
-        // Add gaps between rendered sections
-        const sectionCount = (hasTimeline ? 1 : 0) + (hasBreakdown ? 1 : 0) + 2 // +2 for summary and legend
-        height += Math.max(0, sectionCount - 1) * sectionGap
+      // Container: border-t (1px) + p-3 (24) + space-y-3 between rendered sections (12 each)
+      const containerChrome = 1 + 24
+      const renderedSections =
+        (hasTimeline ? 1 : 0) + (hasBreakdown || legendHeight > 0 ? 1 : 0)
+      const sectionGaps = Math.max(0, renderedSections - 1) * 12
 
-        // Large safety buffer to absolutely prevent overlap
-        // Better to have extra space than content overlapping
-        height += 80
+      // Small safety buffer; ResizeObserver will refine.
+      const safetyBuffer = 16
 
-        return height
-      }
-      return baseHeight
+      return (
+        baseHeight +
+        containerChrome +
+        timelineHeight +
+        bottomGridHeight +
+        sectionGaps +
+        safetyBuffer
+      )
     },
     [associates, expandedRows, compact]
   )
@@ -1075,6 +1269,7 @@ export function AssociateList({
               }
               timelineEvents={timelineEvents}
               approvedOvertime={approvedOvertime}
+              timezone={timezone}
             />
           </motion.div>
         ))}
@@ -1122,6 +1317,7 @@ export function AssociateList({
                 }
                 timelineEvents={timelineEvents}
                 approvedOvertime={approvedOvertime}
+                timezone={timezone}
                 onExpandedChange={(isExpanded) =>
                   handleExpansionChange(associate.user_id, isExpanded)
                 }
@@ -1250,6 +1446,7 @@ function AssociatePerformanceRowWithCallback({
   timelineEvents = [],
   approvedOvertime = [],
   onExpandedChange,
+  timezone = TIMEZONE,
   className,
 }: AssociatePerformanceRowWithCallbackProps) {
   const [isExpanded, setIsExpanded] = useState(defaultExpanded)
@@ -1299,9 +1496,10 @@ function AssociatePerformanceRowWithCallback({
   }
 
   const hasTimeline =
-    associate.timeline && associate.timeline.activityBlocks.length > 0
+    !!associate.timeline && associate.timeline.activityBlocks.length > 0
   const hasBreakdown =
-    associate.taskBreakdown && associate.taskBreakdown.length > 0
+    !!associate.taskBreakdown && associate.taskBreakdown.length > 0
+  const presence = getPresence(associate, hasTimeline)
 
   // Merge timeline events into the activity blocks (same logic as original)
   const enhancedTimeline: DailyTimeline | undefined = useMemo(() => {
@@ -1335,7 +1533,7 @@ function AssociatePerformanceRowWithCallback({
     const timestampToMinutes = (timestamp: string): number => {
       const date = new Date(timestamp)
       const estTimeStr = date.toLocaleString('en-US', {
-        timeZone: TIMEZONE,
+        timeZone: timezone,
         hour: 'numeric',
         minute: 'numeric',
         hour12: false,
@@ -1346,7 +1544,7 @@ function AssociatePerformanceRowWithCallback({
 
     const isDateInDST = (date: Date): boolean => {
       const formatter = new Intl.DateTimeFormat('en-US', {
-        timeZone: TIMEZONE,
+        timeZone: timezone,
         timeZoneName: 'short',
       })
       const parts = formatter.formatToParts(date)
@@ -1489,6 +1687,7 @@ function AssociatePerformanceRowWithCallback({
     timelineEvents,
     associate.user_id,
     associate.working_area_id,
+    timezone,
   ])
 
   const hasEnhancedTimeline =
@@ -1499,21 +1698,20 @@ function AssociatePerformanceRowWithCallback({
       <Collapsible open={isExpanded} onOpenChange={handleExpandedChange}>
         <div
           className={cn(
-            'bg-muted/50 relative rounded-lg transition-all duration-200',
-            isExpanded && 'bg-muted/70 ring-border/50 z-10 ring-1',
+            'bg-muted/50 relative rounded-lg transition-colors duration-200',
+            isExpanded && 'bg-muted/60',
             className
           )}
         >
           {/* Main row */}
           <CollapsibleTrigger asChild disabled={!expandable}>
-            <motion.div
+            <div
               className={cn(
-                'hover:bg-muted flex items-center justify-between transition-all duration-200',
+                'hover:bg-muted/70 flex items-center justify-between transition-colors duration-200',
                 compact ? 'gap-2 p-2' : 'gap-4 p-3',
-                expandable && 'cursor-pointer hover:shadow-sm',
+                expandable && 'cursor-pointer',
                 !expandable && onClick && 'cursor-pointer'
               )}
-              whileHover={{ x: expandable ? 2 : 0 }}
               onClick={!expandable ? onClick : undefined}
             >
               {/* Expand indicator */}
@@ -1586,179 +1784,42 @@ function AssociatePerformanceRowWithCallback({
               </div>
 
               {/* Mini timeline indicator (when collapsed) */}
-              {!isExpanded && hasTimeline && !compact && (
-                <MiniGanttTimeline timeline={associate.timeline!} />
-              )}
+              {!isExpanded &&
+                !compact &&
+                (hasTimeline ? (
+                  <MiniGanttTimeline timeline={associate.timeline!} />
+                ) : (
+                  <MiniTimelinePlaceholder />
+                ))}
 
-              {/* Middle - Task count */}
-              <div
-                className={cn(
-                  'text-center',
-                  compact ? 'min-w-[60px]' : 'min-w-[80px]'
-                )}
-              >
-                <p
-                  className={cn(
-                    'font-semibold',
-                    compact ? 'text-lg' : 'text-xl'
-                  )}
-                >
-                  {associate.total_tasks}
-                </p>
-                <p className='text-muted-foreground text-xs'>tasks</p>
-              </div>
+              <PresenceCell
+                associate={associate}
+                presence={presence}
+                efficiencyColor={efficiencyColor}
+                efficiencyStatus={efficiencyStatus}
+                compact={compact}
+              />
 
-              {/* Right - Efficiency */}
-              <div
-                className={cn(
-                  'text-right',
-                  compact ? 'min-w-[60px]' : 'min-w-[80px]'
-                )}
-              >
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <div>
-                      <p
-                        className={cn(
-                          'font-bold',
-                          compact ? 'text-lg' : 'text-xl',
-                          efficiencyColor
-                        )}
-                      >
-                        {associate.efficiency}%
-                      </p>
-                      <p className='text-muted-foreground text-xs'>
-                        efficiency
-                      </p>
-                    </div>
-                  </TooltipTrigger>
-                  <TooltipContent side='left' className='max-w-[200px] text-xs'>
-                    <p>
-                      Status:{' '}
-                      <span className='capitalize'>{efficiencyStatus}</span>
-                    </p>
-                    <p>Tasks: {associate.total_tasks} completed</p>
-                    <p className='text-muted-foreground mt-1'>
-                      Based on Labor Standards
-                    </p>
-                    <p className='text-muted-foreground/80 border-border/50 mt-1 border-t pt-1 text-[10px]'>
-                      Capped at 150% to maintain meaningful team comparisons
-                    </p>
-                  </TooltipContent>
-                </Tooltip>
-              </div>
-
-              {compact && (
+              {compact && presence.kind === 'working' && (
                 <Badge variant={badgeVariant} className='ml-2'>
                   {efficiencyStatus}
                 </Badge>
               )}
-            </motion.div>
+            </div>
           </CollapsibleTrigger>
 
           {/* Expanded content - using CSS grid animation for reliable height transitions */}
           <CollapsibleContent>
-            <div className='border-border/50 border-t'>
-              <div className='space-y-4 p-4'>
-                {hasEnhancedTimeline && enhancedTimeline && (
-                  <div className='space-y-2'>
-                    <div className='flex items-center justify-between'>
-                      <h4 className='text-muted-foreground text-sm font-medium'>
-                        Activity Timeline
-                      </h4>
-                      {userOvertime && (
-                        <Badge
-                          variant='outline'
-                          className='border-orange-300 text-xs text-orange-600'
-                        >
-                          +{formatDuration(userOvertime.overtimeMinutes)}{' '}
-                          Overtime
-                        </Badge>
-                      )}
-                    </div>
-                    <ActivityGantt
-                      timeline={enhancedTimeline}
-                      height={40}
-                      showLabels={true}
-                      overtimeMarker={userOvertime}
-                    />
-                  </div>
-                )}
-
-                {hasBreakdown && (
-                  <div className='space-y-2'>
-                    <h4 className='text-muted-foreground flex items-center gap-2 text-sm font-medium'>
-                      <MapPin className='h-4 w-4' />
-                      Tasks by Area
-                    </h4>
-                    <div className='grid grid-cols-1 gap-2 md:grid-cols-2 lg:grid-cols-3'>
-                      {associate.taskBreakdown!.map((breakdown, idx) => (
-                        <TaskBreakdownCard key={idx} breakdown={breakdown} />
-                      ))}
-                    </div>
-                  </div>
-                )}
-
-                {(() => {
-                  const taskMetrics = [
-                    {
-                      label: 'Scans',
-                      value: associate.inbound_scans,
-                      color: 'blue',
-                    },
-                    {
-                      label: 'Putaway',
-                      value: associate.put_aways,
-                      color: 'purple',
-                    },
-                    {
-                      label: 'Picking',
-                      value: associate.picking,
-                      color: 'green',
-                    },
-                    { label: 'Pack', value: associate.packed, color: 'orange' },
-                    { label: 'Ship', value: associate.shipped, color: 'teal' },
-                    {
-                      label: 'Final Pack',
-                      value: associate.final_packed,
-                      color: 'amber',
-                    },
-                    {
-                      label: 'Putback',
-                      value: associate.putbacks,
-                      color: 'rose',
-                    },
-                    {
-                      label: 'Counts',
-                      value: associate.cycle_counts,
-                      color: 'indigo',
-                    },
-                  ].filter((m) => m.value > 0)
-
-                  if (taskMetrics.length === 0) return null
-
-                  return (
-                    <div className='space-y-2'>
-                      <h4 className='text-muted-foreground text-sm font-medium'>
-                        Task Summary
-                      </h4>
-                      <div className='flex flex-wrap gap-2'>
-                        {taskMetrics.map((metric) => (
-                          <TaskDetail
-                            key={metric.label}
-                            label={metric.label}
-                            value={metric.value}
-                            color={metric.color}
-                          />
-                        ))}
-                      </div>
-                    </div>
-                  )
-                })()}
-
-                <ActivityLegend className='border-border/30 border-t pt-2' />
-              </div>
-            </div>
+            <ExpandedRowContent
+              associate={associate}
+              enhancedTimeline={enhancedTimeline}
+              hasEnhancedTimeline={!!hasEnhancedTimeline}
+              hasBreakdown={hasBreakdown}
+              userOvertime={userOvertime}
+              efficiencyLabel={efficiencyStatus}
+              efficiencyAccent={efficiencyColor}
+              timezone={timezone}
+            />
           </CollapsibleContent>
         </div>
 
@@ -1776,6 +1837,11 @@ function AssociatePerformanceRowWithCallback({
               { label: 'Shipped', value: associate.shipped },
               { label: 'Putbacks', value: associate.putbacks },
               { label: 'Counts', value: associate.cycle_counts },
+              // Kit workflow stages — migration 310
+              { label: 'Kit Pick', value: associate.kit_picking ?? 0 },
+              { label: 'Kit Build', value: associate.kit_building ?? 0 },
+              { label: 'Kit Insp', value: associate.kit_inspection ?? 0 },
+              { label: 'Dock Stage', value: associate.kit_dock_staging ?? 0 },
               { label: 'Work Queue', value: associate.work_queue_tasks },
             ].filter((m) => m.value > 0)
 
@@ -1868,3 +1934,5 @@ export function AvatarGroup({
     </div>
   )
 }
+
+// Created and developed by Jai Singh

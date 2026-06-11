@@ -1,3 +1,4 @@
+// Created and developed by Jai Singh
 /**
  * RF Work Queue Dashboard Component
  * Mobile-optimized dashboard for RF interface showing worker's assigned tasks and available work
@@ -518,3 +519,5 @@ const RFWorkQueueDashboard: React.FC<RFWorkQueueDashboardProps> = ({
 }
 
 export default RFWorkQueueDashboard
+
+// Created and developed by Jai Singh

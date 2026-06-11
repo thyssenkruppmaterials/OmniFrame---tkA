@@ -1,3 +1,4 @@
+// Created and developed by Jai Singh
 import React, { useRef, useEffect } from 'react'
 
 interface BarcodeProps {
@@ -110,3 +111,5 @@ export const EnhancedBarcode: React.FC<BarcodeProps> = (props) => {
 }
 
 export default Barcode
+
+// Created and developed by Jai Singh

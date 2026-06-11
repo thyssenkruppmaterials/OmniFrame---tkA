@@ -1,3 +1,4 @@
+// Created and developed by Jai Singh
 //! LX03 (Warehouse Inventory) database queries
 //!
 //! High-performance queries for LX03 warehouse inventory data.
@@ -245,3 +246,5 @@ impl LX03Queries {
         Ok(rows)
     }
 }
+
+// Created and developed by Jai Singh

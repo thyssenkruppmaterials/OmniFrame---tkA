@@ -1,3 +1,4 @@
+// Created and developed by Jai Singh
 /**
  * RF Unknown Batch Dialog Component
  *
@@ -576,3 +577,5 @@ export const RFUnknownBatchDialog: React.FC<RFUnknownBatchDialogProps> = ({
     </Dialog>
   )
 }
+
+// Created and developed by Jai Singh

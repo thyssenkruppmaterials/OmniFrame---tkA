@@ -1,3 +1,4 @@
+// Created and developed by Jai Singh
 //! Health check endpoints
 
 use axum::{extract::State, Json};
@@ -131,3 +132,5 @@ pub async fn detailed_health(
         uptime_seconds,
     })
 }
+
+// Created and developed by Jai Singh

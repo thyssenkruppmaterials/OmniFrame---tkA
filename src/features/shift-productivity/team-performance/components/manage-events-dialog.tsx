@@ -1,3 +1,4 @@
+// Created and developed by Jai Singh
 /**
  * Manage Events Dialog Component
  * Full CRUD management for timeline events (view, add, edit, delete)
@@ -305,7 +306,7 @@ export function ManageEventsDialog({
 
   // Form
   const form = useForm<EventFormData>({
-    resolver: zodResolver(eventSchema),
+    resolver: zodResolver(eventSchema) as never,
     defaultValues: {
       event_name: '',
       category_id: '',
@@ -2472,3 +2473,5 @@ export function ManageEventsDialog({
 }
 
 export default ManageEventsDialog
+
+// Created and developed by Jai Singh

@@ -1,3 +1,4 @@
+// Created and developed by Jai Singh
 import * as React from 'react'
 import * as TabsPrimitive from '@radix-ui/react-tabs'
 import { cn } from '@/lib/utils'
@@ -61,3 +62,5 @@ function TabsContent({
 }
 
 export { Tabs, TabsList, TabsTrigger, TabsContent }
+
+// Created and developed by Jai Singh

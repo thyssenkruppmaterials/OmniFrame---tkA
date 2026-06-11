@@ -1,3 +1,4 @@
+// Created and developed by Jai Singh
 /**
  * Rust-enabled Inbound Scan Service
  *
@@ -81,7 +82,7 @@ function ensureRustClientInitialized(): boolean {
   try {
     const baseUrl =
       import.meta.env.VITE_RUST_CORE_URL ||
-      'https://your-rust-core-service.up.railway.app'
+      'https://rust-core-service-production.up.railway.app'
     initRustCoreClient({ baseUrl })
     return true
   } catch {
@@ -1002,8 +1003,6 @@ export class RustInboundScanService {
       logger.log(`📊 Fetching aggregated report stats for last ${days} days...`)
       const startTime = performance.now()
 
-      // RPC function not in generated Supabase types
-      // @ts-expect-error get_inbound_scan_report_stats is a custom RPC not in codegen
       const rpcResult = await supabase.rpc('get_inbound_scan_report_stats', {
         days_back: days,
       })
@@ -1076,4 +1075,5 @@ export class RustInboundScanService {
 
 // Export singleton instance
 export const rustInboundScanService = RustInboundScanService.getInstance()
-// Developer and Creator: Jai Singh
+
+// Created and developed by Jai Singh

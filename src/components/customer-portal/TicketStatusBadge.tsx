@@ -1,3 +1,4 @@
+// Created and developed by Jai Singh
 import {
   AlertCircle,
   CheckCircle,
@@ -225,3 +226,5 @@ export function TicketPriorityBadge({
     </Badge>
   )
 }
+
+// Created and developed by Jai Singh

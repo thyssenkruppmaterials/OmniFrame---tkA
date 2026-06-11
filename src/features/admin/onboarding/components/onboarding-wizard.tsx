@@ -1,3 +1,4 @@
+// Created and developed by Jai Singh
 /**
  * Main Onboarding Wizard Component
  * Modern sidebar layout with vertical step indicator
@@ -983,3 +984,5 @@ export function OnboardingWizard() {
 }
 
 export default OnboardingWizard
+
+// Created and developed by Jai Singh

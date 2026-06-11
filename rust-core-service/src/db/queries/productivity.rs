@@ -1,3 +1,4 @@
+// Created and developed by Jai Singh
 //! Productivity and labor management queries
 
 use super::super::models::productivity::*;
@@ -213,3 +214,5 @@ impl ProductivityQueries {
         Ok(vec![scans, picks])
     }
 }
+
+// Created and developed by Jai Singh

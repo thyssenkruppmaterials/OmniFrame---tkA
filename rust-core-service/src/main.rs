@@ -1,4 +1,5 @@
-//! OmniFrame Rust Core Service
+// Created and developed by Jai Singh
+//! OneBox AI Rust Core Service
 //!
 //! High-performance database optimization, JWT validation, and caching service.
 
@@ -68,23 +69,60 @@ async fn main() -> anyhow::Result<()> {
 
     tracing::info!(
         version = rust_core_service::VERSION,
-        "Starting OmniFrame Rust Core Service"
+        "Starting OneBox AI Rust Core Service"
     );
 
     // Setup Prometheus metrics
     let metrics_handle = prometheus::setup_metrics();
 
-    // Database connection pool
+    // Database connection pool (primary)
     let database_url = std::env::var("DATABASE_URL")
         .expect("DATABASE_URL must be set");
-    
+
     let db_config = pool::DatabaseConfig {
         url: database_url,
         ..Default::default()
     };
-    
+
     let db_pool = pool::create_pool(&db_config).await?;
-    tracing::info!("Database pool initialized");
+    tracing::info!("Database pool initialized (primary)");
+
+    // Optional read-replica pool. When `DATABASE_READ_POOLER_URL` is set,
+    // pure-read paths (RBAC permission lookups, user-profile fetches in
+    // `validate-with-profile`) route through this pool instead of the
+    // primary. When unset, `read_pool` is a clone of `db_pool` so all
+    // downstream code can use `state.read_pool` unconditionally.
+    let read_pool = match std::env::var("DATABASE_READ_POOLER_URL")
+        .ok()
+        .filter(|s| !s.trim().is_empty())
+    {
+        Some(read_url) => {
+            tracing::info!("Initializing read-replica pool (DATABASE_READ_POOLER_URL set)");
+            let read_cfg = pool::DatabaseConfig {
+                url: read_url,
+                ..Default::default()
+            };
+            match pool::create_pool(&read_cfg).await {
+                Ok(p) => {
+                    tracing::info!("Read-replica pool initialized");
+                    p
+                }
+                Err(e) => {
+                    tracing::warn!(
+                        error = %e,
+                        "Failed to initialize read-replica pool — falling back to primary"
+                    );
+                    db_pool.clone()
+                }
+            }
+        }
+        None => {
+            tracing::info!(
+                "DATABASE_READ_POOLER_URL unset; read_pool falls back to primary db_pool"
+            );
+            db_pool.clone()
+        }
+    };
 
     // Redis connection pool (optional - service works without it)
     let redis_pool = match std::env::var("REDIS_URL") {
@@ -119,6 +157,7 @@ async fn main() -> anyhow::Result<()> {
     // Create application state
     let state = AppState::new(
         db_pool,
+        read_pool,
         redis_pool,
         supabase_url,
         jwt_secret,
@@ -219,10 +258,25 @@ async fn main() -> anyhow::Result<()> {
         .with_state(state.clone());
 
     // Start HTTP server
+    //
+    // IMPORTANT: Bind to `[::]` (IPv6 wildcard) rather than `0.0.0.0` so this
+    // service is reachable over Railway's private network (`*.railway.internal`
+    // resolves to AAAA records — IPv6-only on legacy environments, dual-stack
+    // on environments created after 2025-10-16). On Linux the kernel default
+    // `net.ipv6.bindv6only=0` makes `[::]` accept IPv4 connections via
+    // IPv4-mapped IPv6 addresses too, so this keeps the public Railway proxy
+    // working as before.
+    //
+    // History: prior to 2026-05-22 this bound to `0.0.0.0` only, which made
+    // private-DNS connections from sibling services (e.g.
+    // `RUST_CORE_PRIVATE_URL=http://rust-core-service.railway.internal:8010`
+    // set on the `onebox-ai-logistics` FastAPI service) fail with
+    // `httpcore.ConnectError: All connection attempts failed`. See
+    // memorybank/OmniFrame/Debug/Fix-Rust-Core-Private-URL-IPv6-401-2026-05-22.md.
     let http_port = std::env::var("PORT").unwrap_or_else(|_| "8010".to_string());
-    let http_addr = format!("0.0.0.0:{}", http_port);
+    let http_addr = format!("[::]:{}", http_port);
     
-    tracing::info!("HTTP server listening on {}", http_addr);
+    tracing::info!("HTTP server listening on {} (IPv6 dual-stack)", http_addr);
 
     // Start gRPC server in background
     let grpc_port = std::env::var("GRPC_PORT").unwrap_or_else(|_| "8011".to_string());
@@ -239,4 +293,5 @@ async fn main() -> anyhow::Result<()> {
 
     Ok(())
 }
-// Developer and Creator: Jai Singh
+
+// Created and developed by Jai Singh

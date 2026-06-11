@@ -1,3 +1,4 @@
+// Created and developed by Jai Singh
 /**
  * Recordings Panel Component
  *
@@ -346,3 +347,5 @@ export function RecordingsPanel({
     </div>
   )
 }
+
+// Created and developed by Jai Singh

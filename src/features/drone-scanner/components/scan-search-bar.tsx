@@ -1,3 +1,4 @@
+// Created and developed by Jai Singh
 /**
  * Scan Search Bar Component
  *
@@ -72,3 +73,5 @@ export function ScanSearchBar({
     </form>
   )
 }
+
+// Created and developed by Jai Singh

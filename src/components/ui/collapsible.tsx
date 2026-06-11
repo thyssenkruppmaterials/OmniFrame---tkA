@@ -1,3 +1,4 @@
+// Created and developed by Jai Singh
 import * as CollapsiblePrimitive from '@radix-ui/react-collapsible'
 
 function Collapsible({
@@ -29,3 +30,5 @@ function CollapsibleContent({
 }
 
 export { Collapsible, CollapsibleTrigger, CollapsibleContent }
+
+// Created and developed by Jai Singh

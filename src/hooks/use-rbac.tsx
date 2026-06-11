@@ -1,3 +1,4 @@
+// Created and developed by Jai Singh
 import { useState, useEffect } from 'react'
 import type { User } from '@supabase/supabase-js'
 import { rbacService } from '@/lib/auth/rbac-service'
@@ -149,3 +150,5 @@ export function CanAccess({
 
   return hasPermission ? <>{children}</> : <>{fallback}</>
 }
+
+// Created and developed by Jai Singh

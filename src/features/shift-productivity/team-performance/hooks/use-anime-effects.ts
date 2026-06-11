@@ -1,3 +1,4 @@
+// Created and developed by Jai Singh
 /**
  * Anime.js Effect Hooks for Labor Board
  * Provides reusable animation effects: pulse, entrance stagger, number animation
@@ -172,3 +173,5 @@ export function useBannerEntrance(show: boolean) {
 
   return ref
 }
+
+// Created and developed by Jai Singh

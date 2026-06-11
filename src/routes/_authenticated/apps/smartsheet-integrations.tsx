@@ -1,3 +1,4 @@
+// Created and developed by Jai Singh
 import { useRef } from 'react'
 import { useState, useMemo } from 'react'
 import { createFileRoute } from '@tanstack/react-router'
@@ -2108,4 +2109,5 @@ export const Route = createFileRoute(
   beforeLoad: createStandardProtectedRoute('SMARTSHEET_INTEGRATIONS'),
   component: SmartsheetIntegrations,
 })
-// Developer and Creator: Jai Singh
+
+// Created and developed by Jai Singh

@@ -1,3 +1,4 @@
+// Created and developed by Jai Singh
 import { useEffect, useRef, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
@@ -913,3 +914,5 @@ export function useOutboundTOData({
     isUsingRust: RUST_CORE_ENABLED,
   }
 }
+
+// Created and developed by Jai Singh

@@ -1,3 +1,4 @@
+// Created and developed by Jai Singh
 /**
  * Activity Sources Configuration Tab
  * Manage dynamic activity tracking sources for timeline display
@@ -637,7 +638,7 @@ function ActivitySourceFormDialog({
   >([])
 
   const form = useForm<ActivitySourceFormData>({
-    resolver: zodResolver(activitySourceSchema),
+    resolver: zodResolver(activitySourceSchema) as never,
     defaultValues: {
       activity_type: '',
       activity_label: '',
@@ -1510,3 +1511,5 @@ function DeleteActivitySourceDialog({
     </Dialog>
   )
 }
+
+// Created and developed by Jai Singh

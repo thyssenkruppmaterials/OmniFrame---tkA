@@ -1,3 +1,4 @@
+// Created and developed by Jai Singh
 mod api;
 mod auth;
 mod config;
@@ -175,4 +176,5 @@ mod tests {
         assert_eq!(name, "rust-mdm-service");
     }
 }
-// Developer and Creator: Jai Singh
+
+// Created and developed by Jai Singh

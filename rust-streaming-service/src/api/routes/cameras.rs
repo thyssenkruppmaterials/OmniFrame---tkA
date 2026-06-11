@@ -1,3 +1,4 @@
+// Created and developed by Jai Singh
 //! Camera endpoints
 //!
 //! Provides routes for listing cameras, getting details, and PTZ control.
@@ -232,3 +233,5 @@ pub async fn ptz_command(
         timestamp: chrono::Utc::now(),
     }))
 }
+
+// Created and developed by Jai Singh

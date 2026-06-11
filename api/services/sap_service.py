@@ -1,5 +1,6 @@
+# Created and developed by Jai Singh
 """
-SAP RFC Service for OmniFrame Logistics.
+SAP RFC Service for OneBox AI Logistics.
 Provides connection management and function call wrappers for SAP ECC and S/4HANA.
 Supports both Classic WM and EWM operations.
 """
@@ -210,7 +211,7 @@ class SAPService:
             result = await self._call_rfc(
                 'STFC_CONNECTION',
                 config=cfg,
-                REQUTEXT='OmniFrame SAP Connection Test'
+                REQUTEXT='OneBox AI SAP Connection Test'
             )
             
             # Get user details
@@ -1263,4 +1264,4 @@ async def get_sap_service() -> SAPService:
         _sap_service = await SAPService.get_instance()
     return _sap_service
 
-# Developer and Creator: Jai Singh
+# Created and developed by Jai Singh

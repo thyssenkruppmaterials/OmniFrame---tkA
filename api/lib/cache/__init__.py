@@ -1,5 +1,6 @@
+# Created and developed by Jai Singh
 """
-Cache services for OmniFrame API
+Cache services for OneBox AI API
 
 NOTE: Authentication caching (sessions, tokens, permissions) is now handled
 by the Rust Core Service for better performance. This module provides:
@@ -18,3 +19,5 @@ __all__ = [
     "get_redis_service", 
     "close_redis",
 ]
+
+# Created and developed by Jai Singh

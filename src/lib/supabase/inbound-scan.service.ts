@@ -1,3 +1,4 @@
+// Created and developed by Jai Singh
 import type { QueryData } from '@supabase/supabase-js'
 import { RUST_CORE_ENABLED } from '@/lib/rust-core'
 import { rustInboundScanService } from '@/lib/rust-core/inbound-scan.service'
@@ -10,6 +11,10 @@ import {
 } from '@/lib/utils/timezone'
 import { supabase } from './client'
 import type { Tables } from './database.types'
+import {
+  inboundPartTransferService,
+  type LatestInboundPartTransfer,
+} from './inbound-part-transfer.service'
 
 // Define the table row type for inbound scans
 export type InboundScanData = Tables<'rr_inbound_scans'>
@@ -25,6 +30,47 @@ const inboundScansWithUserQuery = supabase.from('rr_inbound_scans').select(`
   `)
 
 export type InboundScansWithUser = QueryData<typeof inboundScansWithUserQuery>
+
+// Inbound scan row augmented with the latest Inbound Part Transfer for its
+// TKA batch number. Used for table display only -- CSV export intentionally
+// omits these fields to preserve the existing export contract.
+export type InboundScanWithTransfer = InboundScansWithUser[number] & {
+  latest_transfer?: LatestInboundPartTransfer | null
+}
+
+async function attachLatestTransfers<T extends InboundScansWithUser[number]>(
+  rows: T[]
+): Promise<(T & { latest_transfer?: LatestInboundPartTransfer | null })[]> {
+  if (!rows || rows.length === 0)
+    return rows as (T & {
+      latest_transfer?: LatestInboundPartTransfer | null
+    })[]
+
+  const batches = rows
+    .map((row) => row.tka_batch_number)
+    .filter((b): b is string => typeof b === 'string' && b.length > 0)
+
+  if (batches.length === 0) {
+    return rows.map((row) => ({ ...row, latest_transfer: null }))
+  }
+
+  const { data: transferMap, error } =
+    await inboundPartTransferService.fetchLatestTransfersByBatches(batches)
+
+  if (error) {
+    logger.warn(
+      'Failed to enrich inbound scans with latest transfers; continuing without transfer columns',
+      error
+    )
+  }
+
+  return rows.map((row) => ({
+    ...row,
+    latest_transfer: row.tka_batch_number
+      ? (transferMap[row.tka_batch_number] ?? null)
+      : null,
+  }))
+}
 
 // Statistics interface
 export interface InboundScanStatistics {
@@ -204,7 +250,12 @@ export class InboundScanService {
     // Use Rust service when enabled (delegates to rustInboundScanService)
     if (RUST_CORE_ENABLED) {
       logger.log('🦀 Using Rust core service for paginated inbound scans')
-      return rustInboundScanService.fetchInboundScansPaginated(options)
+      const result =
+        await rustInboundScanService.fetchInboundScansPaginated(options)
+      if (result.data && result.data.length > 0) {
+        result.data = await attachLatestTransfers(result.data)
+      }
+      return result
     }
 
     // Supabase fallback with server-side pagination
@@ -256,8 +307,10 @@ export class InboundScanService {
         return { data: [], total: 0, page, pageSize, totalPages: 0, error }
       }
 
+      const enriched = await attachLatestTransfers(data || [])
+
       return {
-        data: data || [],
+        data: enriched,
         total: count || 0,
         page,
         pageSize,
@@ -1129,4 +1182,5 @@ export class InboundScanService {
 
 // Export singleton instance
 export const inboundScanService = InboundScanService.getInstance()
-// Developer and Creator: Jai Singh
+
+// Created and developed by Jai Singh

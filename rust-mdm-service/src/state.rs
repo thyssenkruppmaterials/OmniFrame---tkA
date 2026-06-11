@@ -1,3 +1,4 @@
+// Created and developed by Jai Singh
 use std::sync::Arc;
 use tokio::sync::broadcast;
 
@@ -68,3 +69,5 @@ impl AppState {
         })
     }
 }
+
+// Created and developed by Jai Singh

@@ -1,3 +1,4 @@
+// Created and developed by Jai Singh
 /**
  * Team Performance Types
  * TypeScript interfaces for team performance dashboard data structures
@@ -16,6 +17,7 @@ import type { ProductivityStats } from '@/lib/supabase/productivity.service'
  */
 export type StandardActivityType =
   | 'inbound_scan'
+  | 'cart_stow'
   | 'putaway'
   | 'putaway_confirm'
   | 'picking'
@@ -25,6 +27,10 @@ export type StandardActivityType =
   | 'putback'
   | 'cycle_count'
   | 'customer_response'
+  | 'kit_picking'
+  | 'kit_building'
+  | 'kit_inspection'
+  | 'kit_dock_staging'
 
 /**
  * Special block types used in activity timelines
@@ -114,6 +120,11 @@ export interface TaskBreakdownByArea {
   final_packed: number
   putbacks: number
   cycle_counts: number
+  /** Kit workflow stages — migration 310 */
+  kit_picking: number
+  kit_building: number
+  kit_inspection: number
+  kit_dock_staging: number
   total: number
 }
 
@@ -284,6 +295,11 @@ export interface AreaPerformance {
     final_packed: number
     putbacks: number
     cycle_counts: number
+    /** Kit workflow stages — migration 310 */
+    kit_picking: number
+    kit_building: number
+    kit_inspection: number
+    kit_dock_staging: number
   }
   /** Aggregate timeline data for area-level Gantt visualization */
   aggregateTimeline?: {
@@ -352,6 +368,11 @@ export interface TeamProductivityStats {
   final_packed: number
   putbacks: number
   cycle_counts: number
+  /** Kit workflow stages — migration 310 */
+  kit_picking: number
+  kit_building: number
+  kit_inspection: number
+  kit_dock_staging: number
   work_queue_tasks: number
   total_tasks: number
 }
@@ -502,6 +523,10 @@ export function calculateTotalTasks(stats: TeamProductivityStats): number {
     stats.final_packed +
     stats.putbacks +
     stats.cycle_counts +
+    (stats.kit_picking || 0) +
+    (stats.kit_building || 0) +
+    (stats.kit_inspection || 0) +
+    (stats.kit_dock_staging || 0) +
     stats.work_queue_tasks
   )
 }
@@ -557,3 +582,5 @@ export interface ReassignmentResult {
   current?: number
   noop?: boolean
 }
+
+// Created and developed by Jai Singh

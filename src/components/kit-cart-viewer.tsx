@@ -1,10 +1,11 @@
+// Created and developed by Jai Singh
 /**
  * Kit Cart Viewer Component
  *
  * Real-time viewer for Nefab PFC Trace kit cart data.
  * Displays kit cart status, location, and tracking information.
  *
- * @author Jai Singh
+ * @author OmniFrame Team
  * @date December 17, 2025
  * @version 1.0.0
  */
@@ -452,10 +453,10 @@ const KitCartViewer: React.FC<KitCartViewerProps> = React.memo(
       // Count by status
       const atCustomer = statistics.byStatus['AtCustomer'] || 0
 
-      // Count at OmniFrame/ILC (Rolls-Royce ILC warehouse)
-      const atOmniFrameILC = statistics.byWarehouse['Rolls-Royce ILC'] || 0
+      // Count at OneBox/ILC (Rolls-Royce ILC warehouse)
+      const atOneBoxILC = statistics.byWarehouse['Rolls-Royce ILC'] || 0
 
-      // Count Kit Cart types at OmniFrame/ILC
+      // Count Kit Cart types at OneBox/ILC
       const kitCartsAtILC = items.filter(
         (item) =>
           item.StatusWarehouse?.Name === 'Rolls-Royce ILC' &&
@@ -495,9 +496,9 @@ const KitCartViewer: React.FC<KitCartViewerProps> = React.memo(
               <div className='flex items-center justify-around space-x-2'>
                 <div className='text-center'>
                   <div className='text-xl font-bold text-green-600'>
-                    {atOmniFrameILC}
+                    {atOneBoxILC}
                   </div>
-                  <p className='text-muted-foreground text-xs'>OmniFrame/ILC</p>
+                  <p className='text-muted-foreground text-xs'>OneBox/ILC</p>
                 </div>
                 <Separator orientation='vertical' className='h-10' />
                 <div className='text-center'>
@@ -1073,4 +1074,5 @@ const KitCartViewer: React.FC<KitCartViewerProps> = React.memo(
 KitCartViewer.displayName = 'KitCartViewer'
 
 export default KitCartViewer
-// Developer and Creator: Jai Singh
+
+// Created and developed by Jai Singh

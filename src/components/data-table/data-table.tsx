@@ -1,3 +1,4 @@
+// Created and developed by Jai Singh
 import * as React from 'react'
 import {
   ColumnDef,
@@ -65,7 +66,7 @@ export function DataTable<TData, TValue>({
 
   return (
     <div className='space-y-4'>
-      <div className='rounded-md border'>
+      <div className='min-w-0 rounded-md border'>
         <Table>
           <TableHeader>
             {table.getHeaderGroups().map((headerGroup) => (
@@ -118,3 +119,5 @@ export function DataTable<TData, TValue>({
     </div>
   )
 }
+
+// Created and developed by Jai Singh

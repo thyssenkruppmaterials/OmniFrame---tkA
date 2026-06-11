@@ -1,3 +1,4 @@
+// Created and developed by Jai Singh
 'use client'
 
 import * as React from 'react'
@@ -162,3 +163,5 @@ export function MultiSelect({
     </Popover>
   )
 }
+
+// Created and developed by Jai Singh

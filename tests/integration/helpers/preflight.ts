@@ -1,3 +1,4 @@
+// Created and developed by Jai Singh
 import { logger } from '@/lib/utils/logger';
 
 /**
@@ -164,3 +165,5 @@ export function reportIntegrationSummary(summary: IntegrationSummary): void {
     )
   }
 }
+
+// Created and developed by Jai Singh

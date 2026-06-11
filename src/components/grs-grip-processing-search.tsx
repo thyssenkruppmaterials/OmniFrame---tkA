@@ -1,3 +1,4 @@
+// Created and developed by Jai Singh
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { format, toZonedTime } from 'date-fns-tz'
 import {
@@ -837,3 +838,5 @@ const GRSGRIPProcessingSearch: React.FC<GRSGRIPProcessingSearchProps> =
 GRSGRIPProcessingSearch.displayName = 'GRSGRIPProcessingSearch'
 
 export default GRSGRIPProcessingSearch
+
+// Created and developed by Jai Singh

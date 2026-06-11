@@ -1,3 +1,4 @@
+// Created and developed by Jai Singh
 import { useState, useCallback, useEffect, useRef } from 'react'
 import DeviceAgent from './device-agent-plugin'
 import type { AgentStatus, TelemetryConfig } from './device-agent-plugin'
@@ -54,3 +55,5 @@ export function useDeviceAgent() {
     refresh: checkAvailability,
   }
 }
+
+// Created and developed by Jai Singh

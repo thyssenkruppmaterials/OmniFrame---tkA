@@ -1,3 +1,4 @@
+// Created and developed by Jai Singh
 import { useEffect, useMemo } from 'react'
 import { Shield } from 'lucide-react'
 import { cn } from '@/lib/utils'
@@ -181,3 +182,5 @@ export function SessionExpiryModal({
     </div>
   )
 }
+
+// Created and developed by Jai Singh

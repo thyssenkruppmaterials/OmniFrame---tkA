@@ -1,3 +1,4 @@
+// Created and developed by Jai Singh
 import ContentSection from '../components/content-section'
 import { NotificationsForm } from './notifications-form'
 
@@ -11,3 +12,5 @@ export default function SettingsNotifications() {
     </ContentSection>
   )
 }
+
+// Created and developed by Jai Singh

@@ -1,3 +1,4 @@
+// Created and developed by Jai Singh
 /**
  * Advanced Filter Utilities
  * Created: November 9, 2025
@@ -461,3 +462,5 @@ export function validateFilterConfig(config: AdvancedFilterConfig): {
     errors,
   }
 }
+
+// Created and developed by Jai Singh

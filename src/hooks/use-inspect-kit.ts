@@ -1,3 +1,4 @@
+// Created and developed by Jai Singh
 /**
  * Inspect Kit Tool Hook
  * Provides React Query mutations and queries for kit inspection operations
@@ -135,3 +136,5 @@ export function useInspectKitTool() {
     },
   }
 }
+
+// Created and developed by Jai Singh

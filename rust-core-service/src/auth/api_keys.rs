@@ -1,11 +1,12 @@
+// Created and developed by Jai Singh
 //! Service-to-service API key authentication
 //!
 //! This module provides secure internal authentication for microservices
 //! communicating with rust-core-service.
 //!
 //! ## API Key Format
-//! Keys follow the format: `omf_{service}_{random_32_chars}`
-//! Example: `omf_ai_a1b2c3d4e5f6g7h8i9j0k1l2m3n4o5p6`
+//! Keys follow the format: `onbx_{service}_{random_32_chars}`
+//! Example: `onbx_ai_a1b2c3d4e5f6g7h8i9j0k1l2m3n4o5p6`
 //!
 //! ## Security
 //! - Keys are never stored in plaintext
@@ -22,7 +23,7 @@ use serde::{Deserialize, Serialize};
 use thiserror::Error;
 use tracing::{instrument, warn};
 
-/// API key format: omf_{service}_{random_32_chars}
+/// API key format: onbx_{service}_{random_32_chars}
 /// The prefix is always 8 characters for consistent extraction
 const KEY_PREFIX_LENGTH: usize = 8;
 
@@ -78,13 +79,13 @@ pub struct ValidatedService {
 ///
 /// # Example
 /// ```ignore
-/// let (prefix, hash) = extract_key_parts("omf_ai_a1b2c3d4e5f6g7h8i9j0k1l2m3n4o5p6")?;
-/// assert_eq!(prefix, "omf_ai_");
+/// let (prefix, hash) = extract_key_parts("onbx_ai_a1b2c3d4e5f6g7h8i9j0k1l2m3n4o5p6")?;
+/// assert_eq!(prefix, "onbx_ai_");
 /// assert_eq!(hash.len(), 64); // SHA-256 produces 64 hex chars
 /// ```
 pub fn extract_key_parts(api_key: &str) -> Result<(String, String), ApiKeyError> {
-    // Expected format: omf_{service}_{32chars}
-    if !api_key.starts_with("omf_") {
+    // Expected format: onbx_{service}_{32chars}
+    if !api_key.starts_with("onbx_") {
         return Err(ApiKeyError::InvalidFormat);
     }
 
@@ -288,21 +289,21 @@ mod tests {
 
     #[test]
     fn test_extract_key_parts_valid() {
-        let key = "omf_ai_a1b2c3d4e5f6g7h8i9j0k1l2m3n4o5p6";
+        let key = "onbx_ai_a1b2c3d4e5f6g7h8i9j0k1l2m3n4o5p6";
         let result = extract_key_parts(key);
         assert!(result.is_ok());
         let (prefix, hash) = result.unwrap();
-        assert_eq!(prefix, "omf_ai_");
+        assert_eq!(prefix, "onbx_ai_");
         assert_eq!(hash.len(), 64); // SHA-256 produces 64 hex chars
     }
 
     #[test]
     fn test_extract_key_parts_valid_dashboard() {
-        let key = "omf_da_a1b2c3d4e5f6g7h8i9j0k1l2m3n4o5p6";
+        let key = "onbx_da_a1b2c3d4e5f6g7h8i9j0k1l2m3n4o5p6";
         let result = extract_key_parts(key);
         assert!(result.is_ok());
         let (prefix, _hash) = result.unwrap();
-        assert_eq!(prefix, "omf_da_");
+        assert_eq!(prefix, "onbx_da_");
     }
 
     #[test]
@@ -314,13 +315,13 @@ mod tests {
 
     #[test]
     fn test_extract_key_parts_too_short() {
-        let key = "omf_ai";
+        let key = "onbx_ai";
         let result = extract_key_parts(key);
         assert!(matches!(result, Err(ApiKeyError::InvalidFormat)));
     }
 
     #[test]
-    fn test_extract_key_parts_no_omf_prefix() {
+    fn test_extract_key_parts_no_onbx_prefix() {
         let key = "test_ai_a1b2c3d4e5f6g7h8i9j0k1l2m3n4o5p6";
         let result = extract_key_parts(key);
         assert!(matches!(result, Err(ApiKeyError::InvalidFormat)));
@@ -438,9 +439,11 @@ mod tests {
     #[test]
     fn test_consistent_hashing() {
         // Same key should always produce the same hash
-        let key = "omf_ai_a1b2c3d4e5f6g7h8i9j0k1l2m3n4o5p6";
+        let key = "onbx_ai_a1b2c3d4e5f6g7h8i9j0k1l2m3n4o5p6";
         let (_, hash1) = extract_key_parts(key).unwrap();
         let (_, hash2) = extract_key_parts(key).unwrap();
         assert_eq!(hash1, hash2);
     }
 }
+
+// Created and developed by Jai Singh

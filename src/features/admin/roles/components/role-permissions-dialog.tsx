@@ -1,3 +1,4 @@
+// Created and developed by Jai Singh
 import { useState, useEffect } from 'react'
 import { Loader2 } from 'lucide-react'
 import { toast } from 'sonner'
@@ -287,3 +288,5 @@ export function RolePermissionsDialog({
     </Dialog>
   )
 }
+
+// Created and developed by Jai Singh

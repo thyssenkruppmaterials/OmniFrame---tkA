@@ -1,3 +1,4 @@
+// Created and developed by Jai Singh
 import { useState } from 'react'
 import { IconSearch, IconPlus, IconFile } from '@tabler/icons-react'
 import { Button } from '@/components/ui/button'
@@ -158,3 +159,5 @@ function DetailField({
     </div>
   )
 }
+
+// Created and developed by Jai Singh

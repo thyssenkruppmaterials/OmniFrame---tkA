@@ -1,3 +1,4 @@
+// Created and developed by Jai Singh
 import React, { useState, useEffect } from 'react'
 import { ChevronDown, X } from 'lucide-react'
 import { toast } from 'sonner'
@@ -235,3 +236,5 @@ export const DispositionSelect = React.memo(
     )
   }
 )
+
+// Created and developed by Jai Singh

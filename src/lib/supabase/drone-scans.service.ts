@@ -1,3 +1,4 @@
+// Created and developed by Jai Singh
 /**
  * Drone Scans Service
  *
@@ -476,4 +477,5 @@ export class DroneScanService {
 
 // Export singleton instance
 export const droneScanService = DroneScanService.getInstance()
-// Developer and Creator: Jai Singh
+
+// Created and developed by Jai Singh

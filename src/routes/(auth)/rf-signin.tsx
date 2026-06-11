@@ -1,3 +1,4 @@
+// Created and developed by Jai Singh
 import { useEffect } from 'react'
 import { createFileRoute } from '@tanstack/react-router'
 import { rfPWAManager } from '@/lib/pwa/rf-pwa-manager'
@@ -21,4 +22,5 @@ function RFSignInWithPWA() {
 export const Route = createFileRoute('/(auth)/rf-signin')({
   component: RFSignInWithPWA,
 })
-// Developer and Creator: Jai Singh
+
+// Created and developed by Jai Singh

@@ -1,3 +1,4 @@
+// Created and developed by Jai Singh
 import {
   IconClock,
   IconHistory,
@@ -256,3 +257,5 @@ export default function SessionManagement() {
     </SessionManagementProvider>
   )
 }
+
+// Created and developed by Jai Singh

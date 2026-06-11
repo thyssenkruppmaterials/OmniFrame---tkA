@@ -1,9 +1,10 @@
+// Created and developed by Jai Singh
 import { useEffect } from 'react'
 import { z } from 'zod'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { useShiftProductivitySettings } from '@/hooks/use-shift-productivity-settings'
-import { Button } from '@/components/ui/button'
+import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import {
   Form,
   FormControl,
@@ -16,6 +17,11 @@ import { Separator } from '@/components/ui/separator'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Switch } from '@/components/ui/switch'
 import ContentSection from '../components/content-section'
+import {
+  SettingsErrorState,
+  SettingsSaveBar,
+  SettingsStatusBadge,
+} from '../components/settings-primitives'
 
 const notificationSettingsSchema = z.object({
   enableNotifications: z.boolean().default(true),
@@ -35,10 +41,13 @@ export function NotificationSettings() {
     notificationFormValues,
     updateNotificationSettings,
     isUpdatingNotification,
+    error,
+    refetch,
+    organizationId,
   } = useShiftProductivitySettings()
 
   const form = useForm<NotificationSettingsValues>({
-    resolver: zodResolver(notificationSettingsSchema),
+    resolver: zodResolver(notificationSettingsSchema) as never,
     defaultValues: notificationFormValues,
   })
 
@@ -69,13 +78,50 @@ export function NotificationSettings() {
     )
   }
 
+  if (error || !organizationId) {
+    return (
+      <ContentSection
+        title='Automation & Alerts'
+        desc='Configure notification preferences and automation readiness.'
+      >
+        <SettingsErrorState
+          title={
+            !organizationId
+              ? 'Organization required'
+              : 'Unable to load settings'
+          }
+          description={
+            !organizationId
+              ? 'Notification settings require an organization before they can be saved.'
+              : error instanceof Error
+                ? error.message
+                : 'Notification settings failed to load.'
+          }
+          onRetry={organizationId ? () => void refetch() : undefined}
+        />
+      </ContentSection>
+    )
+  }
+
   return (
     <ContentSection
-      title='Notification Settings'
-      desc='Configure alerts and notifications for productivity events.'
+      title='Automation & Alerts'
+      desc='Configure notification preferences and automation readiness.'
     >
       <Form {...form}>
-        <form onSubmit={form.handleSubmit(onSubmit)} className='space-y-8'>
+        <form onSubmit={form.handleSubmit(onSubmit)} className='space-y-6'>
+          <Alert>
+            <AlertTitle className='flex items-center gap-2'>
+              Automation status
+              <SettingsStatusBadge status='pending' />
+            </AlertTitle>
+            <AlertDescription>
+              These preferences are stored per organization. Reminder delivery,
+              daily summaries, and milestone notifications still require a
+              background worker before they can send automatically.
+            </AlertDescription>
+          </Alert>
+
           <FormField
             control={form.control}
             name='enableNotifications'
@@ -249,13 +295,16 @@ export function NotificationSettings() {
             />
           </div>
 
-          <Button type='submit' disabled={isUpdatingNotification}>
-            {isUpdatingNotification
-              ? 'Saving...'
-              : 'Save Notification Settings'}
-          </Button>
+          <SettingsSaveBar
+            isDirty={form.formState.isDirty}
+            isSaving={isUpdatingNotification}
+            submitLabel='Save automation settings'
+            savingLabel='Saving automation settings...'
+          />
         </form>
       </Form>
     </ContentSection>
   )
 }
+
+// Created and developed by Jai Singh

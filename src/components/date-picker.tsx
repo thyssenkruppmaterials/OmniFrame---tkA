@@ -1,3 +1,4 @@
+// Created and developed by Jai Singh
 import { format } from 'date-fns'
 import { Calendar as CalendarIcon } from 'lucide-react'
 import { Button } from '@/components/ui/button'
@@ -49,3 +50,5 @@ export function DatePicker({
     </Popover>
   )
 }
+
+// Created and developed by Jai Singh

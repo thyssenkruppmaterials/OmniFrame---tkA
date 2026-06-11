@@ -1,3 +1,4 @@
+// Created and developed by Jai Singh
 /**
  * Unassigned Users Management Component
  * Table-style bulk assignment for users without active primary shift assignments
@@ -228,6 +229,7 @@ export function UnassignedUsersManagement() {
 
     let successCount = 0
     let failCount = 0
+    const assignedIds = new Set<string>()
 
     for (let i = 0; i < usersToAssign.length; i++) {
       const userId = usersToAssign[i]
@@ -259,6 +261,7 @@ export function UnassignedUsersManagement() {
           )
         })
         successCount++
+        assignedIds.add(userId)
       } catch (error) {
         logger.error(`Error assigning user ${userId}:`, error)
         failCount++
@@ -273,8 +276,7 @@ export function UnassignedUsersManagement() {
       toast.error('Failed to assign users')
     }
 
-    // Clean up state for assigned users
-    const assignedIds = new Set(usersToAssign.slice(0, successCount))
+    // Clean up only the rows that actually succeeded; failures can be retried.
     setSelectedUserIds((prev) => prev.filter((id) => !assignedIds.has(id)))
     setRowAssignments((prev) => {
       const next = { ...prev }
@@ -842,3 +844,5 @@ export function UnassignedUsersManagement() {
     </Card>
   )
 }
+
+// Created and developed by Jai Singh

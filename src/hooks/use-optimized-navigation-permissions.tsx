@@ -1,3 +1,4 @@
+// Created and developed by Jai Singh
 import { useNavigationStore, useNavigation } from '@/stores/navigationStore'
 
 interface NavigationPermission {
@@ -62,3 +63,5 @@ export {
   useNavigationAccess,
   useNavigationActions,
 } from '@/stores/navigationStore'
+
+// Created and developed by Jai Singh

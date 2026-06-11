@@ -1,3 +1,4 @@
+// Created and developed by Jai Singh
 import { supabase } from '@/lib/supabase/client'
 import { DeviceRegistrationService } from '@/lib/supabase/device-registration.service'
 import { logger } from '@/lib/utils/logger'
@@ -1065,7 +1066,7 @@ export class SessionManagementService {
         created_at: new Date(
           currentTime.getTime() - 2 * 60 * 60 * 1000
         ).toISOString(), // 2 hours ago
-        user_email: 'admin@omniframe.ai',
+        user_email: 'admin@onebox.ai',
         user_name: 'System Admin',
         user_role: 'admin',
         is_current: true,
@@ -1089,7 +1090,7 @@ export class SessionManagementService {
         created_at: new Date(
           currentTime.getTime() - 1 * 60 * 60 * 1000
         ).toISOString(), // 1 hour ago
-        user_email: 'manager@omniframe.ai',
+        user_email: 'manager@onebox.ai',
         user_name: 'Operations Manager',
         user_role: 'manager',
         is_current: false,
@@ -1169,3 +1170,5 @@ export class SessionManagementService {
     ]
   }
 }
+
+// Created and developed by Jai Singh

@@ -1,3 +1,4 @@
+// Created and developed by Jai Singh
 /**
  * RF Drone Control Component
  *
@@ -570,3 +571,5 @@ export default function RFDroneControl({
     </div>
   )
 }
+
+// Created and developed by Jai Singh

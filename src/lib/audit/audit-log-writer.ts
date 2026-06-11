@@ -1,3 +1,4 @@
+// Created and developed by Jai Singh
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { logger } from '@/lib/utils/logger'
 
@@ -58,3 +59,5 @@ export async function writeAuditLog(
     return { audit_status: 'failed', audit_id: null, audit_error_code: code }
   }
 }
+
+// Created and developed by Jai Singh

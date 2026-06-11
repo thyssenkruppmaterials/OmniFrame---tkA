@@ -1,3 +1,4 @@
+// Created and developed by Jai Singh
 /**
  * Labor Board Hook
  * Manages column derivation, optimistic mutations, Supabase Realtime sync, and drag state
@@ -540,3 +541,5 @@ export function useLaborBoard({
     isReassigning: reassignMutation.isPending,
   }
 }
+
+// Created and developed by Jai Singh

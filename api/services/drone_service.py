@@ -1,5 +1,6 @@
+# Created and developed by Jai Singh
 """
-Drone Scanner Service for OmniFrame Logistics.
+Drone Scanner Service for OneBox AI Logistics.
 Handles drone scan uploads, AI analysis queuing, and search operations.
 """
 
@@ -448,4 +449,4 @@ async def get_drone_service() -> DroneService:
         _drone_service = DroneService()
     return _drone_service
 
-# Developer and Creator: Jai Singh
+# Created and developed by Jai Singh

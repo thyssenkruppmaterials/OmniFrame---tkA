@@ -1,3 +1,4 @@
+# Created and developed by Jai Singh
 """
 Webhook event management service for Smartsheet real-time updates.
 Handles webhook registration, event storage, and event broadcasting.
@@ -444,5 +445,4 @@ async def start_cleanup_task():
         except Exception as e:
             logger.error(f"Error in cleanup task: {e}")
 
-# Developer and Creator: Jai Singh
-
+# Created and developed by Jai Singh

@@ -1,3 +1,4 @@
+// Created and developed by Jai Singh
 import { IconSearch } from '@tabler/icons-react'
 import { cn } from '@/lib/utils'
 import { useSearch } from '@/context/search-context'
@@ -31,3 +32,5 @@ export function Search({ className = '', placeholder = 'Search' }: Props) {
     </Button>
   )
 }
+
+// Created and developed by Jai Singh

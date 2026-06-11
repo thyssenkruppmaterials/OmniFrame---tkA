@@ -1,3 +1,4 @@
+// Created and developed by Jai Singh
 import type { User } from '@supabase/supabase-js'
 import { create } from 'zustand'
 import { persist, createJSONStorage } from 'zustand/middleware'
@@ -40,12 +41,13 @@ export const useSupabaseAuth = create<AuthState>()(
 
       signUp: async (email, password, metadata = {}) => {
         set({ isLoading: true })
+        const { getAppUrl } = await import('@/lib/utils/app-url')
         const { data, error } = await supabase.auth.signUp({
           email,
           password,
           options: {
             data: metadata,
-            emailRedirectTo: `${window.location.origin}/auth/callback`,
+            emailRedirectTo: `${getAppUrl()}/auth/callback`,
           },
         })
 
@@ -102,8 +104,9 @@ export const useSupabaseAuth = create<AuthState>()(
       },
 
       resetPassword: async (email) => {
+        const { getAppUrl } = await import('@/lib/utils/app-url')
         const { error } = await supabase.auth.resetPasswordForEmail(email, {
-          redirectTo: `${window.location.origin}/auth/reset-password`,
+          redirectTo: `${getAppUrl()}/auth/reset-password`,
         })
         if (error) throw error
       },
@@ -116,10 +119,11 @@ export const useSupabaseAuth = create<AuthState>()(
       },
 
       signInWithProvider: async (provider) => {
+        const { getAppUrl } = await import('@/lib/utils/app-url')
         const { error } = await supabase.auth.signInWithOAuth({
           provider,
           options: {
-            redirectTo: `${window.location.origin}/auth/callback`,
+            redirectTo: `${getAppUrl()}/auth/callback`,
           },
         })
         if (error) throw error
@@ -356,3 +360,5 @@ export const useAuth = () => {
     supabaseUser: user,
   }
 }
+
+// Created and developed by Jai Singh

@@ -1,3 +1,4 @@
+// Created and developed by Jai Singh
 import {
   IconActivity,
   IconAlertTriangle,
@@ -145,3 +146,5 @@ export function SecurityMetrics({ metrics, isLoading }: SecurityMetricsProps) {
     </div>
   )
 }
+
+// Created and developed by Jai Singh

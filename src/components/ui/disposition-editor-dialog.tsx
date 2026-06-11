@@ -1,3 +1,4 @@
+// Created and developed by Jai Singh
 import { useState, useEffect } from 'react'
 import { Plus, Trash2, Loader2, Edit2, ChevronDown } from 'lucide-react'
 import { toast } from 'sonner'
@@ -346,3 +347,5 @@ export function DispositionEditorDialog({
     </Dialog>
   )
 }
+
+// Created and developed by Jai Singh

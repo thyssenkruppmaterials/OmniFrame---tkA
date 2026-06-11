@@ -1,3 +1,4 @@
+// Created and developed by Jai Singh
 import { Header } from '@/components/layout/header'
 import { Main } from '@/components/layout/main'
 import { ProfileDropdown } from '@/components/profile-dropdown'
@@ -40,3 +41,5 @@ export default function Tasks() {
     </TasksProvider>
   )
 }
+
+// Created and developed by Jai Singh

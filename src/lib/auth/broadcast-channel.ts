@@ -1,3 +1,4 @@
+// Created and developed by Jai Singh
 import { logger } from '@/lib/utils/logger'
 
 /**
@@ -20,7 +21,7 @@ type AuthBroadcastMessage =
 
 type AuthBroadcastListener = (message: AuthBroadcastMessage) => void
 
-const CHANNEL_NAME = 'omniframe-auth-channel'
+const CHANNEL_NAME = 'onebox-auth-channel'
 
 class AuthBroadcastChannelManager {
   private channel: BroadcastChannel | null = null
@@ -83,4 +84,5 @@ class AuthBroadcastChannelManager {
 // Singleton instance
 export const authBroadcast = new AuthBroadcastChannelManager()
 export type { AuthBroadcastMessage, AuthBroadcastListener }
-// Developer and Creator: Jai Singh
+
+// Created and developed by Jai Singh

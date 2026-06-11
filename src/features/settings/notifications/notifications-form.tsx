@@ -1,3 +1,4 @@
+// Created and developed by Jai Singh
 import { z } from 'zod'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
@@ -218,3 +219,5 @@ export function NotificationsForm() {
     </Form>
   )
 }
+
+// Created and developed by Jai Singh

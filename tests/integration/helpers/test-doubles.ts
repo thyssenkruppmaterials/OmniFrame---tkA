@@ -1,3 +1,4 @@
+// Created and developed by Jai Singh
 /**
  * Deterministic test doubles for volatile subsystems.
  *
@@ -325,3 +326,5 @@ export class FakeDatabaseConnectionPool {
     return { status: 'healthy', message: 'Fake pool', details: {} }
   }
 }
+
+// Created and developed by Jai Singh

@@ -1,3 +1,4 @@
+// Created and developed by Jai Singh
 /**
  * RF Picking Operations Service
  * Handles all picking-related database operations for RF Terminal
@@ -473,4 +474,5 @@ export const validateLocation = (
 
 // Export singleton instance
 export const rfPickingService = new RFPickingService()
-// Developer and Creator: Jai Singh
+
+// Created and developed by Jai Singh

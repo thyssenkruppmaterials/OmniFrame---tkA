@@ -1,3 +1,4 @@
+// Created and developed by Jai Singh
 import { useQuery } from '@tanstack/react-query'
 import { DeviceManagerService } from '@/lib/supabase/device-manager.service'
 
@@ -18,3 +19,5 @@ export function useComplianceViolations(
     staleTime: 30_000,
   })
 }
+
+// Created and developed by Jai Singh

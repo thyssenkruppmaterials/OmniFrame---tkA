@@ -1,3 +1,4 @@
+// Created and developed by Jai Singh
 //! Request tracing middleware
 
 use axum::{
@@ -82,3 +83,5 @@ fn sanitize_path(path: &str) -> String {
     let numeric_regex = regex_lite::Regex::new(r"/\d+(/|$)").unwrap();
     numeric_regex.replace_all(&sanitized, "/{id}$1").to_string()
 }
+
+// Created and developed by Jai Singh

@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
+# Created and developed by Jai Singh
 """
-Development startup script for OmniFrame Logistics FastAPI
+Development startup script for OneBox AI Logistics FastAPI
 """
 
 import uvicorn
@@ -14,7 +15,7 @@ sys.path.insert(0, str(api_dir))
 
 def main():
     """Start the FastAPI development server"""
-    print("🚀 Starting OmniFrame Logistics FastAPI Development Server...")
+    print("🚀 Starting OneBox AI Logistics FastAPI Development Server...")
     print("📊 Analytics API will be available at: http://localhost:8000/api/analytics")
     print("📈 Reports API will be available at: http://localhost:8000/api/reports")
     print("📚 API Documentation: http://localhost:8000/docs")
@@ -31,3 +32,5 @@ def main():
 
 if __name__ == "__main__":
     main()
+
+# Created and developed by Jai Singh

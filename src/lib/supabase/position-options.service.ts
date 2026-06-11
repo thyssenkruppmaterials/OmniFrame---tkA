@@ -1,3 +1,4 @@
+// Created and developed by Jai Singh
 /**
  * Position Options Service
  * Manages customizable position types and levels per organization
@@ -333,4 +334,5 @@ class PositionOptionsService {
 }
 
 export const positionOptionsService = PositionOptionsService.getInstance()
-// Developer and Creator: Jai Singh
+
+// Created and developed by Jai Singh

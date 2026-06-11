@@ -1,3 +1,4 @@
+// Created and developed by Jai Singh
 import { HTMLAttributes, useState } from 'react'
 import { z } from 'zod'
 import { useForm } from 'react-hook-form'
@@ -173,3 +174,5 @@ export function UserAuthForm({ className, ...props }: UserAuthFormProps) {
     </Form>
   )
 }
+
+// Created and developed by Jai Singh

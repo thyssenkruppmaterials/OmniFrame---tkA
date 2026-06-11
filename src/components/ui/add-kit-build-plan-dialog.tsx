@@ -1,3 +1,4 @@
+// Created and developed by Jai Singh
 /**
  * Add to Kit Build Plan Dialog
  * Dialog for creating new kit build plan entries
@@ -13,21 +14,32 @@ import {
   ClipboardPaste,
   Loader2,
   Package,
+  Palette,
   Plus,
   Trash2,
   X,
 } from 'lucide-react'
 import { toast } from 'sonner'
+import { detectNonWarehouseBins } from '@/lib/kitting/non-warehouse-bins'
+import { withCurrentPlantOption } from '@/lib/kitting/plant-locations'
 import {
   KitDefinitionsService,
+  KIT_CART_COLORS,
   type BomComponent,
   type KitDefinitionRecord,
 } from '@/lib/supabase/kit-definitions.service'
+import type { KittingDropdownOption } from '@/lib/supabase/kitting-options.service'
 import { cn } from '@/lib/utils'
 import { logger } from '@/lib/utils/logger'
+import { useKittingOptions } from '@/hooks/use-kitting-options'
+import {
+  useDeliverToPlantLocations,
+  useNonWarehouseBinPatterns,
+} from '@/hooks/use-kitting-workflow-settings'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Calendar } from '@/components/ui/calendar'
+import { ColorPickerInput } from '@/components/ui/color-picker-input'
 import {
   Dialog,
   DialogContent,
@@ -57,6 +69,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
+import { NonWarehouseBinNotice } from '@/components/kitting/non-warehouse-bin-notice'
 
 // Transfer Order record structure matching Excel columns
 export interface TransferOrderRecord {
@@ -97,6 +110,14 @@ export interface AuthorizedShipShortItem {
 export interface BomCoverageResult {
   matched: BomComponent[]
   unmatched: BomComponent[]
+  /**
+   * Subset of `matched` whose coverage was satisfied ONLY by an
+   * `Authorized to Ship Short` entry (not by an imported TO row or an
+   * INCORA reference). Used by the dialog UI to render a distinct
+   * "Ship Short" badge so the operator knows the BOM hole is intentional
+   * rather than a true match.
+   */
+  matchedViaShipShort: BomComponent[]
   isComplete: boolean
 }
 
@@ -112,6 +133,9 @@ export interface KitBuildPlanFormData {
   authorizedShipShortItems: AuthorizedShipShortItem[]
   kitDefinitionId?: string
   bomCoverage?: BomCoverageResult
+  kitCartColor?: string
+  kitContainerType?: string
+  chargeCode?: string
 }
 
 interface AddKitBuildPlanDialogProps {
@@ -143,38 +167,35 @@ const EXPECTED_HEADERS = [
   'Special Stock Number',
 ]
 
-const ENGINE_PROGRAMS = [
-  '1107C',
-  '2100D2A',
-  '2100D3 (40/50)',
-  '2100D3 (40/50 WGB)',
-  '2100D3 (60/90)',
-  '2100D3 (60/90 WGB)',
-  '3007H',
-  '3007N',
-  'A427',
-  'B17F',
-  'C20W',
-  'C30HU',
-  'C47E',
-  'KS4',
-  'Liftfan',
-  'Liftworks',
-  'MT5S HE+',
-  'MT7',
-  'RR300',
-]
+function withCurrentOption(
+  options: KittingDropdownOption[],
+  currentValue?: string
+) {
+  if (!currentValue) return options
+  const exists = options.some((option) => option.option_value === currentValue)
+  if (exists) return options
+  return [
+    ...options,
+    {
+      id: `current-${currentValue}`,
+      organization_id: '',
+      option_group: options[0]?.option_group ?? 'engine_program',
+      option_value: currentValue,
+      option_label: currentValue,
+      description: null,
+      display_order: options.length,
+      is_active: false,
+      created_at: '',
+      updated_at: '',
+    },
+  ]
+}
 
-const PLANT_LOCATIONS = [
-  'Plant A - Main Assembly',
-  'Plant B - Component Shop',
-  'Plant C - Engine Test',
-  'Plant D - Logistics Hub',
-  'Plant E - Quality Center',
-  'Warehouse 1',
-  'Warehouse 2',
-  'Shipping Dock',
-]
+function buildLabelMap(options: KittingDropdownOption[]) {
+  return Object.fromEntries(
+    options.map((option) => [option.option_value, option.option_label])
+  ) as Record<string, string>
+}
 
 export function parseClipboardData(text: string): TransferOrderRecord[] {
   // Normalize line endings (Windows \r\n to \n) and trim
@@ -239,9 +260,16 @@ export function AddKitBuildPlanDialog({
   onOpenChange,
   onSubmit,
 }: AddKitBuildPlanDialogProps) {
+  const { activeOptionsByGroup } = useKittingOptions()
+  const nonWarehouseBinPatterns = useNonWarehouseBinPatterns()
   const [isSubmitting, setIsSubmitting] = React.useState(false)
   const [isImporting, setIsImporting] = React.useState(false)
   const [calendarOpen, setCalendarOpen] = React.useState(false)
+  // Operator must explicitly tick this box when imported TO rows
+  // reference a non-warehouse bin (see migration 314 +
+  // [[Non-Warehouse-Bin-Acknowledgment]]). Reseeded to false every
+  // time the dialog opens — the ack is per-submission, not persistent.
+  const [nonWarehouseBinAck, setNonWarehouseBinAck] = React.useState(false)
   const [kitDefinitions, setKitDefinitions] = React.useState<
     KitDefinitionRecord[]
   >([])
@@ -260,6 +288,30 @@ export function AddKitBuildPlanDialog({
     incoraItems: [],
     authorizedShipShortItems: [],
   })
+  const engineProgramOptions = withCurrentOption(
+    activeOptionsByGroup.engine_program ?? [],
+    formData.engineProgram
+  )
+  // "Deliver To Plant" dropdown is now sourced from
+  // `kitting_workflow_settings.deliver_to_plant_locations`
+  // (migration 324) so floor leads can edit the list from Settings →
+  // Workflow Settings. `withCurrentPlantOption` keeps a saved-but-
+  // since-removed value visible in the dropdown so re-opening an old
+  // kit doesn't render an empty Select.
+  const configuredPlantLocations = useDeliverToPlantLocations()
+  const plantLocationOptions = withCurrentPlantOption(
+    configuredPlantLocations,
+    formData.deliverToPlant
+  )
+  const kitContainerLabelMap = buildLabelMap(
+    activeOptionsByGroup.kit_container_type ?? []
+  )
+  const chargeCodeLabelMap = buildLabelMap(
+    activeOptionsByGroup.charge_code ?? []
+  )
+  const partContainerLabelMap = buildLabelMap(
+    activeOptionsByGroup.bom_line_container_type ?? []
+  )
 
   React.useEffect(() => {
     KitDefinitionsService.listActive()
@@ -272,17 +324,120 @@ export function AddKitBuildPlanDialog({
     const toMaterials = new Set(
       formData.importedTOs.map((to) => to.material.trim().toUpperCase())
     )
+    const incoraValues = new Set(
+      formData.incoraItems
+        .map((item) => item.value.trim().toUpperCase())
+        .filter(Boolean)
+    )
+    // Operator-entered "Authorized to Ship Short" part numbers explicitly
+    // negate the Black Hat for that BOM line — the kit is allowed to
+    // leave the floor without those parts. Match them by part number
+    // against the BOM primary materialNumber or any deviation substitute.
+    // Does not apply to incora_sub_kit rows because those have no
+    // material number — only an INCORA reference.
+    const shipShortPartNumbers = new Set(
+      formData.authorizedShipShortItems
+        .map((item) => item.partNumber.trim().toUpperCase())
+        .filter(Boolean)
+    )
+
     const matched: BomComponent[] = []
     const unmatched: BomComponent[] = []
+    const matchedViaShipShort: BomComponent[] = []
     for (const c of bomComponents) {
-      if (toMaterials.has(c.materialNumber.trim().toUpperCase())) {
+      if (c.coverageMode === 'informational') {
         matched.push(c)
+        continue
+      }
+
+      if (c.componentType === 'incora_sub_kit') {
+        const ref = (c.incoraReference ?? '').trim().toUpperCase()
+        if (ref && incoraValues.has(ref)) {
+          matched.push(c)
+        } else {
+          unmatched.push(c)
+        }
+        continue
+      }
+
+      if (c.componentType === 'incora_component') {
+        const primary = c.materialNumber.trim().toUpperCase()
+        const ref = (c.incoraReference ?? '').trim().toUpperCase()
+        const deviationNums = (c.deviations ?? []).map((d) =>
+          d.substituteMaterialNumber.trim().toUpperCase()
+        )
+        const matAccept = [primary, ...deviationNums].filter(Boolean)
+        const matMatch = matAccept.some((num) => toMaterials.has(num))
+        const refMatch = !!ref && incoraValues.has(ref)
+        if (matMatch || refMatch) {
+          matched.push(c)
+        } else if (matAccept.some((num) => shipShortPartNumbers.has(num))) {
+          matched.push(c)
+          matchedViaShipShort.push(c)
+        } else {
+          unmatched.push(c)
+        }
+        continue
+      }
+
+      const primary = c.materialNumber.trim().toUpperCase()
+      const deviationNums = (c.deviations ?? []).map((d) =>
+        d.substituteMaterialNumber.trim().toUpperCase()
+      )
+      const allAcceptable = [primary, ...deviationNums].filter(Boolean)
+      if (allAcceptable.some((num) => toMaterials.has(num))) {
+        matched.push(c)
+      } else if (allAcceptable.some((num) => shipShortPartNumbers.has(num))) {
+        matched.push(c)
+        matchedViaShipShort.push(c)
       } else {
         unmatched.push(c)
       }
     }
-    return { matched, unmatched, isComplete: unmatched.length === 0 }
-  }, [bomComponents, formData.importedTOs])
+    return {
+      matched,
+      unmatched,
+      matchedViaShipShort,
+      isComplete: unmatched.length === 0,
+    }
+  }, [
+    bomComponents,
+    formData.importedTOs,
+    formData.incoraItems,
+    formData.authorizedShipShortItems,
+  ])
+
+  /**
+   * Detection of TOs that reference a non-warehouse bin. Driven by the
+   * org-level `non_warehouse_bin_patterns` setting (migration 314). The
+   * notice card mounts when `hasMatches === true` and the submit
+   * button is gated on `nonWarehouseBinAck`.
+   *
+   * Reset the acknowledgement whenever the set of triggered bins or
+   * patterns changes — re-importing a different batch of TOs counts as
+   * a new acknowledgement, even if the operator had previously ticked
+   * the box for the earlier batch.
+   */
+  const nonWarehouseBinDetection = React.useMemo(
+    () => detectNonWarehouseBins(formData.importedTOs, nonWarehouseBinPatterns),
+    [formData.importedTOs, nonWarehouseBinPatterns]
+  )
+
+  const detectionFingerprint = React.useMemo(
+    () =>
+      nonWarehouseBinDetection.matches
+        .map(
+          (m) =>
+            `${m.record.transferOrderNumber}|${m.sourceStorageBin}|${m.record.material}`
+        )
+        .sort()
+        .join('::'),
+    [nonWarehouseBinDetection.matches]
+  )
+
+  React.useEffect(() => {
+    setNonWarehouseBinAck(false)
+  }, [detectionFingerprint])
 
   const handleKitDefinitionChange = (definitionId: string) => {
     const def = kitDefinitions.find((d) => d.id === definitionId) ?? null
@@ -290,17 +445,38 @@ export function AddKitBuildPlanDialog({
     if (def) {
       const components = (def.required_components ?? []) as BomComponent[]
       setBomComponents(components)
+
+      const incoraFromBom: IncoraItem[] = components
+        .filter(
+          (c) =>
+            (c.componentType === 'incora_sub_kit' ||
+              c.componentType === 'incora_component') &&
+            c.incoraReference?.trim()
+        )
+        .map((c, i) => ({
+          lineNumber: i + 1,
+          value: c.incoraReference!.trim(),
+        }))
+
       setFormData((prev) => ({
         ...prev,
         kitNumber: def.kit_number,
         engineProgram: def.engine_program ?? '',
         kitDefinitionId: def.id,
+        kitCartColor: def.default_kit_cart_color ?? undefined,
+        kitContainerType: def.kit_container_type ?? undefined,
+        chargeCode: def.charge_code ?? undefined,
+        incoraItems: incoraFromBom,
       }))
     } else {
       setBomComponents([])
       setFormData((prev) => ({
         ...prev,
         kitDefinitionId: undefined,
+        kitCartColor: undefined,
+        kitContainerType: undefined,
+        chargeCode: undefined,
+        incoraItems: [],
       }))
     }
   }
@@ -463,6 +639,20 @@ export function AddKitBuildPlanDialog({
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
+
+    // Defence-in-depth: the submit button is already disabled when the
+    // ack is missing, but if a user finds a way to bypass that (e.g.
+    // Enter key on a non-button focus) we surface a toast and abort
+    // here too rather than silently saving a kit with unhandled
+    // external-plant bins.
+    if (nonWarehouseBinDetection.hasMatches && !nonWarehouseBinAck) {
+      toast.error('Acknowledge External Plant Bins', {
+        description:
+          'Tick the acknowledgement checkbox on the External Plant Bins notice before saving.',
+      })
+      return
+    }
+
     setIsSubmitting(true)
 
     await onSubmit({ ...formData, bomCoverage })
@@ -470,6 +660,7 @@ export function AddKitBuildPlanDialog({
     setIsSubmitting(false)
     setSelectedDefinition(null)
     setBomComponents([])
+    setNonWarehouseBinAck(false)
     setFormData({
       kitBuildNumber: '',
       kitPoNumber: '',
@@ -480,6 +671,10 @@ export function AddKitBuildPlanDialog({
       importedTOs: [],
       incoraItems: [],
       authorizedShipShortItems: [],
+      kitCartColor: undefined,
+      kitDefinitionId: undefined,
+      kitContainerType: undefined,
+      chargeCode: undefined,
     })
   }
 
@@ -488,6 +683,7 @@ export function AddKitBuildPlanDialog({
       onOpenChange(false)
       setSelectedDefinition(null)
       setBomComponents([])
+      setNonWarehouseBinAck(false)
       setFormData({
         kitBuildNumber: '',
         kitPoNumber: '',
@@ -498,6 +694,10 @@ export function AddKitBuildPlanDialog({
         importedTOs: [],
         incoraItems: [],
         authorizedShipShortItems: [],
+        kitCartColor: undefined,
+        kitDefinitionId: undefined,
+        kitContainerType: undefined,
+        chargeCode: undefined,
       })
     }
   }
@@ -508,11 +708,12 @@ export function AddKitBuildPlanDialog({
     formData.engineProgram !== '' &&
     formData.kitNumber.trim() !== '' &&
     formData.deliverToPlant !== '' &&
-    formData.dueDate !== undefined
+    formData.dueDate !== undefined &&
+    (!nonWarehouseBinDetection.hasMatches || nonWarehouseBinAck)
 
   return (
     <Dialog open={isOpen} onOpenChange={handleClose}>
-      <DialogContent className='max-h-[90vh] overflow-y-auto sm:max-w-[600px]'>
+      <DialogContent className='max-h-[72vh] overflow-y-auto sm:max-w-[960px]'>
         <DialogHeader>
           <DialogTitle className='flex items-center gap-2'>
             <Package className='h-5 w-5' />
@@ -615,9 +816,12 @@ export function AddKitBuildPlanDialog({
                       <SelectValue placeholder='Select engine program' />
                     </SelectTrigger>
                     <SelectContent>
-                      {ENGINE_PROGRAMS.map((program) => (
-                        <SelectItem key={program} value={program}>
-                          {program}
+                      {engineProgramOptions.map((option) => (
+                        <SelectItem
+                          key={option.id || option.option_value}
+                          value={option.option_value}
+                        >
+                          {option.option_label}
                         </SelectItem>
                       ))}
                     </SelectContent>
@@ -654,19 +858,35 @@ export function AddKitBuildPlanDialog({
                     onValueChange={(value) =>
                       handleFieldChange('deliverToPlant', value)
                     }
-                    disabled={isSubmitting}
+                    disabled={isSubmitting || plantLocationOptions.length === 0}
                   >
                     <SelectTrigger id='deliver-to-plant' className='w-full'>
-                      <SelectValue placeholder='Select destination' />
+                      <SelectValue
+                        placeholder={
+                          plantLocationOptions.length === 0
+                            ? 'No plants configured — add some in Settings'
+                            : 'Select destination'
+                        }
+                      />
                     </SelectTrigger>
                     <SelectContent>
-                      {PLANT_LOCATIONS.map((plant) => (
+                      {plantLocationOptions.map((plant) => (
                         <SelectItem key={plant} value={plant}>
                           {plant}
                         </SelectItem>
                       ))}
                     </SelectContent>
                   </Select>
+                  {plantLocationOptions.length === 0 && (
+                    <FieldDescription>
+                      Add plant destinations from{' '}
+                      <span className='font-medium'>
+                        Settings → Workflow Settings → Deliver To Plant
+                        Locations
+                      </span>
+                      .
+                    </FieldDescription>
+                  )}
                 </Field>
 
                 <Field>
@@ -709,7 +929,44 @@ export function AddKitBuildPlanDialog({
                 </Field>
               </div>
 
-              {/* Row 4: Import TO's from clipboard */}
+              {/* Row 4: Kit Cart Color */}
+              <Field>
+                <FieldLabel>
+                  <span className='flex items-center gap-1.5'>
+                    <Palette className='h-3.5 w-3.5' />
+                    Kit Cart Color
+                  </span>
+                </FieldLabel>
+                <ColorPickerInput
+                  value={formData.kitCartColor ?? ''}
+                  onChange={(value) =>
+                    handleFieldChange('kitCartColor', value || undefined)
+                  }
+                  disabled={isSubmitting}
+                  placeholder='#22c55e'
+                  presetColors={KIT_CART_COLORS}
+                />
+                {formData.kitCartColor && (
+                  <div className='mt-2 flex items-center gap-2 text-xs'>
+                    <div
+                      className='h-3 w-3 rounded-full'
+                      style={{ backgroundColor: formData.kitCartColor }}
+                    />
+                    <span className='text-muted-foreground'>
+                      {KIT_CART_COLORS.find(
+                        (c) => c.value === formData.kitCartColor
+                      )?.label ?? formData.kitCartColor}{' '}
+                      — shown on printed build sheet sidebar
+                    </span>
+                  </div>
+                )}
+                <FieldDescription>
+                  Optional. Select a color for the kit build sheet sidebar to
+                  identify the cart configuration.
+                </FieldDescription>
+              </Field>
+
+              {/* Row 5: Import TO's from clipboard */}
               <Field>
                 <FieldLabel>Import Transfer Orders</FieldLabel>
                 <div className='space-y-3'>
@@ -747,31 +1004,43 @@ export function AddKitBuildPlanDialog({
                   </div>
 
                   {formData.importedTOs.length > 0 ? (
-                    <div className='rounded-md border border-green-500/30 bg-green-500/10 p-3'>
-                      <div className='flex items-center gap-2 text-sm text-green-700 dark:text-green-400'>
-                        <CheckCircle2 className='h-4 w-4' />
-                        <span className='font-medium'>
-                          {formData.importedTOs.length} Transfer Order
-                          {formData.importedTOs.length === 1 ? '' : 's'}{' '}
-                          imported
-                        </span>
+                    <div className='space-y-3'>
+                      <div className='rounded-md border border-green-500/30 bg-green-500/10 p-3'>
+                        <div className='flex items-center gap-2 text-sm text-green-700 dark:text-green-400'>
+                          <CheckCircle2 className='h-4 w-4' />
+                          <span className='font-medium'>
+                            {formData.importedTOs.length} Transfer Order
+                            {formData.importedTOs.length === 1 ? '' : 's'}{' '}
+                            imported
+                          </span>
+                        </div>
+                        <div className='mt-2 flex flex-wrap gap-1.5'>
+                          {formData.importedTOs.slice(0, 5).map((to, idx) => (
+                            <Badge
+                              key={idx}
+                              variant='secondary'
+                              className='text-xs'
+                            >
+                              TO: {to.transferOrderNumber}
+                            </Badge>
+                          ))}
+                          {formData.importedTOs.length > 5 && (
+                            <Badge variant='outline' className='text-xs'>
+                              +{formData.importedTOs.length - 5} more
+                            </Badge>
+                          )}
+                        </div>
                       </div>
-                      <div className='mt-2 flex flex-wrap gap-1.5'>
-                        {formData.importedTOs.slice(0, 5).map((to, idx) => (
-                          <Badge
-                            key={idx}
-                            variant='secondary'
-                            className='text-xs'
-                          >
-                            TO: {to.transferOrderNumber}
-                          </Badge>
-                        ))}
-                        {formData.importedTOs.length > 5 && (
-                          <Badge variant='outline' className='text-xs'>
-                            +{formData.importedTOs.length - 5} more
-                          </Badge>
-                        )}
-                      </div>
+
+                      {/* External-plant-bin acknowledgement card —
+                          self-hides when no TO row matches a
+                          non-warehouse pattern. */}
+                      <NonWarehouseBinNotice
+                        detection={nonWarehouseBinDetection}
+                        acknowledged={nonWarehouseBinAck}
+                        onAcknowledgedChange={setNonWarehouseBinAck}
+                        disabled={isSubmitting}
+                      />
                     </div>
                   ) : (
                     <div className='border-muted-foreground/30 bg-muted/30 rounded-md border border-dashed p-3'>
@@ -796,44 +1065,146 @@ export function AddKitBuildPlanDialog({
                 </FieldDescription>
               </Field>
 
+              {/* Container Type Preview */}
+              {formData.kitContainerType && (
+                <Field>
+                  <FieldLabel>Container Type</FieldLabel>
+                  <Badge variant='outline' className='w-fit text-xs'>
+                    {kitContainerLabelMap[formData.kitContainerType] ??
+                      formData.kitContainerType}
+                  </Badge>
+                  <FieldDescription>
+                    From the selected kit definition.
+                  </FieldDescription>
+                </Field>
+              )}
+
+              {formData.chargeCode && (
+                <Field>
+                  <FieldLabel>Charge Code</FieldLabel>
+                  <Badge variant='outline' className='w-fit text-xs'>
+                    {chargeCodeLabelMap[formData.chargeCode] ??
+                      formData.chargeCode}
+                  </Badge>
+                  <FieldDescription>
+                    Will print on the kit build sheet.
+                  </FieldDescription>
+                </Field>
+              )}
+
               {/* BOM Pick List Preview */}
               {bomComponents.length > 0 && (
                 <Field>
                   <FieldLabel>
-                    BOM Pick List ({bomComponents.length} materials)
+                    BOM Pick List ({bomComponents.length} components)
                   </FieldLabel>
                   <div className='max-h-48 space-y-1 overflow-y-auto rounded-md border p-3'>
                     {bomComponents.map((c, idx) => {
-                      const isCovered =
-                        formData.importedTOs.length > 0 &&
-                        formData.importedTOs.some(
-                          (to) =>
-                            to.material.trim().toUpperCase() ===
-                            c.materialNumber.trim().toUpperCase()
-                        )
-                      const hasTOs = formData.importedTOs.length > 0
+                      const isIncoraSubKit =
+                        c.componentType === 'incora_sub_kit'
+                      const isIncoraComponent =
+                        c.componentType === 'incora_component'
+                      const isInfo = c.coverageMode === 'informational'
+                      const coveredEntry = bomCoverage
+                        ? bomCoverage.matched.includes(c)
+                        : false
+                      const coveredViaShipShort = bomCoverage
+                        ? bomCoverage.matchedViaShipShort.includes(c)
+                        : false
+                      const hasData =
+                        formData.importedTOs.length > 0 ||
+                        formData.incoraItems.length > 0 ||
+                        formData.authorizedShipShortItems.length > 0
+                      const displayId = isIncoraSubKit
+                        ? (c.incoraReference ?? '')
+                        : isIncoraComponent
+                          ? c.materialNumber || c.incoraReference || ''
+                          : c.materialNumber
                       return (
                         <div
                           key={idx}
                           className={cn(
                             'flex items-center gap-2 rounded px-2 py-1 text-xs',
-                            hasTOs && isCovered && 'bg-green-500/10',
-                            hasTOs && !isCovered && 'bg-red-500/10'
+                            isInfo && 'opacity-60',
+                            hasData &&
+                              coveredEntry &&
+                              !coveredViaShipShort &&
+                              'bg-green-500/10',
+                            hasData && coveredViaShipShort && 'bg-amber-500/10',
+                            hasData &&
+                              !coveredEntry &&
+                              !isInfo &&
+                              'bg-red-500/10'
                           )}
                         >
-                          {hasTOs ? (
-                            isCovered ? (
-                              <CheckCircle2 className='h-3.5 w-3.5 shrink-0 text-green-600 dark:text-green-400' />
+                          {hasData && !isInfo ? (
+                            coveredEntry ? (
+                              <CheckCircle2
+                                className={cn(
+                                  'h-3.5 w-3.5 shrink-0',
+                                  coveredViaShipShort
+                                    ? 'text-amber-600 dark:text-amber-400'
+                                    : 'text-green-600 dark:text-green-400'
+                                )}
+                              />
                             ) : (
                               <AlertTriangle className='h-3.5 w-3.5 shrink-0 text-red-600 dark:text-red-400' />
                             )
                           ) : (
                             <Package className='text-muted-foreground h-3.5 w-3.5 shrink-0' />
                           )}
-                          <span className='font-mono'>{c.materialNumber}</span>
+                          {isIncoraSubKit && (
+                            <Badge
+                              variant='outline'
+                              className='px-1 py-0 text-[9px]'
+                            >
+                              INCORA Sub-Kit
+                            </Badge>
+                          )}
+                          {isIncoraComponent && (
+                            <Badge
+                              variant='outline'
+                              className='px-1 py-0 text-[9px]'
+                            >
+                              INCORA Component
+                            </Badge>
+                          )}
+                          <span className='font-mono'>{displayId}</span>
+                          {isIncoraComponent &&
+                            c.materialNumber &&
+                            c.incoraReference && (
+                              <span className='text-muted-foreground/80 font-mono text-[10px]'>
+                                ({c.incoraReference})
+                              </span>
+                            )}
                           <span className='text-muted-foreground truncate'>
                             {c.materialDescription}
                           </span>
+                          {coveredViaShipShort && (
+                            <Badge
+                              variant='outline'
+                              className='border-amber-500/40 px-1 py-0 text-[9px] text-amber-700 dark:text-amber-300'
+                            >
+                              Ship Short
+                            </Badge>
+                          )}
+                          {c.partContainerType && (
+                            <Badge
+                              variant='secondary'
+                              className='px-1 py-0 text-[9px]'
+                            >
+                              {partContainerLabelMap[c.partContainerType] ??
+                                c.partContainerType}
+                            </Badge>
+                          )}
+                          {isInfo && (
+                            <Badge
+                              variant='secondary'
+                              className='px-1 py-0 text-[9px]'
+                            >
+                              Info
+                            </Badge>
+                          )}
                           <span className='text-muted-foreground ml-auto shrink-0'>
                             Qty: {c.requiredQuantity}
                           </span>
@@ -841,36 +1212,63 @@ export function AddKitBuildPlanDialog({
                       )
                     })}
                   </div>
-                  {bomCoverage && formData.importedTOs.length > 0 && (
-                    <div className='mt-2'>
-                      {bomCoverage.isComplete ? (
-                        <div className='flex items-center gap-2 text-sm text-green-700 dark:text-green-400'>
-                          <CheckCircle2 className='h-4 w-4' />
-                          All {bomComponents.length} BOM materials covered by
-                          imported TOs
-                        </div>
-                      ) : (
-                        <div className='rounded-md border border-red-500/30 bg-red-500/10 p-3'>
-                          <div className='flex items-center gap-2 text-sm font-medium text-red-700 dark:text-red-400'>
-                            <AlertTriangle className='h-4 w-4' />
-                            {bomCoverage.unmatched.length} of{' '}
-                            {bomComponents.length} BOM material(s) missing — Kit
-                            will be flagged as Black Hat
+                  {bomCoverage &&
+                    (formData.importedTOs.length > 0 ||
+                      formData.incoraItems.length > 0 ||
+                      formData.authorizedShipShortItems.length > 0) && (
+                      <div className='mt-2'>
+                        {bomCoverage.isComplete ? (
+                          <div className='flex items-center gap-2 text-sm text-green-700 dark:text-green-400'>
+                            <CheckCircle2 className='h-4 w-4' />
+                            All required BOM components covered
+                            {bomCoverage.matchedViaShipShort.length > 0 && (
+                              <span className='text-amber-700 dark:text-amber-300'>
+                                ({bomCoverage.matchedViaShipShort.length}{' '}
+                                authorized to ship short)
+                              </span>
+                            )}
                           </div>
-                          <div className='mt-1.5 space-y-0.5'>
-                            {bomCoverage.unmatched.map((c, i) => (
-                              <p
-                                key={i}
-                                className='text-xs text-red-600 dark:text-red-300'
-                              >
-                                {c.materialNumber} — {c.materialDescription}
-                              </p>
-                            ))}
+                        ) : (
+                          <div className='rounded-md border border-red-500/30 bg-red-500/10 p-3'>
+                            <div className='flex items-center gap-2 text-sm font-medium text-red-700 dark:text-red-400'>
+                              <AlertTriangle className='h-4 w-4' />
+                              {bomCoverage.unmatched.length} required BOM
+                              component(s) missing — Kit will be flagged as
+                              Black Hat
+                            </div>
+                            <div className='mt-1.5 space-y-0.5'>
+                              {bomCoverage.unmatched.map((c, i) => {
+                                let label: string
+                                if (c.componentType === 'incora_sub_kit') {
+                                  label = `INCORA: ${c.incoraReference}`
+                                } else if (
+                                  c.componentType === 'incora_component'
+                                ) {
+                                  const matPart = c.materialNumber || ''
+                                  const refPart = c.incoraReference
+                                    ? `INCORA: ${c.incoraReference}`
+                                    : ''
+                                  label =
+                                    matPart && refPart
+                                      ? `${matPart} / ${refPart}`
+                                      : matPart || refPart || ''
+                                } else {
+                                  label = c.materialNumber
+                                }
+                                return (
+                                  <p
+                                    key={i}
+                                    className='text-xs text-red-600 dark:text-red-300'
+                                  >
+                                    {label} — {c.materialDescription}
+                                  </p>
+                                )
+                              })}
+                            </div>
                           </div>
-                        </div>
-                      )}
-                    </div>
-                  )}
+                        )}
+                      </div>
+                    )}
                 </Field>
               )}
 
@@ -1008,7 +1406,9 @@ export function AddKitBuildPlanDialog({
                 </div>
                 <FieldDescription>
                   Optional. Document parts authorized to ship short for this kit
-                  (max 7 items).
+                  (max 7 items). A part number listed here negates the Black Hat
+                  flag for the matching BOM line so the kit can be picked
+                  without that material on hand.
                 </FieldDescription>
               </Field>
             </FieldGroup>
@@ -1039,3 +1439,5 @@ export function AddKitBuildPlanDialog({
     </Dialog>
   )
 }
+
+// Created and developed by Jai Singh

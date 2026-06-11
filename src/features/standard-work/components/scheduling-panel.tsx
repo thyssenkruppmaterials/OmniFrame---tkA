@@ -1,8 +1,9 @@
+// Created and developed by Jai Singh
 /**
  * Scheduling Panel Component
  * Configuration panel for template scheduling (daily/weekly/monthly)
  */
-import { useState, useEffect } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import {
   Calendar,
   Clock,
@@ -10,11 +11,11 @@ import {
   AlertCircle,
   CalendarDays,
   CalendarRange,
+  Globe,
   Repeat,
   Save,
   Loader2,
 } from 'lucide-react'
-import { toast } from 'sonner'
 import { cn } from '@/lib/utils'
 import { logger } from '@/lib/utils/logger'
 import {
@@ -184,13 +185,14 @@ export function SchedulingPanel({
         notify_on_overdue: notifyOnOverdue,
       }
 
-      // Update frequency separately (it's on the template)
+      // Two mutations: frequency lives on the template row; the rest live in
+      // the dedicated schedule columns. The mutations themselves toast on
+      // success/failure -- we deliberately don't toast a third time here.
       await updateTemplate({
         id: template.id,
         updates: { frequency },
       })
 
-      // Update schedule config
       await updateTemplateSchedule({
         templateId: template.id,
         scheduleConfig,
@@ -199,11 +201,10 @@ export function SchedulingPanel({
         notificationSettings,
       })
 
-      toast.success('Schedule updated successfully')
       onOpenChange(false)
     } catch (error) {
       logger.error('Failed to save schedule:', error)
-      toast.error('Failed to save schedule')
+      // The originating mutation already toasted the failure; no second toast.
     }
   }
 
@@ -254,6 +255,64 @@ export function SchedulingPanel({
     return s[(v - 20) % 10] || s[v] || s[0]
   }
 
+  // Browser timezone for the due-time input. Shown as a small label so users
+  // know whether 09:00 means 9 AM local or in some shared facility timezone.
+  const browserTimezone = useMemo(
+    () =>
+      typeof Intl !== 'undefined'
+        ? Intl.DateTimeFormat().resolvedOptions().timeZone
+        : 'local',
+    []
+  )
+
+  // Compute the next 5 occurrence dates client-side from the current local
+  // schedule + due time. This is a preview; the canonical generator lives in
+  // SQL (`get_scheduled_tasks_for_date`) but this helps users sanity-check
+  // their selections before saving.
+  const nextOccurrences = useMemo(() => {
+    const out: Date[] = []
+    const now = new Date()
+    const cursor = new Date(now)
+    cursor.setHours(0, 0, 0, 0)
+    const limit = 60 // look 60 days ahead at most
+    const matches = (d: Date) => {
+      switch (frequency) {
+        case 'daily':
+          return true
+        case 'weekly':
+          return daysOfWeek.includes(d.getDay())
+        case 'monthly': {
+          const dom = d.getDate()
+          const lastDayOfMonth = new Date(
+            d.getFullYear(),
+            d.getMonth() + 1,
+            0
+          ).getDate()
+          if (endOfMonth && dom === lastDayOfMonth) return true
+          return daysOfMonth.includes(dom)
+        }
+        case 'shift_start':
+        case 'shift_end':
+        case 'as_needed':
+        default:
+          return false
+      }
+    }
+    for (let i = 0; i < limit && out.length < 5; i++) {
+      const d = new Date(cursor)
+      d.setDate(d.getDate() + i)
+      if (!matches(d)) continue
+      if (dueTime) {
+        const [h = '00', m = '00'] = dueTime.split(':')
+        d.setHours(parseInt(h, 10) || 0, parseInt(m, 10) || 0, 0, 0)
+      }
+      // Skip occurrences already in the past for today.
+      if (d.getTime() < now.getTime()) continue
+      out.push(d)
+    }
+    return out
+  }, [frequency, daysOfWeek, daysOfMonth, endOfMonth, dueTime])
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className='max-h-[90vh] max-w-2xl overflow-y-auto'>
@@ -293,7 +352,7 @@ export function SchedulingPanel({
                   >
                     <div
                       className={cn(
-                        'flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-md',
+                        'flex h-8 w-8 shrink-0 items-center justify-center rounded-md',
                         isSelected
                           ? 'bg-primary text-primary-foreground'
                           : 'bg-muted'
@@ -464,8 +523,9 @@ export function SchedulingPanel({
                 onChange={(e) => setDueTime(e.target.value)}
                 placeholder='No specific time'
               />
-              <p className='text-muted-foreground text-xs'>
-                When the task should be completed by
+              <p className='text-muted-foreground flex items-center gap-1 text-xs'>
+                <Globe className='h-3 w-3' aria-hidden='true' />
+                Local to <span className='font-medium'>{browserTimezone}</span>
               </p>
             </div>
 
@@ -548,11 +608,14 @@ export function SchedulingPanel({
             </CardContent>
           </Card>
 
-          {/* Summary */}
+          {/* Summary + next-occurrence preview */}
           <Card className='bg-muted/50'>
-            <CardContent className='pt-4'>
-              <div className='flex items-center gap-2 text-sm'>
-                <Repeat className='text-muted-foreground h-4 w-4' />
+            <CardContent className='space-y-3 pt-4'>
+              <div className='flex flex-wrap items-center gap-2 text-sm'>
+                <Repeat
+                  className='text-muted-foreground h-4 w-4'
+                  aria-hidden='true'
+                />
                 <span className='text-muted-foreground'>Schedule:</span>
                 <Badge variant='secondary'>{getScheduleSummary()}</Badge>
                 {dueTime && (
@@ -562,6 +625,39 @@ export function SchedulingPanel({
                   </>
                 )}
               </div>
+              {nextOccurrences.length > 0 && (
+                <div className='text-muted-foreground space-y-1.5 text-xs'>
+                  <p className='font-medium'>Next occurrences</p>
+                  <ul className='ml-3 list-disc space-y-0.5'>
+                    {nextOccurrences.map((d) => (
+                      <li key={d.toISOString()}>
+                        {d.toLocaleDateString(undefined, {
+                          weekday: 'short',
+                          month: 'short',
+                          day: 'numeric',
+                        })}
+                        {dueTime && (
+                          <>
+                            {' · '}
+                            {d.toLocaleTimeString(undefined, {
+                              hour: 'numeric',
+                              minute: '2-digit',
+                            })}
+                          </>
+                        )}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+              {frequency !== 'daily' &&
+                frequency !== 'weekly' &&
+                frequency !== 'monthly' &&
+                frequency !== 'as_needed' && (
+                  <p className='text-muted-foreground text-xs'>
+                    Occurrences depend on shift configuration.
+                  </p>
+                )}
             </CardContent>
           </Card>
         </div>
@@ -585,3 +681,5 @@ export function SchedulingPanel({
 }
 
 export default SchedulingPanel
+
+// Created and developed by Jai Singh

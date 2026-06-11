@@ -1,3 +1,4 @@
+// Created and developed by Jai Singh
 import React, { Suspense } from 'react'
 import { Loader2 } from 'lucide-react'
 import { useTabSearchParam } from '@/hooks/use-tab-search-param'
@@ -158,3 +159,5 @@ export function DeviceManagerPage() {
     </>
   )
 }
+
+// Created and developed by Jai Singh

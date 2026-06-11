@@ -1,3 +1,4 @@
+// Created and developed by Jai Singh
 /**
  * Rust-enabled LX03 Data Service
  *
@@ -323,4 +324,5 @@ export class RustLX03DataService {
 
 // Export singleton instance
 export const rustLX03DataService = RustLX03DataService.getInstance()
-// Developer and Creator: Jai Singh
+
+// Created and developed by Jai Singh

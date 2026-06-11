@@ -1,3 +1,4 @@
+// Created and developed by Jai Singh
 import { useState } from 'react'
 import {
   IconSearch,
@@ -386,3 +387,5 @@ function Detail({
     </div>
   )
 }
+
+// Created and developed by Jai Singh

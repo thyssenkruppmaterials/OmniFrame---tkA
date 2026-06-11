@@ -1,3 +1,4 @@
+// Created and developed by Jai Singh
 // Re-export database types for easier imports
 // Supabase specific types
 import type { User, Session, AuthError } from '@supabase/supabase-js'
@@ -79,3 +80,5 @@ export interface AuthState {
     reset: () => void
   }
 }
+
+// Created and developed by Jai Singh

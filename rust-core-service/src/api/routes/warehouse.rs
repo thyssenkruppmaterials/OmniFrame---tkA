@@ -1,3 +1,4 @@
+// Created and developed by Jai Singh
 //! Warehouse API endpoints
 
 use axum::{
@@ -317,3 +318,5 @@ fn resolve_org_scope(auth_user: &AuthenticatedUser) -> Option<Uuid> {
         auth_user.organization_id
     }
 }
+
+// Created and developed by Jai Singh

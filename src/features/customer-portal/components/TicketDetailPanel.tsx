@@ -1,3 +1,4 @@
+// Created and developed by Jai Singh
 /**
  * Ticket Detail Panel Component
  *
@@ -11,18 +12,15 @@ import {
   IconArrowsExchange,
   IconCalendar,
   IconLoader2,
-  IconMail,
   IconMessageCircle,
   IconPaperclip,
   IconPlus,
   IconPrinter,
   IconRefresh,
-  IconTag,
   IconUser,
   IconX,
 } from '@tabler/icons-react'
 import { toast } from 'sonner'
-// Removed TicketStatusBadge and TicketPriorityBadge imports - no longer used in header
 import { useUnifiedAuth } from '@/lib/auth/unified-auth-provider'
 import { cn } from '@/lib/utils'
 import { Badge } from '@/components/ui/badge'
@@ -349,14 +347,17 @@ export function TicketDetailPanel({
     }
   }, [ticket])
 
-  // Empty state when no ticket selected
   if (!ticketId) {
     return (
-      <Card className='flex h-full items-center justify-center'>
-        <CardContent className='py-16 text-center'>
-          <IconMessageCircle className='text-muted-foreground/40 mx-auto mb-4 h-16 w-16' />
-          <h3 className='mb-2 text-lg font-semibold'>No Ticket Selected</h3>
-          <p className='text-muted-foreground text-sm'>
+      <Card className='flex h-full items-center justify-center border-dashed'>
+        <CardContent className='py-20 text-center'>
+          <div className='bg-muted/40 mx-auto mb-5 flex h-16 w-16 items-center justify-center rounded-2xl'>
+            <IconMessageCircle className='text-muted-foreground/50 h-8 w-8' />
+          </div>
+          <h3 className='text-foreground mb-1.5 text-base font-semibold'>
+            No Ticket Selected
+          </h3>
+          <p className='text-muted-foreground mx-auto max-w-[220px] text-sm leading-relaxed'>
             Select a ticket from the list to view details and respond
           </p>
         </CardContent>
@@ -364,50 +365,59 @@ export function TicketDetailPanel({
     )
   }
 
-  // Loading state
   if (isLoading) {
     return (
       <Card className='h-full'>
-        <CardHeader className='flex flex-row items-start justify-between'>
-          <div className='space-y-2'>
-            <Skeleton className='h-6 w-24' />
-            <Skeleton className='h-8 w-64' />
+        <CardHeader className='space-y-3 pb-4'>
+          <div className='flex items-start justify-between'>
+            <div className='space-y-2'>
+              <Skeleton className='h-5 w-28' />
+              <Skeleton className='h-6 w-72' />
+              <Skeleton className='h-4 w-48' />
+            </div>
+            <div className='flex gap-1'>
+              <Skeleton className='h-8 w-8 rounded-md' />
+              <Skeleton className='h-8 w-8 rounded-md' />
+            </div>
           </div>
-          <Skeleton className='h-9 w-9' />
         </CardHeader>
-        <CardContent className='space-y-4'>
-          <div className='flex gap-2'>
-            <Skeleton className='h-6 w-20' />
-            <Skeleton className='h-6 w-16' />
-            <Skeleton className='h-6 w-24' />
+        <CardContent className='space-y-4 pt-0'>
+          <div className='flex items-center gap-3'>
+            <Skeleton className='h-8 w-32' />
+            <Skeleton className='h-8 w-8' />
           </div>
-          <Skeleton className='h-24 w-full' />
           <Separator />
-          <div className='space-y-4'>
-            {[1, 2, 3].map((i) => (
-              <Skeleton key={i} className='h-20 w-full' />
+          <div className='grid grid-cols-2 gap-3'>
+            {[1, 2, 3, 4].map((i) => (
+              <div key={i} className='space-y-1.5'>
+                <Skeleton className='h-3 w-20' />
+                <Skeleton className='h-4 w-32' />
+              </div>
             ))}
           </div>
+          <Separator />
+          <Skeleton className='h-28 w-full rounded-lg' />
         </CardContent>
       </Card>
     )
   }
 
-  // Error state
   if (error || !ticket) {
     return (
-      <Card className='flex h-full items-center justify-center'>
-        <CardContent className='py-16 text-center'>
-          <IconX className='text-destructive/40 mx-auto mb-4 h-16 w-16' />
-          <h3 className='text-destructive mb-2 text-lg font-semibold'>
-            Error Loading Ticket
+      <Card className='flex h-full items-center justify-center border-dashed'>
+        <CardContent className='py-20 text-center'>
+          <div className='bg-destructive/10 mx-auto mb-5 flex h-16 w-16 items-center justify-center rounded-2xl'>
+            <IconX className='text-destructive h-8 w-8' />
+          </div>
+          <h3 className='text-foreground mb-1.5 text-base font-semibold'>
+            Failed to Load Ticket
           </h3>
-          <p className='text-muted-foreground mb-4 text-sm'>
-            {error?.message || 'Ticket not found'}
+          <p className='text-muted-foreground mx-auto mb-5 max-w-[240px] text-sm leading-relaxed'>
+            {error?.message || 'This ticket could not be found'}
           </p>
-          <Button variant='outline' onClick={() => refetch()}>
-            <IconRefresh className='mr-2 h-4 w-4' />
-            Try Again
+          <Button variant='outline' size='sm' onClick={() => refetch()}>
+            <IconRefresh className='mr-1.5 h-3.5 w-3.5' />
+            Retry
           </Button>
         </CardContent>
       </Card>
@@ -421,111 +431,103 @@ export function TicketDetailPanel({
     ) || 0
 
   return (
-    <Card className='flex h-full flex-col'>
+    <Card className='flex h-full flex-col overflow-hidden'>
       {/* Header */}
-      <CardHeader className='flex flex-row items-start justify-between space-y-0 pb-4'>
-        <div className='min-w-0 flex-1 space-y-1'>
-          {/* Ticket ID - prominent display */}
-          <span className='text-primary font-mono text-xl font-bold'>
-            {ticket.ticket_id}
-          </span>
-
-          {/* Subject */}
-          <h2 className='text-xl leading-tight font-bold'>{ticket.subject}</h2>
-
-          {/* Created Date with Timestamp + Reassign Button */}
-          <div className='text-muted-foreground flex items-center gap-4 text-sm'>
-            {ticket.created_at && (
-              <span className='flex items-center gap-1'>
-                <IconCalendar className='h-3 w-3' />
-                Created{' '}
-                {format(new Date(ticket.created_at), "MMM d, yyyy 'at' h:mm a")}
-              </span>
-            )}
-
-            {/* Reassign Department Dropdown */}
+      <CardHeader className='space-y-0 border-b px-5 pt-4 pb-4'>
+        <div className='flex items-start justify-between'>
+          <div className='min-w-0 flex-1 space-y-1'>
             <div className='flex items-center gap-2'>
-              <Select
-                value={ticket.ilc_department || ''}
-                onValueChange={handleDepartmentSelect}
-                disabled={isUpdatingDepartment}
-              >
-                <SelectTrigger className='h-7 w-[180px] text-xs'>
-                  <IconArrowsExchange className='mr-1 h-3 w-3' />
-                  <SelectValue placeholder='Reassign Department' />
-                </SelectTrigger>
-                <SelectContent>
-                  {ilcDepartments.map((dept) => (
-                    <SelectItem key={dept} value={dept}>
-                      {dept}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              <span className='text-primary text-sm font-semibold tracking-tight'>
+                {ticket.ticket_id}
+              </span>
+              {ticket.ilc_department && (
+                <Badge variant='outline' className='text-[10px] font-normal'>
+                  {ticket.ilc_department}
+                </Badge>
+              )}
             </div>
+            <h2 className='text-lg leading-tight font-semibold tracking-tight'>
+              {ticket.subject}
+            </h2>
+            {ticket.created_at && (
+              <p className='text-muted-foreground flex items-center gap-1 text-xs'>
+                <IconCalendar className='h-3 w-3' />
+                {format(new Date(ticket.created_at), "MMM d, yyyy 'at' h:mm a")}
+              </p>
+            )}
+          </div>
 
-            {/* Reassign Department Confirmation Dialog */}
-            <ConfirmDialog
-              open={showReassignConfirm}
-              onOpenChange={(open) => {
-                if (!open) handleCancelReassign()
-              }}
-              title='Reassign Ticket'
-              desc={
-                <div className='space-y-2'>
-                  <p>Are you sure you want to reassign this ticket?</p>
-                  <div className='bg-muted space-y-1 rounded-md p-3 text-sm'>
-                    <div className='flex justify-between'>
-                      <span className='text-muted-foreground'>
-                        Current Department:
-                      </span>
-                      <span className='font-medium'>
-                        {ticket.ilc_department || 'None'}
-                      </span>
-                    </div>
-                    <div className='flex justify-between'>
-                      <span className='text-muted-foreground'>
-                        New Department:
-                      </span>
-                      <span className='text-primary font-medium'>
-                        {pendingDepartment}
-                      </span>
-                    </div>
-                  </div>
-                </div>
-              }
-              confirmText='Confirm'
-              cancelBtnText='Cancel'
-              handleConfirm={handleConfirmReassign}
-              isLoading={isUpdatingDepartment}
-            />
+          <div className='ml-3 flex items-center gap-0.5'>
+            <Button
+              variant='ghost'
+              size='icon'
+              className='h-7 w-7'
+              onClick={handlePrintTicket}
+              title='Print'
+            >
+              <IconPrinter className='h-3.5 w-3.5' />
+            </Button>
+            <Button
+              variant='ghost'
+              size='icon'
+              className='h-7 w-7'
+              onClick={handleRefresh}
+              disabled={isRefreshing}
+              title='Refresh'
+            >
+              <IconRefresh
+                className={cn('h-3.5 w-3.5', isRefreshing && 'animate-spin')}
+              />
+            </Button>
+            <Button
+              variant='ghost'
+              size='icon'
+              className='h-7 w-7'
+              onClick={onClose}
+              title='Close'
+            >
+              <IconX className='h-3.5 w-3.5' />
+            </Button>
           </div>
         </div>
 
-        {/* Actions */}
-        <div className='ml-4 flex items-center gap-1'>
-          <Button
-            variant='ghost'
-            size='icon'
-            className='h-8 w-8'
-            onClick={handlePrintTicket}
-            title='Print Ticket'
-          >
-            <IconPrinter className='h-4 w-4' />
-          </Button>
-          <Button
-            variant='ghost'
-            size='icon'
-            className='h-8 w-8'
-            onClick={onClose}
-          >
-            <IconX className='h-4 w-4' />
-          </Button>
-        </div>
+        {/* Reassign Department Confirmation Dialog */}
+        <ConfirmDialog
+          open={showReassignConfirm}
+          onOpenChange={(open) => {
+            if (!open) handleCancelReassign()
+          }}
+          title='Reassign Ticket'
+          desc={
+            <div className='space-y-2'>
+              <p>Are you sure you want to reassign this ticket?</p>
+              <div className='bg-muted space-y-1 rounded-md p-3 text-sm'>
+                <div className='flex justify-between'>
+                  <span className='text-muted-foreground'>
+                    Current Department:
+                  </span>
+                  <span className='font-medium'>
+                    {ticket.ilc_department || 'None'}
+                  </span>
+                </div>
+                <div className='flex justify-between'>
+                  <span className='text-muted-foreground'>New Department:</span>
+                  <span className='text-primary font-medium'>
+                    {pendingDepartment}
+                  </span>
+                </div>
+              </div>
+            </div>
+          }
+          confirmText='Confirm'
+          cancelBtnText='Cancel'
+          handleConfirm={handleConfirmReassign}
+          isLoading={isUpdatingDepartment}
+        />
       </CardHeader>
 
-      <CardContent className='flex flex-1 flex-col overflow-hidden pt-0'>
-        {/* External Update Notification Banner */}
+      <CardContent className='flex flex-1 flex-col overflow-hidden px-5 pt-4'>
+        {/* External Update Banner */}
         {isTicketUpdated && (
           <div className='animate-in fade-in slide-in-from-top-1 mb-3 flex items-center justify-between rounded-lg border border-blue-200 bg-blue-50 px-3 py-2 duration-300 dark:border-blue-800 dark:bg-blue-950/30'>
             <div className='flex items-center gap-2 text-sm text-blue-700 dark:text-blue-300'>
@@ -541,15 +543,17 @@ export function TicketDetailPanel({
                 onAcknowledgeUpdate?.()
               }}
             >
-              Refresh to see changes
+              Refresh
             </Button>
           </div>
         )}
 
-        {/* Status Change Control */}
-        <div className='mb-3 flex items-center justify-between border-b pb-3'>
-          <div className='flex items-center gap-2'>
-            <span className='text-sm font-medium'>Status:</span>
+        {/* Status + Department Controls */}
+        <div className='mb-4 flex flex-wrap items-center gap-3'>
+          <div className='flex items-center gap-1.5'>
+            <span className='text-muted-foreground text-xs font-medium'>
+              Status
+            </span>
             <Select
               value={ticket.status}
               onValueChange={(value) =>
@@ -557,11 +561,10 @@ export function TicketDetailPanel({
               }
               disabled={isUpdatingStatus}
             >
-              <SelectTrigger className='h-8 w-[160px]'>
+              <SelectTrigger className='h-7 w-[140px] text-xs'>
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                {/* Valid Smartsheet picklist values only */}
                 <SelectItem value={TicketStatus.NOT_STARTED}>
                   Not Started
                 </SelectItem>
@@ -580,197 +583,154 @@ export function TicketDetailPanel({
               </SelectContent>
             </Select>
           </div>
-          <Button
-            variant={isRefreshing ? 'default' : 'outline'}
-            size={isRefreshing ? 'sm' : 'icon'}
-            onClick={handleRefresh}
-            disabled={isRefreshing}
-            className={cn(
-              'overflow-hidden transition-all duration-300 ease-in-out',
-              isRefreshing &&
-                'bg-primary/90 hover:bg-primary/90 text-primary-foreground min-w-[100px]'
-            )}
-          >
-            <IconRefresh
-              className={cn(
-                'h-4 w-4 transition-transform',
-                isRefreshing && 'animate-spin'
-              )}
-            />
-            {isRefreshing && (
-              <span className='ml-2 animate-pulse text-sm font-medium'>
-                Syncing...
-              </span>
-            )}
-          </Button>
+          <Separator orientation='vertical' className='h-5' />
+          <div className='flex items-center gap-1.5'>
+            <span className='text-muted-foreground text-xs font-medium'>
+              Dept
+            </span>
+            <Select
+              value={ticket.ilc_department || ''}
+              onValueChange={handleDepartmentSelect}
+              disabled={isUpdatingDepartment}
+            >
+              <SelectTrigger className='h-7 w-[150px] text-xs'>
+                <IconArrowsExchange className='mr-1 h-3 w-3' />
+                <SelectValue placeholder='Reassign' />
+              </SelectTrigger>
+              <SelectContent>
+                {ilcDepartments.map((dept) => (
+                  <SelectItem key={dept} value={dept}>
+                    {dept}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
         </div>
 
-        {/* Customer Info Card */}
-        <div className='bg-muted/30 mb-3 grid grid-cols-2 gap-3 rounded-lg p-3'>
-          <div className='space-y-1'>
-            <p className='text-muted-foreground flex items-center gap-1 text-xs'>
-              <IconUser className='h-3 w-3' />
-              Requestor Name
-            </p>
-            <p className='text-sm font-medium'>
-              {ticket.requestor_name || '-'}
-            </p>
+        {/* Customer Info */}
+        <div className='bg-muted/30 mb-4 rounded-lg border p-3'>
+          <div className='mb-2 flex items-center gap-1.5'>
+            <IconUser className='text-muted-foreground h-3.5 w-3.5' />
+            <span className='text-xs font-semibold'>Customer Details</span>
           </div>
-          <div className='space-y-1'>
-            <p className='text-muted-foreground flex items-center gap-1 text-xs'>
-              <IconMail className='h-3 w-3' />
-              Requestor E-mail
-            </p>
-            <p className='text-sm font-medium'>
-              {ticket.requestor_email || '-'}
-            </p>
+          <div className='grid grid-cols-2 gap-x-6 gap-y-2'>
+            <MetaField label='Requestor' value={ticket.requestor_name} />
+            <MetaField label='Email' value={ticket.requestor_email} />
+            {ticket.plant && <MetaField label='Plant' value={ticket.plant} />}
+            {ticket.material_number && (
+              <MetaField label='Material #' value={ticket.material_number} />
+            )}
+            {ticket.quantity && (
+              <MetaField label='Quantity' value={ticket.quantity} />
+            )}
+            {ticket.delivery_number && (
+              <MetaField label='Delivery #' value={ticket.delivery_number} />
+            )}
+            {ticket.po_number && (
+              <MetaField label='PO #' value={ticket.po_number} />
+            )}
+            {ticket.rma_number && (
+              <MetaField label='RMA #' value={ticket.rma_number} />
+            )}
+            {ticket.qn_number && (
+              <MetaField label='QN #' value={ticket.qn_number} />
+            )}
+
+            {ticket.ilc_department?.toLowerCase() === 'containment' && (
+              <>
+                <div className='space-y-0.5'>
+                  <p className='text-muted-foreground text-[11px]'>
+                    Containment
+                  </p>
+                  <div className='flex items-center gap-2'>
+                    <Checkbox
+                      checked={ticket.containment ?? false}
+                      onCheckedChange={async (checked) => {
+                        if (!ticketId) return
+                        onSuppressNotification?.(ticketId)
+                        try {
+                          await updateCheckbox(
+                            ticketId,
+                            'containment',
+                            checked === true
+                          )
+                          toast.success(
+                            checked
+                              ? 'Containment marked'
+                              : 'Containment unmarked'
+                          )
+                          refetch()
+                        } catch (error: unknown) {
+                          toast.error(
+                            error instanceof Error
+                              ? error.message
+                              : 'Failed to update containment'
+                          )
+                        }
+                      }}
+                      disabled={isUpdatingCheckbox}
+                    />
+                    <span className='text-xs font-medium'>
+                      {ticket.containment ? 'Yes' : 'No'}
+                    </span>
+                  </div>
+                </div>
+                {ticket.containment_date && (
+                  <MetaField
+                    label='Containment Date'
+                    value={ticket.containment_date}
+                  />
+                )}
+              </>
+            )}
+
+            {ticket.ilc_department?.toLowerCase() === 'quality' && (
+              <>
+                <div className='space-y-0.5'>
+                  <p className='text-muted-foreground text-[11px]'>RTV</p>
+                  <div className='flex items-center gap-2'>
+                    <Checkbox
+                      checked={ticket.rtv ?? false}
+                      onCheckedChange={async (checked) => {
+                        if (!ticketId) return
+                        onSuppressNotification?.(ticketId)
+                        try {
+                          await updateCheckbox(
+                            ticketId,
+                            'rtv',
+                            checked === true
+                          )
+                          toast.success(checked ? 'RTV marked' : 'RTV unmarked')
+                          refetch()
+                        } catch (error: unknown) {
+                          toast.error(
+                            error instanceof Error
+                              ? error.message
+                              : 'Failed to update RTV'
+                          )
+                        }
+                      }}
+                      disabled={isUpdatingCheckbox}
+                    />
+                    <span className='text-xs font-medium'>
+                      {ticket.rtv ? 'Yes' : 'No'}
+                    </span>
+                  </div>
+                </div>
+                {ticket.rtv_critical && (
+                  <MetaField label='RTV Critical' value={ticket.rtv_critical} />
+                )}
+                {ticket.rtv_date && (
+                  <MetaField label='RTV Date' value={ticket.rtv_date} />
+                )}
+              </>
+            )}
           </div>
-          {ticket.plant && (
-            <div className='space-y-1'>
-              <p className='text-muted-foreground text-xs'>Plant</p>
-              <p className='text-sm font-medium'>{ticket.plant}</p>
-            </div>
-          )}
-          {ticket.material_number && (
-            <div className='space-y-1'>
-              <p className='text-muted-foreground text-xs'>Material Number</p>
-              <p className='text-sm font-medium'>{ticket.material_number}</p>
-            </div>
-          )}
-          {ticket.quantity && (
-            <div className='space-y-1'>
-              <p className='text-muted-foreground text-xs'>Quantity</p>
-              <p className='text-sm font-medium'>{ticket.quantity}</p>
-            </div>
-          )}
-          {ticket.delivery_number && (
-            <div className='space-y-1'>
-              <p className='text-muted-foreground text-xs'>Delivery Number</p>
-              <p className='text-sm font-medium'>{ticket.delivery_number}</p>
-            </div>
-          )}
-          {ticket.po_number && (
-            <div className='space-y-1'>
-              <p className='text-muted-foreground text-xs'>PO Number</p>
-              <p className='text-sm font-medium'>{ticket.po_number}</p>
-            </div>
-          )}
-          {ticket.rma_number && (
-            <div className='space-y-1'>
-              <p className='text-muted-foreground text-xs'>RMA Number</p>
-              <p className='text-sm font-medium'>{ticket.rma_number}</p>
-            </div>
-          )}
-          {ticket.qn_number && (
-            <div className='space-y-1'>
-              <p className='text-muted-foreground text-xs'>QN Number</p>
-              <p className='text-sm font-medium'>{ticket.qn_number}</p>
-            </div>
-          )}
-
-          {/* Containment Department Fields */}
-          {ticket.ilc_department?.toLowerCase() === 'containment' && (
-            <>
-              <div className='space-y-1'>
-                <p className='text-muted-foreground text-xs'>Containment</p>
-                <div className='flex items-center gap-2'>
-                  <Checkbox
-                    checked={ticket.containment ?? false}
-                    onCheckedChange={async (checked) => {
-                      if (!ticketId) return
-                      onSuppressNotification?.(ticketId)
-                      try {
-                        await updateCheckbox(
-                          ticketId,
-                          'containment',
-                          checked === true
-                        )
-                        toast.success(
-                          checked
-                            ? 'Containment marked'
-                            : 'Containment unmarked'
-                        )
-                        refetch()
-                      } catch (error: unknown) {
-                        toast.error(
-                          error instanceof Error
-                            ? error.message
-                            : 'Failed to update containment'
-                        )
-                      }
-                    }}
-                    disabled={isUpdatingCheckbox}
-                  />
-                  <span className='text-sm font-medium'>
-                    {ticket.containment ? 'Yes' : 'No'}
-                  </span>
-                </div>
-              </div>
-              {ticket.containment_date && (
-                <div className='space-y-1'>
-                  <p className='text-muted-foreground text-xs'>
-                    Containment Date
-                  </p>
-                  <p className='text-sm font-medium'>
-                    {ticket.containment_date}
-                  </p>
-                </div>
-              )}
-            </>
-          )}
-
-          {/* Quality Department Fields */}
-          {ticket.ilc_department?.toLowerCase() === 'quality' && (
-            <>
-              <div className='space-y-1'>
-                <p className='text-muted-foreground text-xs'>RTV</p>
-                <div className='flex items-center gap-2'>
-                  <Checkbox
-                    checked={ticket.rtv ?? false}
-                    onCheckedChange={async (checked) => {
-                      if (!ticketId) return
-                      onSuppressNotification?.(ticketId)
-                      try {
-                        await updateCheckbox(ticketId, 'rtv', checked === true)
-                        toast.success(checked ? 'RTV marked' : 'RTV unmarked')
-                        refetch()
-                      } catch (error: unknown) {
-                        toast.error(
-                          error instanceof Error
-                            ? error.message
-                            : 'Failed to update RTV'
-                        )
-                      }
-                    }}
-                    disabled={isUpdatingCheckbox}
-                  />
-                  <span className='text-sm font-medium'>
-                    {ticket.rtv ? 'Yes' : 'No'}
-                  </span>
-                </div>
-              </div>
-              {ticket.rtv_critical && (
-                <div className='space-y-1'>
-                  <p className='text-muted-foreground text-xs'>RTV Critical</p>
-                  <p className='text-sm font-medium'>{ticket.rtv_critical}</p>
-                </div>
-              )}
-              {ticket.rtv_date && (
-                <div className='space-y-1'>
-                  <p className='text-muted-foreground text-xs'>RTV Date</p>
-                  <p className='text-sm font-medium'>{ticket.rtv_date}</p>
-                </div>
-              )}
-            </>
-          )}
         </div>
 
         {/* Ticket Details Tabs */}
-        <div className='mb-3'>
-          <div className='mb-1.5 flex items-center gap-1'>
-            <IconTag className='h-4 w-4' />
-            <span className='text-sm font-semibold'>Details</span>
-          </div>
+        <div className='mb-4'>
           <Tabs defaultValue='description' className='w-full'>
             <TabsList className='h-8 w-full p-0.5'>
               <TabsTrigger value='description' className='h-7 flex-1 text-xs'>
@@ -790,18 +750,18 @@ export function TicketDetailPanel({
               </TabsTrigger>
             </TabsList>
             <TabsContent value='description' className='mt-2'>
-              <div className='text-muted-foreground bg-muted/30 min-h-[60px] rounded-lg p-2.5 text-sm whitespace-pre-wrap'>
+              <div className='text-muted-foreground bg-muted/30 min-h-[48px] rounded-lg border border-transparent p-3 text-sm leading-relaxed whitespace-pre-wrap'>
                 {ticket.description || (
-                  <span className='text-muted-foreground/60 italic'>
-                    No description
+                  <span className='text-muted-foreground/50 italic'>
+                    No description provided
                   </span>
                 )}
               </div>
             </TabsContent>
             <TabsContent value='tka_updates' className='mt-2'>
-              <div className='text-muted-foreground bg-muted/30 min-h-[60px] rounded-lg p-2.5 text-sm whitespace-pre-wrap'>
+              <div className='text-muted-foreground bg-muted/30 min-h-[48px] rounded-lg border border-transparent p-3 text-sm leading-relaxed whitespace-pre-wrap'>
                 {ticket.tka_updates || (
-                  <span className='text-muted-foreground/60 italic'>
+                  <span className='text-muted-foreground/50 italic'>
                     No TKA updates
                   </span>
                 )}
@@ -844,9 +804,7 @@ export function TicketDetailPanel({
                 </div>
               ) : (
                 <div className='relative mt-2 inline-block'>
-                  {/* Outer container for the rotating gradient - sized larger than button */}
-                  <div className='absolute -inset-[1px] overflow-hidden rounded-md'>
-                    {/* Spinning gradient layer - creates the glowing light beam effect */}
+                  <div className='absolute -inset-px overflow-hidden rounded-md'>
                     <div
                       className='absolute top-1/2 left-1/2 h-[200%] w-[200%] -translate-x-1/2 -translate-y-1/2 animate-[spin_3s_linear_infinite]'
                       style={{
@@ -855,8 +813,7 @@ export function TicketDetailPanel({
                       }}
                     />
                   </div>
-                  {/* Inner solid background that masks the center */}
-                  <div className='bg-background absolute inset-[1px] rounded-[5px]' />
+                  <div className='bg-background absolute inset-px rounded-[5px]' />
                   <Button
                     variant='ghost'
                     size='sm'
@@ -870,19 +827,19 @@ export function TicketDetailPanel({
               )}
             </TabsContent>
             <TabsContent value='rolls_royce_updates' className='mt-2'>
-              <div className='text-muted-foreground bg-muted/30 min-h-[60px] rounded-lg p-2.5 text-sm whitespace-pre-wrap'>
+              <div className='text-muted-foreground bg-muted/30 min-h-[48px] rounded-lg border border-transparent p-3 text-sm leading-relaxed whitespace-pre-wrap'>
                 {ticket.rolls_royce_updates || (
-                  <span className='text-muted-foreground/60 italic'>
+                  <span className='text-muted-foreground/50 italic'>
                     No Rolls Royce updates
                   </span>
                 )}
               </div>
             </TabsContent>
             <TabsContent value='resolution' className='mt-2'>
-              <div className='text-muted-foreground bg-muted/30 min-h-[60px] rounded-lg p-2.5 text-sm whitespace-pre-wrap'>
+              <div className='text-muted-foreground bg-muted/30 min-h-[48px] rounded-lg border border-transparent p-3 text-sm leading-relaxed whitespace-pre-wrap'>
                 {ticket.resolution || (
-                  <span className='text-muted-foreground/60 italic'>
-                    No resolution
+                  <span className='text-muted-foreground/50 italic'>
+                    No resolution yet
                   </span>
                 )}
               </div>
@@ -924,9 +881,7 @@ export function TicketDetailPanel({
                 </div>
               ) : (
                 <div className='relative mt-2 inline-block'>
-                  {/* Outer container for the rotating gradient - sized larger than button */}
-                  <div className='absolute -inset-[1px] overflow-hidden rounded-md'>
-                    {/* Spinning gradient layer - creates the glowing light beam effect */}
+                  <div className='absolute -inset-px overflow-hidden rounded-md'>
                     <div
                       className='absolute top-1/2 left-1/2 h-[200%] w-[200%] -translate-x-1/2 -translate-y-1/2 animate-[spin_3s_linear_infinite]'
                       style={{
@@ -935,8 +890,7 @@ export function TicketDetailPanel({
                       }}
                     />
                   </div>
-                  {/* Inner solid background that masks the center */}
-                  <div className='bg-background absolute inset-[1px] rounded-[5px]' />
+                  <div className='bg-background absolute inset-px rounded-[5px]' />
                   <Button
                     variant='ghost'
                     size='sm'
@@ -954,36 +908,41 @@ export function TicketDetailPanel({
 
         {/* Internal Notes */}
         {ticket.notes && (
-          <div className='mb-3'>
-            <h4 className='mb-1.5 text-sm font-semibold'>Internal Notes</h4>
-            <p className='rounded-lg border border-yellow-200 bg-yellow-50 p-2.5 text-sm dark:border-yellow-800 dark:bg-yellow-950/20'>
-              {ticket.notes}
+          <div className='mb-4'>
+            <p className='mb-1.5 text-xs font-semibold text-amber-600 dark:text-amber-400'>
+              Internal Notes
             </p>
+            <div className='rounded-lg border border-amber-200/60 bg-amber-50/50 p-3 text-sm leading-relaxed whitespace-pre-wrap dark:border-amber-800/40 dark:bg-amber-950/20'>
+              {ticket.notes}
+            </div>
           </div>
         )}
 
-        {/* Tabs for Comments and Attachments */}
+        {/* Comments & Attachments */}
         <Tabs defaultValue='comments' className='flex min-h-0 flex-1 flex-col'>
-          <TabsList className='w-full justify-start'>
-            <TabsTrigger value='comments' className='flex items-center gap-1'>
-              <IconMessageCircle className='h-4 w-4' />
+          <TabsList className='h-9 w-full justify-start rounded-lg'>
+            <TabsTrigger
+              value='comments'
+              className='flex items-center gap-1.5 text-xs'
+            >
+              <IconMessageCircle className='h-3.5 w-3.5' />
               Comments
               {commentCount > 0 && (
-                <Badge variant='secondary' className='ml-1 px-1.5 py-0 text-xs'>
+                <span className='bg-muted text-muted-foreground rounded-full px-1.5 py-0 text-[10px] font-medium tabular-nums'>
                   {commentCount}
-                </Badge>
+                </span>
               )}
             </TabsTrigger>
             <TabsTrigger
               value='attachments'
-              className='flex items-center gap-1'
+              className='flex items-center gap-1.5 text-xs'
             >
-              <IconPaperclip className='h-4 w-4' />
+              <IconPaperclip className='h-3.5 w-3.5' />
               Attachments
               {ticket.attachments && ticket.attachments.length > 0 && (
-                <Badge variant='secondary' className='ml-1 px-1.5 py-0 text-xs'>
+                <span className='bg-muted text-muted-foreground rounded-full px-1.5 py-0 text-[10px] font-medium tabular-nums'>
                   {ticket.attachments.length}
-                </Badge>
+                </span>
               )}
             </TabsTrigger>
           </TabsList>
@@ -1011,3 +970,14 @@ export function TicketDetailPanel({
     </Card>
   )
 }
+
+function MetaField({ label, value }: { label: string; value?: string | null }) {
+  return (
+    <div className='space-y-0.5'>
+      <p className='text-muted-foreground text-[11px]'>{label}</p>
+      <p className='text-foreground text-xs font-medium'>{value || '-'}</p>
+    </div>
+  )
+}
+
+// Created and developed by Jai Singh

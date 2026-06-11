@@ -1,3 +1,4 @@
+// Created and developed by Jai Singh
 /**
  * Visitor Log Management Panel
  *
@@ -82,7 +83,7 @@ function StatCard({
 }: {
   title: string
   value: number
-  icon: React.ElementType
+  icon: React.ComponentType<{ className?: string }>
   color: string
   active?: boolean
   onClick?: () => void
@@ -472,7 +473,8 @@ function DetailField({
   return (
     <div className={cn(fullWidth && 'col-span-2')}>
       <p className='text-muted-foreground mb-0.5 flex items-center gap-1 text-xs'>
-        {Icon && <Icon className='h-3 w-3' />}
+        {/* @ts-expect-error React 19 dynamic component typing */}
+        {Icon && <Icon {...({} as any)} className='h-3 w-3' />}
         {label}
       </p>
       <p className='text-foreground text-sm font-medium wrap-break-word whitespace-normal'>
@@ -1311,3 +1313,5 @@ export function VisitorLogPanel() {
     </div>
   )
 }
+
+// Created and developed by Jai Singh

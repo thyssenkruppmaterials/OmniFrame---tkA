@@ -1,3 +1,4 @@
+// Created and developed by Jai Singh
 /**
  * Employee Onboarding System Types
  * Created: December 22, 2025
@@ -600,3 +601,5 @@ export const getDefaultWizardState = (): OnboardingWizardState => ({
   createdUserId: null,
   generatedCredentials: null,
 })
+
+// Created and developed by Jai Singh

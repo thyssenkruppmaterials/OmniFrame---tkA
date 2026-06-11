@@ -1,0 +1,191 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/**
+ * OmniAgent design tokens.
+ *
+ * The HSL channels are split (`H S% L%`) so Tailwind's `colors`
+ * configuration in `tailwind.config.ts` can wrap them via
+ * `hsl(var(--<token>) / <alpha-value>)` and still receive opacity
+ * modifiers (e.g. `bg-card/80`). Two themes are defined:
+ *
+ *   - `:root` / `.dark`: deep slate operator console (the default).
+ *   - `.light`: zinc/ash daytime palette (used in Settings → Theme).
+ *
+ * Surfaces follow the elevation ladder slate-950 → slate-900 → slate-850 →
+ * slate-800, with a single-pixel slate-700 border across the boundary.
+ */
+
+@layer base {
+  :root,
+  .dark {
+    --background: 222 47% 5%;
+    --foreground: 210 20% 96%;
+
+    --card: 222 39% 9%;
+    --card-foreground: 210 20% 96%;
+
+    --popover: 222 39% 9%;
+    --popover-foreground: 210 20% 96%;
+
+    --primary: 217 91% 60%;
+    --primary-foreground: 0 0% 100%;
+
+    --secondary: 222 32% 14%;
+    --secondary-foreground: 210 20% 96%;
+
+    --muted: 222 32% 14%;
+    --muted-foreground: 215 16% 64%;
+
+    --accent: 222 32% 18%;
+    --accent-foreground: 210 20% 96%;
+
+    --destructive: 350 79% 51%;
+    --destructive-foreground: 0 0% 100%;
+
+    --success: 158 64% 42%;
+    --success-foreground: 0 0% 100%;
+
+    --warning: 38 92% 50%;
+    --warning-foreground: 26 60% 12%;
+
+    --info: 263 85% 64%;
+    --info-foreground: 0 0% 100%;
+
+    --border: 222 28% 18%;
+    --input: 222 28% 18%;
+    --ring: 217 91% 60%;
+
+    --radius: 10px;
+
+    color-scheme: dark;
+  }
+
+  .light {
+    --background: 0 0% 100%;
+    --foreground: 222 47% 11%;
+
+    --card: 0 0% 100%;
+    --card-foreground: 222 47% 11%;
+
+    --popover: 0 0% 100%;
+    --popover-foreground: 222 47% 11%;
+
+    --primary: 217 91% 60%;
+    --primary-foreground: 0 0% 100%;
+
+    --secondary: 210 40% 96%;
+    --secondary-foreground: 222 47% 11%;
+
+    --muted: 210 40% 96%;
+    --muted-foreground: 215 16% 47%;
+
+    --accent: 210 40% 90%;
+    --accent-foreground: 222 47% 11%;
+
+    --destructive: 350 79% 47%;
+    --destructive-foreground: 0 0% 100%;
+
+    --success: 158 64% 36%;
+    --success-foreground: 0 0% 100%;
+
+    --warning: 38 92% 45%;
+    --warning-foreground: 26 60% 12%;
+
+    --info: 263 70% 55%;
+    --info-foreground: 0 0% 100%;
+
+    --border: 214 32% 88%;
+    --input: 214 32% 88%;
+    --ring: 217 91% 60%;
+
+    color-scheme: light;
+  }
+
+  * {
+    @apply border-border;
+  }
+
+  html,
+  body,
+  #root {
+    height: 100%;
+  }
+
+  body {
+    @apply bg-background text-foreground;
+    font-feature-settings:
+      "rlig" 1,
+      "calt" 1,
+      "ss01" 1,
+      "cv11" 1;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+
+  /* Tauri-friendly: prevent the elastic bounce on macOS so the operator
+     console feels like a native app rather than a web page. */
+  body {
+    overscroll-behavior: none;
+  }
+
+  /* Custom scrollbars — slimmer than the OS default, themed to match the
+     surface palette. Falls back to the OS scrollbar in Firefox via
+     `scrollbar-color` / `scrollbar-width`. */
+  ::-webkit-scrollbar {
+    width: 10px;
+    height: 10px;
+  }
+  ::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  ::-webkit-scrollbar-thumb {
+    background-color: hsl(var(--border));
+    border-radius: 9999px;
+    border: 2px solid transparent;
+    background-clip: padding-box;
+  }
+  ::-webkit-scrollbar-thumb:hover {
+    background-color: hsl(var(--muted-foreground) / 0.45);
+    background-clip: padding-box;
+  }
+  * {
+    scrollbar-color: hsl(var(--border)) transparent;
+    scrollbar-width: thin;
+  }
+}
+
+@layer components {
+  /* Subtle dotted grid background used behind the master grid. The pattern
+     is rendered via CSS radial-gradient so it scales without an asset and
+     stays crisp at any zoom. */
+  .bg-grid-pattern {
+    background-image: radial-gradient(
+      hsl(var(--border) / 0.6) 1px,
+      transparent 1px
+    );
+    background-size: 18px 18px;
+  }
+
+  .glass-panel {
+    background-color: hsl(var(--card) / 0.65);
+    backdrop-filter: blur(12px) saturate(180%);
+    -webkit-backdrop-filter: blur(12px) saturate(180%);
+    border: 1px solid hsl(var(--border));
+  }
+
+  .console-line {
+    font-variant-ligatures: none;
+    font-feature-settings: "calt" 0;
+  }
+}
+
+@layer utilities {
+  .text-balance {
+    text-wrap: balance;
+  }
+  .text-pretty {
+    text-wrap: pretty;
+  }
+}

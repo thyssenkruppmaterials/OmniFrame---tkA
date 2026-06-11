@@ -1,3 +1,4 @@
+// Created and developed by Jai Singh
 /**
  * Color Conversion Utilities
  *
@@ -207,9 +208,7 @@ export function getWCAGLevel(
 
 function getRelativeLuminance(hex: string): number {
   const normalized = hex.startsWith('#') ? hex : `#${hex}`
-  const match = normalized.match(
-    /^#([0-9a-f]{2})([0-9a-f]{2})([0-9a-f]{2})$/i
-  )
+  const match = normalized.match(/^#([0-9a-f]{2})([0-9a-f]{2})([0-9a-f]{2})$/i)
   if (!match) return 0
 
   const [r, g, b] = [match[1], match[2], match[3]].map((c) => {
@@ -221,3 +220,5 @@ function getRelativeLuminance(hex: string): number {
 
   return 0.2126 * r + 0.7152 * g + 0.0722 * b
 }
+
+// Created and developed by Jai Singh

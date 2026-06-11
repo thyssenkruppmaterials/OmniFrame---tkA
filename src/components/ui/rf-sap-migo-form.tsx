@@ -1,10 +1,10 @@
+// Created and developed by Jai Singh
 'use client'
 
 import React, { useEffect, useRef, useState } from 'react'
 import {
   AlertCircle,
   CheckCircle2,
-  ChevronLeft,
   FileText,
   Loader2,
   Package,
@@ -17,10 +17,11 @@ import { toast } from 'sonner'
 import { cn } from '@/lib/utils'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { Card, CardContent, CardHeader } from '@/components/ui/card'
 import { Label } from '@/components/ui/label'
 import { ScannerInput } from '@/components/ui/scanner-input'
 import { sapFetch } from '@/features/admin/sap-testing/utils/auth-fetch'
+import { RFScreenHeader } from '@/features/rf-interface/_shell'
 
 interface GoodsReceiptResult {
   success: boolean
@@ -343,24 +344,12 @@ const RFSAPMigoForm: React.FC<RFSAPMigoFormProps> = ({ onBack }) => {
       {/* Header Card */}
       <Card>
         <CardHeader className='px-3 pt-3 pb-2'>
-          <div className='flex items-center'>
-            {onBack && (
-              <Button
-                variant='ghost'
-                size='sm'
-                onClick={onBack}
-                className='h-8 px-2'
-              >
-                <ChevronLeft className='h-4 w-4' />
-                Back
-              </Button>
-            )}
-            <CardTitle className='flex flex-1 items-center justify-center gap-2 text-center text-sm'>
-              <Package className='h-5 w-5' />
-              SAP MIGO
-            </CardTitle>
-            <div className='w-14' />
-          </div>
+          <RFScreenHeader
+            title='SAP MIGO'
+            subtitle='Direct posting'
+            onBack={onBack}
+            right={<Package className='text-muted-foreground h-4 w-4' />}
+          />
         </CardHeader>
       </Card>
 
@@ -742,3 +731,5 @@ const RFSAPMigoForm: React.FC<RFSAPMigoFormProps> = ({ onBack }) => {
 }
 
 export default RFSAPMigoForm
+
+// Created and developed by Jai Singh

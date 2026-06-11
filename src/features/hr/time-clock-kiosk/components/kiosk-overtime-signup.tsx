@@ -1,3 +1,4 @@
+// Created and developed by Jai Singh
 import { useState, useCallback, useEffect } from 'react'
 import { format, addDays, startOfDay, endOfDay } from 'date-fns'
 import {
@@ -438,3 +439,5 @@ export default function KioskOvertimeSignup({
     </div>
   )
 }
+
+// Created and developed by Jai Singh

@@ -1,3 +1,4 @@
+// Created and developed by Jai Singh
 import { useEffect } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { supabase } from '@/lib/supabase/client'
@@ -220,3 +221,5 @@ export function useSessionManagement() {
     },
   }
 }
+
+// Created and developed by Jai Singh

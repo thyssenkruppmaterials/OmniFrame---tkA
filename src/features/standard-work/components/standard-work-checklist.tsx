@@ -1,7 +1,13 @@
+// Created and developed by Jai Singh
 /**
- * Standard Work Checklist Component
- * Enterprise-grade checklist completion interface with progress tracking
- * Updated: February 8, 2026 - Complete UI redesign for modern enterprise experience
+ * Standard Work Checklist
+ *
+ * Hosts the dashboard view and the active-submission runner. The runner
+ * renders all item types (checkbox, text, number, select, multi_select,
+ * date, time, photo, signature), respects `conditional_display` to hide
+ * dependent items until their predicate is satisfied, flushes pending
+ * debounced saves on exit, and exposes a polite aria-live region so screen
+ * readers hear status changes ("Saving…" / "Saved" / "Submitted").
  */
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
@@ -18,6 +24,8 @@ import {
   Send,
 } from 'lucide-react'
 import { toast } from 'sonner'
+import { useUnifiedAuth } from '@/lib/auth/unified-auth-provider'
+import { uploadStandardWorkAttachment } from '@/lib/supabase/standard-work-attachments.service'
 import { cn } from '@/lib/utils'
 import { logger } from '@/lib/utils/logger'
 import {
@@ -32,6 +40,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Checkbox } from '@/components/ui/checkbox'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
+import { MultiSelect } from '@/components/ui/multi-select'
 import { Progress } from '@/components/ui/progress'
 import {
   Select,
@@ -43,24 +52,104 @@ import {
 import { Skeleton } from '@/components/ui/skeleton'
 import { Textarea } from '@/components/ui/textarea'
 import { StandardWorkDashboard } from './dashboard'
+import { PhotoCapture } from './runner/photo-capture'
+import { SignaturePad } from './runner/signature-pad'
 
-// Checklist Item Component
-function ChecklistItemRenderer({
-  item,
-  response,
-  onResponseChange,
-  disabled = false,
-  index,
-}: {
+const userLocale =
+  typeof navigator !== 'undefined' && navigator.language
+    ? navigator.language
+    : 'en-US'
+
+// ---------- Conditional display helpers ----------
+
+type ConditionOp =
+  | 'equals'
+  | 'not_equals'
+  | 'contains'
+  | 'is_checked'
+  | 'is_unchecked'
+
+function evaluateCondition(
+  op: ConditionOp | string,
+  expected: string | undefined,
+  response: Partial<StandardWorkResponse> | undefined
+): boolean {
+  if (!response) {
+    // No response yet -> only the unchecked predicate can be satisfied.
+    return op === 'is_unchecked'
+  }
+  switch (op) {
+    case 'is_checked':
+      return !!response.is_checked
+    case 'is_unchecked':
+      return !response.is_checked
+    case 'not_equals':
+      return (response.response_value ?? '') !== (expected ?? '')
+    case 'contains':
+      return (response.response_value ?? '').includes(expected ?? '')
+    case 'equals':
+    default:
+      return (response.response_value ?? '') === (expected ?? '')
+  }
+}
+
+function isItemVisible(
+  item: StandardWorkItem,
+  responses: Record<string, Partial<StandardWorkResponse>>
+): boolean {
+  if (!item.conditional_display) return true
+  const { depends_on, condition, value } = item.conditional_display
+  return evaluateCondition(condition, value, responses[depends_on])
+}
+
+// ---------- Multi-select serialization ----------
+
+function parseMultiValue(raw?: string | null): string[] {
+  if (!raw) return []
+  // Stored as JSON array; gracefully handle legacy comma-separated strings.
+  try {
+    const parsed = JSON.parse(raw)
+    return Array.isArray(parsed)
+      ? parsed.filter((v) => typeof v === 'string')
+      : []
+  } catch {
+    return raw
+      .split(',')
+      .map((s) => s.trim())
+      .filter(Boolean)
+  }
+}
+
+function serializeMultiValue(values: string[]): string {
+  return JSON.stringify(values)
+}
+
+// ---------- Item Renderer ----------
+
+interface ChecklistItemRendererProps {
   item: StandardWorkItem
-  response?: StandardWorkResponse
+  response?: Partial<StandardWorkResponse>
   onResponseChange: (
     itemId: string,
     value: Partial<StandardWorkResponse>
   ) => void
   disabled?: boolean
   index: number
-}) {
+  organizationId: string
+  submissionId: string
+}
+
+function ChecklistItemRenderer({
+  item,
+  response,
+  onResponseChange,
+  disabled = false,
+  index,
+  organizationId,
+  submissionId,
+}: ChecklistItemRendererProps) {
+  const [uploading, setUploading] = useState(false)
+
   const handleCheckboxChange = (checked: boolean) => {
     onResponseChange(item.id, {
       is_checked: checked,
@@ -84,9 +173,81 @@ function ChecklistItemRenderer({
     onResponseChange(item.id, { response_value: value })
   }
 
+  const handleMultiSelectChange = (values: string[]) => {
+    onResponseChange(item.id, {
+      response_value: serializeMultiValue(values),
+    })
+  }
+
+  const handlePhotoCapture = async (file: File) => {
+    setUploading(true)
+    try {
+      const result = await uploadStandardWorkAttachment({
+        file,
+        organizationId,
+        submissionId,
+        itemId: item.id,
+        contentType: file.type,
+      })
+      if (!result.success || !result.publicUrl) {
+        toast.error(
+          `Couldn't upload photo: ${result.error?.message ?? 'unknown error'}`
+        )
+        return
+      }
+      onResponseChange(item.id, {
+        file_url: result.publicUrl,
+        response_value: result.publicUrl,
+        file_metadata: {
+          storage_path: result.storagePath,
+          content_type: result.contentType,
+          size: result.size,
+          captured_at: new Date().toISOString(),
+        },
+      })
+    } finally {
+      setUploading(false)
+    }
+  }
+
+  const handleSignatureCapture = async (blob: Blob) => {
+    setUploading(true)
+    try {
+      const result = await uploadStandardWorkAttachment({
+        file: blob,
+        organizationId,
+        submissionId,
+        itemId: item.id,
+        contentType: 'image/png',
+        fileName: 'signature.png',
+      })
+      if (!result.success || !result.publicUrl) {
+        toast.error(
+          `Couldn't save signature: ${result.error?.message ?? 'unknown error'}`
+        )
+        return
+      }
+      onResponseChange(item.id, {
+        file_url: result.publicUrl,
+        response_value: result.publicUrl,
+        is_checked: true,
+        file_metadata: {
+          storage_path: result.storagePath,
+          content_type: 'image/png',
+          size: result.size,
+          captured_at: new Date().toISOString(),
+        },
+      })
+      toast.success('Signature saved')
+    } finally {
+      setUploading(false)
+    }
+  }
+
   const isCompleted =
     response?.is_checked ||
-    (response?.response_value && response.response_value !== '')
+    !!response?.file_url ||
+    (response?.response_value !== undefined && response.response_value !== '')
 
   return (
     <div
@@ -109,17 +270,19 @@ function ChecklistItemRenderer({
           )}
         >
           {isCompleted ? (
-            <Check className='h-4 w-4' strokeWidth={3} />
+            <Check className='h-4 w-4' strokeWidth={3} aria-label='Completed' />
           ) : (
             index + 1
           )}
         </div>
 
-        {/* Item Content */}
         <div className='min-w-0 flex-1 space-y-3'>
           <div className='flex items-start justify-between gap-2'>
             <div>
-              <Label className='flex items-center gap-2 text-sm font-semibold'>
+              <Label
+                htmlFor={item.id}
+                className='flex items-center gap-2 text-sm font-semibold'
+              >
                 {item.item_title}
                 {item.is_required && (
                   <Badge
@@ -143,14 +306,15 @@ function ChecklistItemRenderer({
             )}
           </div>
 
-          {/* Input based on type */}
           <div>
             {item.item_type === 'checkbox' && (
               <div className='bg-muted/30 flex items-center space-x-3 rounded-lg p-2.5'>
                 <Checkbox
                   id={item.id}
                   checked={response?.is_checked || false}
-                  onCheckedChange={handleCheckboxChange}
+                  onCheckedChange={(checked) =>
+                    handleCheckboxChange(checked === true)
+                  }
                   disabled={disabled}
                   className='h-5 w-5'
                 />
@@ -168,6 +332,7 @@ function ChecklistItemRenderer({
 
             {item.item_type === 'text' && (
               <Textarea
+                id={item.id}
                 placeholder={item.placeholder || 'Enter your response...'}
                 value={response?.response_value || ''}
                 onChange={(e) => handleTextChange(e.target.value)}
@@ -178,6 +343,7 @@ function ChecklistItemRenderer({
 
             {item.item_type === 'number' && (
               <Input
+                id={item.id}
                 type='number'
                 placeholder={item.placeholder || 'Enter a number...'}
                 value={response?.response_value || ''}
@@ -189,14 +355,17 @@ function ChecklistItemRenderer({
               />
             )}
 
-            {(item.item_type === 'select' ||
-              item.item_type === 'multi_select') && (
+            {item.item_type === 'select' && (
               <Select
                 value={response?.response_value || ''}
                 onValueChange={handleSelectChange}
                 disabled={disabled}
               >
-                <SelectTrigger className='max-w-[320px]'>
+                <SelectTrigger
+                  id={item.id}
+                  className='max-w-[320px]'
+                  aria-label={item.item_title}
+                >
                   <SelectValue
                     placeholder={item.placeholder || 'Select an option...'}
                   />
@@ -211,8 +380,20 @@ function ChecklistItemRenderer({
               </Select>
             )}
 
+            {item.item_type === 'multi_select' && (
+              <MultiSelect
+                options={item.options ?? []}
+                selected={parseMultiValue(response?.response_value)}
+                onSelectionChange={handleMultiSelectChange}
+                placeholder={item.placeholder || 'Select all that apply...'}
+                disabled={disabled}
+                className='max-w-[480px]'
+              />
+            )}
+
             {item.item_type === 'date' && (
               <Input
+                id={item.id}
                 type='date'
                 value={response?.date_value || ''}
                 onChange={(e) =>
@@ -228,6 +409,7 @@ function ChecklistItemRenderer({
 
             {item.item_type === 'time' && (
               <Input
+                id={item.id}
                 type='time'
                 value={response?.time_value || ''}
                 onChange={(e) =>
@@ -240,12 +422,39 @@ function ChecklistItemRenderer({
                 className='max-w-[160px]'
               />
             )}
+
+            {item.item_type === 'photo' && (
+              <PhotoCapture
+                existingUrl={response?.file_url ?? null}
+                disabled={disabled}
+                isSaving={uploading}
+                onCapture={handlePhotoCapture}
+                onRemove={async () => {
+                  onResponseChange(item.id, {
+                    file_url: undefined,
+                    response_value: '',
+                    file_metadata: {},
+                  })
+                }}
+              />
+            )}
+
+            {item.item_type === 'signature' && (
+              <SignaturePad
+                existingUrl={response?.file_url ?? null}
+                disabled={disabled}
+                isSaving={uploading}
+                onCapture={handleSignatureCapture}
+              />
+            )}
           </div>
 
-          {/* Item Notes */}
           {response?.item_notes && (
             <div className='text-muted-foreground bg-muted/50 flex items-start gap-2 rounded-lg p-2.5 text-xs'>
-              <FileText className='mt-0.5 h-3 w-3 shrink-0' />
+              <FileText
+                className='mt-0.5 h-3 w-3 shrink-0'
+                aria-hidden='true'
+              />
               {response.item_notes}
             </div>
           )}
@@ -255,36 +464,46 @@ function ChecklistItemRenderer({
   )
 }
 
-// Active Submission View
+// ---------- Active Submission View ----------
+
+interface ActiveSubmissionViewProps {
+  submissionId: string
+  onComplete: () => void
+  onCancel: () => void
+}
+
 function ActiveSubmissionView({
   submissionId,
   onComplete,
   onCancel,
-}: {
-  submissionId: string
-  onComplete: () => void
-  onCancel: () => void
-}) {
+}: ActiveSubmissionViewProps) {
+  const { authState } = useUnifiedAuth()
+  const organizationId = authState.profile?.organization_id ?? ''
+
   const {
-    useSubmission,
-    useSubmissionResponses,
-    useTemplateItems,
+    useSubmissionBundle,
     upsertResponse,
     submitChecklist,
     isSubmittingChecklist,
   } = useStandardWork()
-  const { data: submission, isLoading: submissionLoading } =
-    useSubmission(submissionId)
-  const { data: responses = [], isLoading: responsesLoading } =
-    useSubmissionResponses(submissionId)
-  const { data: items = [], isLoading: itemsLoading } = useTemplateItems(
-    submission?.template_id || ''
-  )
+  // One RPC instead of three parallel queries (submission + responses + items).
+  // The bundle returns a hydrated submission (with template + area joined) and
+  // an array of items already filtered to the ones present on the submission.
+  const {
+    data: bundle,
+    isLoading: bundleLoading,
+    isError: bundleError,
+  } = useSubmissionBundle(submissionId)
+
+  const submission = bundle?.submission
+  const responses = useMemo(() => bundle?.responses ?? [], [bundle])
+  const items = useMemo(() => bundle?.items ?? [], [bundle])
 
   const [localResponses, setLocalResponses] = useState<
     Record<string, Partial<StandardWorkResponse>>
   >({})
   const [isSaving, setIsSaving] = useState(false)
+  const [statusAnnouncement, setStatusAnnouncement] = useState('')
   const [collapsedSections, setCollapsedSections] = useState<
     Record<string, boolean>
   >({})
@@ -292,19 +511,30 @@ function ActiveSubmissionView({
     {}
   )
   const pendingSavesRef = useRef(0)
-
-  // Initialize local responses from fetched data
+  // Mirror localResponses in a ref so flush handlers can read the latest
+  // state without listing it as a dependency (avoids stale closure issues
+  // when the user closes the tab mid-edit).
+  const localResponsesRef = useRef<
+    Record<string, Partial<StandardWorkResponse>>
+  >({})
   useEffect(() => {
-    if (responses.length > 0) {
+    localResponsesRef.current = localResponses
+  }, [localResponses])
+
+  // Seed local state from server only on the first time responses arrive --
+  // re-runs when the server refetches would otherwise stomp in-flight edits.
+  const seededRef = useRef(false)
+  useEffect(() => {
+    if (!seededRef.current && responses.length > 0) {
       const responseMap: Record<string, Partial<StandardWorkResponse>> = {}
       responses.forEach((r) => {
         responseMap[r.item_id] = r
       })
       setLocalResponses(responseMap)
+      seededRef.current = true
     }
   }, [responses])
 
-  // Cleanup timers on unmount
   useEffect(() => {
     const timers = saveTimersRef.current
     return () => {
@@ -312,88 +542,146 @@ function ActiveSubmissionView({
     }
   }, [])
 
-  // Debounced save function -- only fires after 600ms of inactivity per item
+  // Flush a single item's pending payload bypassing the debounce timer.
+  const flushItem = useCallback(
+    async (itemId: string, payload?: Partial<StandardWorkResponse>) => {
+      const timer = saveTimersRef.current[itemId]
+      if (timer) {
+        clearTimeout(timer)
+        delete saveTimersRef.current[itemId]
+      }
+      const fullResponse = payload || {
+        ...localResponsesRef.current[itemId],
+        item_id: itemId,
+        submission_id: submissionId,
+      }
+      pendingSavesRef.current++
+      setIsSaving(true)
+      try {
+        await upsertResponse(fullResponse)
+      } catch {
+        // mutation toasts on persistent failure
+      } finally {
+        pendingSavesRef.current--
+        if (pendingSavesRef.current === 0) {
+          setIsSaving(false)
+          setStatusAnnouncement('Saved')
+        }
+      }
+    },
+    [submissionId, upsertResponse]
+  )
+
+  // Flush every still-pending debounced save. Used on Save & Exit and on tab
+  // hide / beforeunload so in-flight edits aren't silently dropped.
+  const flushAllPending = useCallback(async () => {
+    const pendingItemIds = Object.keys(saveTimersRef.current)
+    if (pendingItemIds.length === 0) return
+    await Promise.all(pendingItemIds.map((id) => flushItem(id)))
+  }, [flushItem])
+
+  useEffect(() => {
+    const onVisibilityChange = () => {
+      if (document.visibilityState === 'hidden') {
+        // Best effort: fire and forget. Browsers typically allow short
+        // synchronous-ish work before they actually pause the tab.
+        flushAllPending()
+      }
+    }
+    const onBeforeUnload = (e: BeforeUnloadEvent) => {
+      if (Object.keys(saveTimersRef.current).length > 0) {
+        flushAllPending()
+        e.preventDefault()
+        e.returnValue = ''
+      }
+    }
+    window.addEventListener('visibilitychange', onVisibilityChange)
+    window.addEventListener('beforeunload', onBeforeUnload)
+    return () => {
+      window.removeEventListener('visibilitychange', onVisibilityChange)
+      window.removeEventListener('beforeunload', onBeforeUnload)
+    }
+  }, [flushAllPending])
+
+  // Debounced save -- 600ms inactivity per item. Reads `payload` directly
+  // rather than re-deriving from React state to avoid stale-merge bugs.
   const debouncedSave = useCallback(
-    (itemId: string, fullResponse: Partial<StandardWorkResponse>) => {
-      // Clear any existing timer for this item
+    (itemId: string, payload: Partial<StandardWorkResponse>) => {
       if (saveTimersRef.current[itemId]) {
         clearTimeout(saveTimersRef.current[itemId])
       }
-
-      saveTimersRef.current[itemId] = setTimeout(async () => {
+      saveTimersRef.current[itemId] = setTimeout(() => {
         delete saveTimersRef.current[itemId]
-        pendingSavesRef.current++
-        setIsSaving(true)
-        try {
-          await upsertResponse(fullResponse)
-        } catch {
-          // Error toast is handled by the mutation
-        } finally {
-          pendingSavesRef.current--
-          if (pendingSavesRef.current === 0) {
-            setIsSaving(false)
-          }
-        }
+        flushItem(itemId, payload)
       }, 600)
     },
-    [upsertResponse]
+    [flushItem]
   )
 
   const handleResponseChange = useCallback(
     (itemId: string, value: Partial<StandardWorkResponse>) => {
-      // 1. Update local state immediately for instant UI feedback (pure function)
-      setLocalResponses((prev) => ({
-        ...prev,
-        [itemId]: {
+      // Functional setState so we always merge against the latest snapshot,
+      // including concurrent rapid edits from different items.
+      let merged: Partial<StandardWorkResponse> = {}
+      setLocalResponses((prev) => {
+        merged = {
           ...prev[itemId],
           ...value,
           item_id: itemId,
           submission_id: submissionId,
-        },
-      }))
+        }
+        return { ...prev, [itemId]: merged }
+      })
 
-      // 2. Build the full response payload for saving
-      const fullResponse = {
-        ...localResponses[itemId],
-        ...value,
-        item_id: itemId,
-        submission_id: submissionId,
-      }
-
-      // 3. Immediate save for single-action inputs, debounced for text/number
       const itemType = items.find((i) => i.id === itemId)?.item_type
-      if (
+      const isImmediate =
         itemType === 'checkbox' ||
         itemType === 'select' ||
-        itemType === 'multi_select'
-      ) {
-        // Single-action inputs: save immediately
-        setIsSaving(true)
-        pendingSavesRef.current++
-        upsertResponse(fullResponse)
-          .catch(() => {})
-          .finally(() => {
-            pendingSavesRef.current--
-            if (pendingSavesRef.current === 0) setIsSaving(false)
-          })
+        itemType === 'multi_select' ||
+        itemType === 'photo' ||
+        itemType === 'signature'
+
+      setStatusAnnouncement('Saving…')
+
+      if (isImmediate) {
+        flushItem(itemId, merged)
       } else {
-        // Text, number, date, time: debounce
-        debouncedSave(itemId, fullResponse)
+        debouncedSave(itemId, merged)
       }
     },
-    [submissionId, upsertResponse, debouncedSave, localResponses, items]
+    [submissionId, items, debouncedSave, flushItem]
+  )
+
+  const visibleItems = useMemo(
+    () => items.filter((item) => isItemVisible(item, localResponses)),
+    [items, localResponses]
+  )
+
+  const requiredVisibleItems = useMemo(
+    () => visibleItems.filter((i) => i.is_required),
+    [visibleItems]
   )
 
   const handleSubmit = async () => {
-    const requiredItems = items.filter((i) => i.is_required)
-    const missingRequired = requiredItems.filter((item) => {
+    // Flush any debounced saves before validating so the latest state is
+    // both in the UI and on the server.
+    await flushAllPending()
+
+    const missingRequired = requiredVisibleItems.filter((item) => {
       const response = localResponses[item.id]
       if (!response) return true
       if (item.item_type === 'checkbox') return !response.is_checked
+      if (item.item_type === 'photo' || item.item_type === 'signature')
+        return !response.file_url
+      if (item.item_type === 'multi_select')
+        return parseMultiValue(response.response_value).length === 0
       return !response.response_value
     })
 
     if (missingRequired.length > 0) {
+      setStatusAnnouncement(
+        `${missingRequired.length} required item${missingRequired.length === 1 ? '' : 's'} remaining`
+      )
       toast.error(
         `Please complete all required items (${missingRequired.length} remaining)`
       )
@@ -402,31 +690,60 @@ function ActiveSubmissionView({
 
     try {
       await submitChecklist(submissionId)
+      setStatusAnnouncement('Submitted')
       onComplete()
     } catch (error) {
       logger.error('Submit error:', error)
     }
   }
 
-  // Group items by section
+  const handleSaveAndExit = async () => {
+    await flushAllPending()
+    onCancel()
+  }
+
   const groupedItems = useMemo(() => {
     const groups: Record<string, StandardWorkItem[]> = {}
-    items.forEach((item) => {
+    visibleItems.forEach((item) => {
       const section = item.section_name || 'General'
       if (!groups[section]) groups[section] = []
       groups[section].push(item)
     })
     return groups
-  }, [items])
+  }, [visibleItems])
 
-  const completedCount = Object.values(localResponses).filter((r) => {
-    const item = items.find((i) => i.id === r.item_id)
-    if (!item) return false
-    if (item.item_type === 'checkbox') return r.is_checked
-    return r.response_value && r.response_value !== ''
+  // Required-only completion percentage so optional items don't drag the
+  // progress number down when most fields are nice-to-haves.
+  const completedRequired = requiredVisibleItems.filter((item) => {
+    const response = localResponses[item.id]
+    if (!response) return false
+    if (item.item_type === 'checkbox') return !!response.is_checked
+    if (item.item_type === 'photo' || item.item_type === 'signature')
+      return !!response.file_url
+    if (item.item_type === 'multi_select')
+      return parseMultiValue(response.response_value).length > 0
+    return !!response.response_value && response.response_value !== ''
   }).length
 
-  const progress = items.length > 0 ? (completedCount / items.length) * 100 : 0
+  const completedTotal = visibleItems.filter((item) => {
+    const response = localResponses[item.id]
+    if (!response) return false
+    if (item.item_type === 'checkbox') return !!response.is_checked
+    if (item.item_type === 'photo' || item.item_type === 'signature')
+      return !!response.file_url
+    if (item.item_type === 'multi_select')
+      return parseMultiValue(response.response_value).length > 0
+    return !!response.response_value && response.response_value !== ''
+  }).length
+
+  const requiredProgress =
+    requiredVisibleItems.length > 0
+      ? (completedRequired / requiredVisibleItems.length) * 100
+      : completedTotal === visibleItems.length
+        ? 100
+        : 0
+  const totalProgress =
+    visibleItems.length > 0 ? (completedTotal / visibleItems.length) * 100 : 0
   const isSubmitted = submission?.status === 'submitted'
 
   const toggleSection = (section: string) => {
@@ -437,13 +754,17 @@ function ActiveSubmissionView({
     const completed = sectionItems.filter((item) => {
       const response = localResponses[item.id]
       if (!response) return false
-      if (item.item_type === 'checkbox') return response.is_checked
-      return response.response_value && response.response_value !== ''
+      if (item.item_type === 'checkbox') return !!response.is_checked
+      if (item.item_type === 'photo' || item.item_type === 'signature')
+        return !!response.file_url
+      if (item.item_type === 'multi_select')
+        return parseMultiValue(response.response_value).length > 0
+      return !!response.response_value && response.response_value !== ''
     }).length
     return { completed, total: sectionItems.length }
   }
 
-  if (submissionLoading || responsesLoading || itemsLoading) {
+  if (bundleLoading) {
     return (
       <div className='mx-auto max-w-4xl space-y-4'>
         <Skeleton className='h-10 w-48' />
@@ -454,43 +775,56 @@ function ActiveSubmissionView({
     )
   }
 
-  if (!submission) {
+  if (bundleError || !submission) {
     return (
       <Alert variant='destructive' className='mx-auto max-w-4xl'>
         <AlertCircle className='h-4 w-4' />
         <AlertDescription>
-          Submission not found. It may have been deleted.
+          {bundleError
+            ? "Couldn't load this submission. It may have been deleted, or you may not have permission to view it."
+            : 'Submission not found. It may have been deleted.'}
         </AlertDescription>
       </Alert>
     )
   }
 
-  // Track item indices across sections
   let globalIndex = 0
 
   return (
     <div className='mx-auto max-w-4xl space-y-6'>
-      {/* Back navigation + Header */}
+      {/* Polite live region: only screen readers see this. */}
+      <p
+        role='status'
+        aria-live='polite'
+        aria-atomic='true'
+        className='sr-only'
+      >
+        {statusAnnouncement}
+      </p>
+
       <div className='flex items-center gap-3'>
         <Button
           variant='ghost'
           size='sm'
-          onClick={onCancel}
+          onClick={handleSaveAndExit}
           className='text-muted-foreground hover:text-foreground h-8 gap-1.5'
+          aria-label='Save progress and return to dashboard'
         >
           <ArrowLeft className='h-4 w-4' />
           Back to Dashboard
         </Button>
       </div>
 
-      {/* Template header card */}
       <Card className='overflow-hidden'>
         <div className='from-primary/60 to-primary/20 h-1.5 bg-linear-to-r' />
         <CardContent className='p-6'>
           <div className='flex items-start justify-between gap-4'>
             <div className='flex items-start gap-4'>
               <div className='bg-primary/10 flex h-12 w-12 shrink-0 items-center justify-center rounded-xl'>
-                <ClipboardCheck className='text-primary h-6 w-6' />
+                <ClipboardCheck
+                  className='text-primary h-6 w-6'
+                  aria-hidden='true'
+                />
               </div>
               <div>
                 <h2 className='text-lg font-bold'>
@@ -499,14 +833,14 @@ function ActiveSubmissionView({
                 <div className='text-muted-foreground mt-1 flex items-center gap-3 text-sm'>
                   {submission.working_area?.area_name && (
                     <span className='flex items-center gap-1'>
-                      <MapPin className='h-3.5 w-3.5' />
+                      <MapPin className='h-3.5 w-3.5' aria-hidden='true' />
                       {submission.working_area.area_name}
                     </span>
                   )}
                   <span className='flex items-center gap-1'>
-                    <Calendar className='h-3.5 w-3.5' />
+                    <Calendar className='h-3.5 w-3.5' aria-hidden='true' />
                     {new Date(submission.shift_date).toLocaleDateString(
-                      'en-US',
+                      userLocale,
                       { weekday: 'short', month: 'short', day: 'numeric' }
                     )}
                   </span>
@@ -525,31 +859,58 @@ function ActiveSubmissionView({
             </Badge>
           </div>
 
-          {/* Progress bar */}
           <div className='mt-5 space-y-2'>
             <div className='flex items-center justify-between text-sm'>
               <div className='flex items-center gap-2'>
-                <span className='text-muted-foreground'>Progress</span>
+                <span className='text-muted-foreground'>
+                  {requiredVisibleItems.length > 0
+                    ? 'Required progress'
+                    : 'Progress'}
+                </span>
                 {isSaving && (
                   <span className='text-muted-foreground flex items-center gap-1 text-xs'>
-                    <Loader2 className='h-3 w-3 animate-spin' />
+                    <Loader2
+                      className='h-3 w-3 animate-spin'
+                      aria-hidden='true'
+                    />
                     Saving
                   </span>
                 )}
               </div>
               <span className='font-semibold'>
-                {completedCount} / {items.length}
+                {requiredVisibleItems.length > 0
+                  ? `${completedRequired} / ${requiredVisibleItems.length}`
+                  : `${completedTotal} / ${visibleItems.length}`}
                 <span className='text-muted-foreground ml-1 font-normal'>
-                  ({Math.round(progress)}%)
+                  (
+                  {Math.round(
+                    requiredVisibleItems.length > 0
+                      ? requiredProgress
+                      : totalProgress
+                  )}
+                  %)
                 </span>
               </span>
             </div>
-            <Progress value={progress} className='h-2.5' />
+            <Progress
+              value={
+                requiredVisibleItems.length > 0
+                  ? requiredProgress
+                  : totalProgress
+              }
+              className='h-2.5'
+            />
+            {requiredVisibleItems.length > 0 &&
+              completedTotal !== visibleItems.length && (
+                <p className='text-muted-foreground text-[11px]'>
+                  All items: {completedTotal} of {visibleItems.length} (
+                  {Math.round(totalProgress)}%)
+                </p>
+              )}
           </div>
         </CardContent>
       </Card>
 
-      {/* Instructions */}
       {submission.template?.instructions && (
         <Alert className='border-blue-500/20 bg-blue-500/5'>
           <FileText className='h-4 w-4 text-blue-500' />
@@ -559,14 +920,14 @@ function ActiveSubmissionView({
         </Alert>
       )}
 
-      {/* Checklist Sections */}
       <div className='space-y-4'>
         {Object.entries(groupedItems).map(([section, sectionItems]) => {
           const { completed, total } = getSectionCompletion(sectionItems)
-          const isCollapsed = collapsedSections[section]
+          const isCollapsed = !!collapsedSections[section]
           const sectionComplete = completed === total && total > 0
           const startIndex = globalIndex
           globalIndex += sectionItems.length
+          const sectionId = `sw-section-${section.replace(/\s+/g, '-').toLowerCase()}`
 
           return (
             <Card
@@ -576,48 +937,59 @@ function ActiveSubmissionView({
                 sectionComplete && 'border-green-500/20'
               )}
             >
-              <CardHeader
-                className='hover:bg-accent/30 cursor-pointer p-4 transition-colors select-none'
-                onClick={() => toggleSection(section)}
-              >
-                <div className='flex items-center justify-between'>
-                  <div className='flex items-center gap-3'>
-                    <ChevronDown
-                      className={cn(
-                        'text-muted-foreground h-4 w-4 transition-transform duration-200',
-                        isCollapsed && '-rotate-90'
-                      )}
-                    />
-                    <CardTitle className='text-muted-foreground text-sm font-semibold tracking-wider uppercase'>
-                      {section}
-                    </CardTitle>
-                    <Badge
-                      variant={sectionComplete ? 'default' : 'outline'}
-                      className={cn(
-                        'h-5 text-[10px]',
-                        sectionComplete &&
-                          'border-green-500/20 bg-green-500/10 text-green-600 dark:text-green-400'
-                      )}
-                    >
-                      {completed}/{total}
-                    </Badge>
+              <CardHeader className='p-0'>
+                <button
+                  type='button'
+                  onClick={() => toggleSection(section)}
+                  aria-expanded={!isCollapsed}
+                  aria-controls={sectionId}
+                  className='hover:bg-accent/30 focus-visible:ring-ring w-full p-4 transition-colors focus-visible:ring-2 focus-visible:ring-inset'
+                >
+                  <div className='flex items-center justify-between'>
+                    <div className='flex items-center gap-3'>
+                      <ChevronDown
+                        className={cn(
+                          'text-muted-foreground h-4 w-4 transition-transform duration-200',
+                          isCollapsed && '-rotate-90'
+                        )}
+                        aria-hidden='true'
+                      />
+                      <CardTitle className='text-muted-foreground text-sm font-semibold tracking-wider uppercase'>
+                        {section}
+                      </CardTitle>
+                      <Badge
+                        variant={sectionComplete ? 'default' : 'outline'}
+                        className={cn(
+                          'h-5 text-[10px]',
+                          sectionComplete &&
+                            'border-green-500/20 bg-green-500/10 text-green-600 dark:text-green-400'
+                        )}
+                      >
+                        {completed}/{total}
+                      </Badge>
+                    </div>
+                    {sectionComplete && (
+                      <CheckCircle2
+                        className='h-4 w-4 text-green-500'
+                        aria-hidden='true'
+                      />
+                    )}
                   </div>
-                  {sectionComplete && (
-                    <CheckCircle2 className='h-4 w-4 text-green-500' />
-                  )}
-                </div>
+                </button>
               </CardHeader>
 
               {!isCollapsed && (
-                <CardContent className='space-y-3 p-4 pt-0'>
+                <CardContent id={sectionId} className='space-y-3 p-4 pt-0'>
                   {sectionItems.map((item, idx) => (
                     <ChecklistItemRenderer
                       key={item.id}
                       item={item}
-                      response={localResponses[item.id] as StandardWorkResponse}
+                      response={localResponses[item.id]}
                       onResponseChange={handleResponseChange}
                       disabled={isSubmitted}
                       index={startIndex + idx}
+                      organizationId={organizationId}
+                      submissionId={submissionId}
                     />
                   ))}
                 </CardContent>
@@ -627,25 +999,44 @@ function ActiveSubmissionView({
         })}
       </div>
 
-      {/* Sticky Submit Bar */}
       {!isSubmitted && (
         <div className='bg-background/95 sticky bottom-0 -mx-6 mt-6 border-t px-6 py-4 backdrop-blur-sm'>
           <div className='mx-auto flex max-w-4xl items-center justify-between'>
             <div className='text-muted-foreground text-sm'>
-              {completedCount === items.length ? (
+              {requiredVisibleItems.length > 0 &&
+              completedRequired === requiredVisibleItems.length ? (
                 <span className='flex items-center gap-1.5 font-medium text-green-600 dark:text-green-400'>
-                  <CheckCircle2 className='h-4 w-4' />
+                  <CheckCircle2 className='h-4 w-4' aria-hidden='true' />
+                  Required items complete — ready to submit
+                </span>
+              ) : requiredVisibleItems.length > 0 ? (
+                <span>
+                  {requiredVisibleItems.length - completedRequired} required
+                  item
+                  {requiredVisibleItems.length - completedRequired !== 1
+                    ? 's'
+                    : ''}{' '}
+                  remaining
+                </span>
+              ) : completedTotal === visibleItems.length ? (
+                <span className='flex items-center gap-1.5 font-medium text-green-600 dark:text-green-400'>
+                  <CheckCircle2 className='h-4 w-4' aria-hidden='true' />
                   All items completed — ready to submit
                 </span>
               ) : (
                 <span>
-                  {items.length - completedCount} item
-                  {items.length - completedCount !== 1 ? 's' : ''} remaining
+                  {visibleItems.length - completedTotal} item
+                  {visibleItems.length - completedTotal !== 1 ? 's' : ''}{' '}
+                  remaining
                 </span>
               )}
             </div>
             <div className='flex items-center gap-3'>
-              <Button variant='ghost' onClick={onCancel} className='h-9'>
+              <Button
+                variant='ghost'
+                onClick={handleSaveAndExit}
+                className='h-9'
+              >
                 Save & Exit
               </Button>
               <Button
@@ -668,7 +1059,8 @@ function ActiveSubmissionView({
   )
 }
 
-// Main Checklist Component
+// ---------- Main Checklist Component ----------
+
 export default function StandardWorkChecklist() {
   const { startSubmission } = useStandardWork()
 
@@ -681,6 +1073,15 @@ export default function StandardWorkChecklist() {
       const submission = await startSubmission({ templateId })
       setActiveSubmissionId(submission.id)
     } catch (error) {
+      // The service throws a structured error for already-submitted duplicates;
+      // surface a friendlier toast in that case.
+      const e = error as Error & { code?: string }
+      if (e?.code === 'DUPLICATE_SUBMISSION') {
+        toast.error(
+          'This checklist has already been submitted today. View it in Recent Activity.'
+        )
+        return
+      }
       logger.error('Start checklist error:', error)
     }
   }
@@ -691,14 +1092,12 @@ export default function StandardWorkChecklist() {
 
   const handleChecklistComplete = () => {
     setActiveSubmissionId(null)
-    // Toast is handled by the submitChecklist mutation in use-standard-work.ts
   }
 
   const handleChecklistCancel = () => {
     setActiveSubmissionId(null)
   }
 
-  // Active submission view
   if (activeSubmissionId) {
     return (
       <ActiveSubmissionView
@@ -709,7 +1108,6 @@ export default function StandardWorkChecklist() {
     )
   }
 
-  // Dashboard view
   return (
     <StandardWorkDashboard
       onStartChecklist={handleStartChecklist}
@@ -717,3 +1115,5 @@ export default function StandardWorkChecklist() {
     />
   )
 }
+
+// Created and developed by Jai Singh

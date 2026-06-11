@@ -1,4 +1,4 @@
-# SAP RFC-enabled Python API for OmniFrame
+# SAP RFC-enabled Python API for OneBox AI
 # This Dockerfile includes the SAP NW RFC SDK for pyrfc connectivity
 
 FROM python:3.11-slim

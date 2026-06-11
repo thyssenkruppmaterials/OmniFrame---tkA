@@ -1,3 +1,4 @@
+// Created and developed by Jai Singh
 import { useEffect } from 'react'
 import { createFileRoute } from '@tanstack/react-router'
 import { timeclockPWAManager } from '@/lib/pwa/timeclock-pwa-manager'
@@ -17,4 +18,5 @@ function TimeclockPage() {
 export const Route = createFileRoute('/timeclockapp/')({
   component: TimeclockPage,
 })
-// Developer and Creator: Jai Singh
+
+// Created and developed by Jai Singh

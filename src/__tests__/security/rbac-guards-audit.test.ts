@@ -1,3 +1,4 @@
+// Created and developed by Jai Singh
 /**
  * RBAC Guards Audit Tests
  * Verify that critical admin components have PermissionGuard wrappers and
@@ -188,3 +189,5 @@ describe('Python Auth Hardening Markers', () => {
     expect(content).not.toMatch(/==\s*["']@j\.ai["']/)
   })
 })
+
+// Created and developed by Jai Singh

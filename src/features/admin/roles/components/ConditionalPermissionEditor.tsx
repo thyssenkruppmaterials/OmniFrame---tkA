@@ -1,3 +1,4 @@
+// Created and developed by Jai Singh
 import { useState } from 'react'
 import {
   IconCalendar,
@@ -452,7 +453,7 @@ export function ConditionalPermissionEditor({
                             addToArray('location.allowed_countries', value)
                           }
                         >
-                          <SelectTrigger className='flex-1'>
+                          <SelectTrigger className='min-w-0 flex-1'>
                             <SelectValue placeholder='Add country...' />
                           </SelectTrigger>
                           <SelectContent>
@@ -510,7 +511,7 @@ export function ConditionalPermissionEditor({
                             addToArray('location.blocked_countries', value)
                           }
                         >
-                          <SelectTrigger className='flex-1'>
+                          <SelectTrigger className='min-w-0 flex-1'>
                             <SelectValue placeholder='Add country to block...' />
                           </SelectTrigger>
                           <SelectContent>
@@ -703,3 +704,5 @@ export function ConditionalPermissionEditor({
     </div>
   )
 }
+
+// Created and developed by Jai Singh

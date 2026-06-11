@@ -1,3 +1,4 @@
+// Created and developed by Jai Singh
 /**
  * Labor Board Component
  * Interactive drag-and-drop board for managing associate area assignments
@@ -451,3 +452,5 @@ function LaborBoardSkeleton() {
 }
 
 export default LaborBoard
+
+// Created and developed by Jai Singh

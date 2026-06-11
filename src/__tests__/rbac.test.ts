@@ -1,3 +1,4 @@
+// Created and developed by Jai Singh
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
 
 // Mock Supabase client
@@ -696,3 +697,5 @@ export class RBACTestUtils {
 }
 
 export { mockUser, mockRoles, mockPermissions }
+
+// Created and developed by Jai Singh

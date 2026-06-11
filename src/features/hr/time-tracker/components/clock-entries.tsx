@@ -1,3 +1,4 @@
+// Created and developed by Jai Singh
 /**
  * Clock Entries Component
  * Real clock entry log viewer with filtering, status indicators, and photo preview.
@@ -415,3 +416,5 @@ function ClockEntries() {
 }
 
 export default ClockEntries
+
+// Created and developed by Jai Singh

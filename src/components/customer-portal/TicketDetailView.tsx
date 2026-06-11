@@ -1,3 +1,4 @@
+// Created and developed by Jai Singh
 import {
   AlertCircle,
   Calendar,
@@ -231,3 +232,5 @@ export function TicketDetailView({ ticketId }: TicketDetailViewProps) {
     </Card>
   )
 }
+
+// Created and developed by Jai Singh

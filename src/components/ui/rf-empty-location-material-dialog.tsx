@@ -1,3 +1,4 @@
+// Created and developed by Jai Singh
 /**
  * RF Empty Location Material Found Dialog Component
  *
@@ -615,3 +616,5 @@ export const RFEmptyLocationMaterialDialog: React.FC<
     </Dialog>
   )
 }
+
+// Created and developed by Jai Singh

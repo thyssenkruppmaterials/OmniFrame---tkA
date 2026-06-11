@@ -1,3 +1,4 @@
+// Created and developed by Jai Singh
 'use client'
 
 /**
@@ -25,6 +26,7 @@ import { useUnifiedAuth } from '@/lib/auth/unified-auth-provider'
 import { cn } from '@/lib/utils'
 import { logger } from '@/lib/utils/logger'
 import { useBuildKitTool } from '@/hooks/use-build-kit'
+import { useKitInspectionRequired } from '@/hooks/use-kitting-workflow-settings'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
@@ -46,6 +48,12 @@ interface TOLine {
 
 interface KitData {
   kitPoNumber: string
+  // Globally unique kit identity (`KIT-YYYYMMDD-NNN`). Surfaced here so
+  // the downstream Build Kit mutations can scope by serial when this
+  // PO covers more than one kit — see
+  // `memorybank/OmniFrame/Debug/Fix-Build-Kit-Completion-Multi-Kit-PO.md`.
+  // May be null on legacy rows that predate `createKitBuildPlan`.
+  kitSerialNumber: string | null
   kitBuildNumber: string
   kitNumber: string
   engineProgram: string
@@ -236,6 +244,10 @@ const BuildKitForm = () => {
   // Auth state management
   const { authState } = useUnifiedAuth()
   const { isAuthenticated, isLoading: isAuthLoading } = authState
+
+  // Workflow flag — when off, completeKit jumps straight to On Dock
+  // and the per-line inspection stage is bypassed.
+  const kitInspectionRequired = useKitInspectionRequired()
 
   // Auto-proceed flag
   const [hasAutoProceedTriggered, setHasAutoProceedTriggered] = useState(false)
@@ -481,12 +493,18 @@ const BuildKitForm = () => {
           kitData: result.kitData!,
         }))
 
-        // Start the kit build if not already in progress
+        // Start the kit build if not already in progress. Pass the
+        // serial when we have one so multi-kit POs don't drag a
+        // sibling kit into `in_progress` — see
+        // `memorybank/OmniFrame/Debug/Fix-Build-Kit-Completion-Multi-Kit-PO.md`.
         if (
           result.kitData.status === 'printed' ||
           result.kitData.status === 'pending'
         ) {
-          await startBuildAsync(formData.kitPoNumber.trim())
+          await startBuildAsync({
+            kitPoNumber: formData.kitPoNumber.trim(),
+            kitSerialNumber: result.kitData.kitSerialNumber,
+          })
         }
 
         if (!hasAutoProceedTriggered) {
@@ -618,6 +636,7 @@ const BuildKitForm = () => {
     try {
       const result = await kitMaterialAsync({
         kitPoNumber: formData.kitPoNumber,
+        kitSerialNumber: formData.kitData?.kitSerialNumber ?? null,
         material: currentMaterialScan.trim(),
         quantity: quantityToVerify,
       })
@@ -719,13 +738,22 @@ const BuildKitForm = () => {
 
   const handleCompleteKit = async () => {
     try {
-      const result = await completeKitAsync(formData.kitPoNumber)
+      const result = await completeKitAsync({
+        kitPoNumber: formData.kitPoNumber,
+        kitSerialNumber: formData.kitData?.kitSerialNumber ?? null,
+        skipInspection: !kitInspectionRequired,
+      })
 
       if (result.success) {
         setFormData((prev) => ({
           ...prev,
           kitData: prev.kitData
-            ? { ...prev.kitData, status: 'kit_built' }
+            ? {
+                ...prev.kitData,
+                status: result.skippedInspection
+                  ? 'kit_inspected'
+                  : 'kit_built',
+              }
             : null,
         }))
       }
@@ -1382,3 +1410,5 @@ const BuildKitForm = () => {
 }
 
 export default BuildKitForm
+
+// Created and developed by Jai Singh

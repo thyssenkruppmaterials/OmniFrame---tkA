@@ -1,5 +1,6 @@
+# Created and developed by Jai Singh
 """
-Route parity tests for OmniFrame backend.
+Route parity tests for OneBox AI backend.
 
 Ensures all expected route prefixes are registered in the FastAPI app.
 This catches accidental router removal or import failures.
@@ -71,3 +72,5 @@ class TestRouteParity:
             assert count <= 4, (
                 f"Route '{path}' registered {count} times — possible misconfiguration"
             )
+
+# Created and developed by Jai Singh

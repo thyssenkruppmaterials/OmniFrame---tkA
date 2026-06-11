@@ -1,3 +1,4 @@
+// Created and developed by Jai Singh
 /**
  * React Query hooks for Smartsheet operations.
  * Uses Rust backend for high-performance operations.
@@ -1353,3 +1354,5 @@ export function useSmartsheetExport() {
     }),
   }
 }
+
+// Created and developed by Jai Singh

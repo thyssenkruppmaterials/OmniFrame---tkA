@@ -1,3 +1,4 @@
+// Created and developed by Jai Singh
 /**
  * Visitor Log Feature
  *
@@ -26,3 +27,5 @@ export type {
 } from './hooks/useVisitorLog'
 
 export { ApprovalStatus } from './hooks/useVisitorLog'
+
+// Created and developed by Jai Singh

@@ -1,3 +1,4 @@
+// Created and developed by Jai Singh
 /**
  * Assign User Dialog Component
  * Form modal for assigning users to positions and working areas
@@ -104,7 +105,7 @@ export function AssignUserDialog({
   const [userSearchOpen, setUserSearchOpen] = useState(false)
 
   const form = useForm<AssignmentFormData>({
-    resolver: zodResolver(assignmentSchema),
+    resolver: zodResolver(assignmentSchema) as never,
     defaultValues: {
       user_id: '',
       position_id: '',
@@ -759,3 +760,5 @@ export function AssignUserDialog({
     </Dialog>
   )
 }
+
+// Created and developed by Jai Singh

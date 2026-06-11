@@ -1,3 +1,4 @@
+// Created and developed by Jai Singh
 /**
  * Add Working Area Dialog Component
  * Form modal for creating new working areas
@@ -89,7 +90,7 @@ export function AddAreaDialog({ open, onOpenChange }: AddAreaDialogProps) {
   const [isSubmitting, setIsSubmitting] = useState(false)
 
   const form = useForm<AreaFormData>({
-    resolver: zodResolver(areaSchema),
+    resolver: zodResolver(areaSchema) as never,
     defaultValues: {
       area_code: '',
       area_name: '',
@@ -172,7 +173,7 @@ export function AddAreaDialog({ open, onOpenChange }: AddAreaDialogProps) {
                 Basic Information
               </h4>
 
-              <div className='grid grid-cols-4 gap-6'>
+              <div className='grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-4'>
                 <FormField
                   control={form.control}
                   name='area_code'
@@ -204,7 +205,7 @@ export function AddAreaDialog({ open, onOpenChange }: AddAreaDialogProps) {
                 />
               </div>
 
-              <div className='grid grid-cols-4 gap-6'>
+              <div className='grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-4'>
                 <FormField
                   control={form.control}
                   name='area_type'
@@ -327,7 +328,7 @@ export function AddAreaDialog({ open, onOpenChange }: AddAreaDialogProps) {
             <div className='space-y-4'>
               <h4 className='text-sm font-semibold'>Operating Schedule</h4>
 
-              <div className='grid grid-cols-4 gap-6'>
+              <div className='grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-4'>
                 <FormField
                   control={form.control}
                   name='operating_hours_start'
@@ -415,3 +416,5 @@ export function AddAreaDialog({ open, onOpenChange }: AddAreaDialogProps) {
     </Dialog>
   )
 }
+
+// Created and developed by Jai Singh

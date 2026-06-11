@@ -1,3 +1,4 @@
+// Created and developed by Jai Singh
 import React from 'react'
 import { CommandMenu } from '@/components/command-menu'
 
@@ -43,3 +44,5 @@ export const useSearch = () => {
 
   return searchContext
 }
+
+// Created and developed by Jai Singh

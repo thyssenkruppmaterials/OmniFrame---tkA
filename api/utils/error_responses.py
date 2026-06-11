@@ -1,3 +1,4 @@
+# Created and developed by Jai Singh
 """
 Sanitized error response utilities.
 
@@ -49,3 +50,5 @@ def sanitized_error(
             "correlation_id": correlation_id,
         },
     )
+
+# Created and developed by Jai Singh

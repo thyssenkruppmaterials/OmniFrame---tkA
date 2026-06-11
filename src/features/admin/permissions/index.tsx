@@ -1,3 +1,4 @@
+// Created and developed by Jai Singh
 import { PermissionGuard } from '@/components/auth/PermissionGuard'
 import { Header } from '@/components/layout/header'
 import { Main } from '@/components/layout/main'
@@ -50,3 +51,5 @@ export default function PermissionManagement() {
     </PermissionsProvider>
   )
 }
+
+// Created and developed by Jai Singh

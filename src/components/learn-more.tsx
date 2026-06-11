@@ -1,3 +1,4 @@
+// Created and developed by Jai Singh
 import { Root, Content, Trigger } from '@radix-ui/react-popover'
 import { IconQuestionMark } from '@tabler/icons-react'
 import { cn } from '@/lib/utils'
@@ -42,3 +43,5 @@ export function LearnMore({
     </Popover>
   )
 }
+
+// Created and developed by Jai Singh

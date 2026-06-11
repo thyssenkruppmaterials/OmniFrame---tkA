@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# Created and developed by Jai Singh
 """
 Apply schema migration to expand field sizes for GS1-128 data.
 """
@@ -109,7 +110,7 @@ print("⚠️  IMPORTANT: The Supabase Python client doesn't support DDL operati
 print("Please apply the migration using ONE of these methods:")
 print()
 print("1. Supabase Dashboard SQL Editor:")
-print("   - Go to: https://supabase.com/dashboard/project/YOUR_PROJECT_ID/sql")
+print("   - Go to: https://supabase.com/dashboard/project/wncpqxwmbxjgxvrpcake/sql")
 print("   - Paste the contents of: supabase/migrations/013_expand_inbound_scans_fields_for_gs1128.sql")
 print("   - Click 'Run'")
 print()
@@ -126,3 +127,4 @@ print()
 if __name__ == "__main__":
     pass
 
+# Created and developed by Jai Singh

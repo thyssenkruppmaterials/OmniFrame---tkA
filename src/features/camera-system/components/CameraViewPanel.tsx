@@ -1,3 +1,4 @@
+// Created and developed by Jai Singh
 /**
  * Camera View Panel Component
  *
@@ -155,3 +156,5 @@ export function CameraViewPanel({ camera, className }: CameraViewPanelProps) {
     </Card>
   )
 }
+
+// Created and developed by Jai Singh

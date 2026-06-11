@@ -1,3 +1,4 @@
+// Created and developed by Jai Singh
 import React, { useState } from 'react'
 import { Briefcase, Shield, Users, Eye, Settings, Zap } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
@@ -287,3 +288,5 @@ export function RoleTemplates({ onTemplateApply }: RoleTemplatesProps) {
     </div>
   )
 }
+
+// Created and developed by Jai Singh

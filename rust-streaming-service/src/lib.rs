@@ -1,4 +1,5 @@
-//! OmniFrame Rust Streaming Service
+// Created and developed by Jai Singh
+//! OneBox AI Rust Streaming Service
 //!
 //! High-performance ExacqVision camera streaming proxy providing:
 //! - MJPEG stream proxying with zero-copy forwarding
@@ -98,4 +99,5 @@ impl AppState {
 /// Version information
 pub const VERSION: &str = env!("CARGO_PKG_VERSION");
 pub const NAME: &str = env!("CARGO_PKG_NAME");
-// Developer and Creator: Jai Singh
+
+// Created and developed by Jai Singh

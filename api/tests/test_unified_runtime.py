@@ -1,5 +1,6 @@
+# Created and developed by Jai Singh
 """
-Unified runtime tests for OmniFrame backend.
+Unified runtime tests for OneBox AI backend.
 
 Validates that:
 - start.py uses the canonical app from api.main
@@ -56,7 +57,9 @@ class TestApiInfoEndpoint:
 
     @pytest.mark.asyncio
     async def test_api_info_contains_app_name(self, client):
-        """/api/info name should reference OmniFrame."""
+        """/api/info name should reference OneBox."""
         response = await client.get("/api/info")
         data = response.json()
-        assert "OmniFrame" in data["name"] or "omniframe" in data["name"].lower()
+        assert "OneBox" in data["name"] or "onebox" in data["name"].lower()
+
+# Created and developed by Jai Singh

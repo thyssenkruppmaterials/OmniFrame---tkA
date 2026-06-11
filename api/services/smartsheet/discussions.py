@@ -1,3 +1,4 @@
+# Created and developed by Jai Singh
 """Discussion / comment mixin for SmartsheetService."""
 
 import asyncio
@@ -289,4 +290,4 @@ class _DiscussionsMixin:
                                     status="error", error_message=str(e))
             return await self._handle_api_error(e)
 
-# Developer and Creator: Jai Singh
+# Created and developed by Jai Singh

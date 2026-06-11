@@ -1,9 +1,10 @@
 #!/usr/bin/env python3
+# Created and developed by Jai Singh
 """
 Generate secure API keys for service-to-service authentication.
 
 This script generates cryptographically secure API keys for internal
-microservice communication as part of the OmniFrame security infrastructure.
+microservice communication as part of the OneBox AI security infrastructure.
 
 Usage:
     python generate_service_api_key.py --service rust-ai-service --description "AI Service auth key"
@@ -55,7 +56,7 @@ def generate_api_key(service_name: str) -> tuple[str, str, str]:
         service_name,
         service_name.replace("rust-", "").replace("-service", "")[:2]
     )
-    prefix = f"omnf_{service_short}_"
+    prefix = f"onbx_{service_short}_"
     
     # Ensure prefix is exactly 8 characters
     prefix = prefix[:8].ljust(8, "_")
@@ -276,3 +277,5 @@ Examples:
 
 if __name__ == "__main__":
     main()
+
+# Created and developed by Jai Singh

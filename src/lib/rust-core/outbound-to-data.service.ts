@@ -1,3 +1,4 @@
+// Created and developed by Jai Singh
 /**
  * Rust-enabled Outbound TO Data Service
  *
@@ -6,7 +7,7 @@
  *
  * Enable by setting VITE_RUST_CORE_ENABLED=true and VITE_RUST_CORE_URL
  */
-import { supabase } from '@/lib/supabase/client'
+import { supabase, supabaseRead } from '@/lib/supabase/client'
 import type { Tables } from '@/lib/supabase/database.types'
 import { logger } from '@/lib/utils/logger'
 import { getTodayEST } from '@/lib/utils/timezone'
@@ -98,7 +99,7 @@ function ensureRustClientInitialized(): boolean {
   try {
     const baseUrl =
       import.meta.env.VITE_RUST_CORE_URL ||
-      'https://your-rust-core-service.up.railway.app'
+      'https://rust-core-service-production.up.railway.app'
     initRustCoreClient({ baseUrl })
     return true
   } catch {
@@ -181,8 +182,8 @@ export class RustOutboundTODataService {
 
       const { organizationId } = await getUserOrganization()
 
-      // Build count query first
-      const { count, error: countError } = await supabase
+      // Build count query first (read-only; replica safe).
+      const { count, error: countError } = await supabaseRead
         .from('outbound_to_data')
         .select('*', { count: 'exact', head: true })
         .eq('organization_id', organizationId)
@@ -214,7 +215,7 @@ export class RustOutboundTODataService {
           const to = from + pageSize - 1
 
           const promise = (async (): Promise<OutboundTOData[]> => {
-            const { data, error } = await supabase
+            const { data, error } = await supabaseRead
               .from('outbound_to_data')
               .select('*')
               .eq('organization_id', organizationId)
@@ -266,7 +267,7 @@ export class RustOutboundTODataService {
       const searchTerm = query.toLowerCase().replace(/\s+/g, '')
       logger.log(`🔍 Searching outbound TO data for: "${searchTerm}"`)
 
-      const { data, error } = await supabase
+      const { data, error } = await supabaseRead
         .from('outbound_to_data')
         .select('*')
         .eq('organization_id', organizationId)
@@ -336,6 +337,8 @@ export class RustOutboundTODataService {
 
       // Parallel fetch all stats for performance
       // Note: 'waved', 'error', 'putback' are not valid outbound_status enum values
+      // All 12 parallel reads route to the replica via supabaseRead. Statistics
+      // queries don't chain to writes, so replication lag is irrelevant here.
       const [
         { count: totalCount },
         { count: pendingCount },
@@ -350,77 +353,65 @@ export class RustOutboundTODataService {
         { count: todayPackedCount },
         { count: todayFinalPackedCount },
       ] = await Promise.all([
-        // Total
-        supabase
+        supabaseRead
           .from('outbound_to_data')
           .select('*', { count: 'exact', head: true })
           .eq('organization_id', organizationId),
-        // Pending
-        supabase
+        supabaseRead
           .from('outbound_to_data')
           .select('*', { count: 'exact', head: true })
           .eq('organization_id', organizationId)
           .eq('status', 'pending'),
-        // Processing (used instead of 'waved')
-        supabase
+        supabaseRead
           .from('outbound_to_data')
           .select('*', { count: 'exact', head: true })
           .eq('organization_id', organizationId)
           .eq('status', 'processing'),
-        // Picked
-        supabase
+        supabaseRead
           .from('outbound_to_data')
           .select('*', { count: 'exact', head: true })
           .eq('organization_id', organizationId)
           .eq('status', 'picked'),
-        // Packed
-        supabase
+        supabaseRead
           .from('outbound_to_data')
           .select('*', { count: 'exact', head: true })
           .eq('organization_id', organizationId)
           .eq('status', 'packed'),
-        // Final Packed
-        supabase
+        supabaseRead
           .from('outbound_to_data')
           .select('*', { count: 'exact', head: true })
           .eq('organization_id', organizationId)
           .eq('status', 'final_packed'),
-        // Shipped
-        supabase
+        supabaseRead
           .from('outbound_to_data')
           .select('*', { count: 'exact', head: true })
           .eq('organization_id', organizationId)
           .eq('status', 'shipped'),
-        // Completed
-        supabase
+        supabaseRead
           .from('outbound_to_data')
           .select('*', { count: 'exact', head: true })
           .eq('organization_id', organizationId)
           .eq('status', 'completed'),
-        // On Hold (used instead of 'error'/'putback')
-        supabase
+        supabaseRead
           .from('outbound_to_data')
           .select('*', { count: 'exact', head: true })
           .eq('organization_id', organizationId)
           .eq('status', 'on_hold'),
-        // Today shipped
-        supabase
+        supabaseRead
           .from('outbound_to_data')
           .select('*', { count: 'exact', head: true })
           .eq('organization_id', organizationId)
           .eq('status', 'shipped')
           .gte('shipped_at', `${today}T00:00:00`)
           .lte('shipped_at', `${today}T23:59:59`),
-        // Today packed
-        supabase
+        supabaseRead
           .from('outbound_to_data')
           .select('*', { count: 'exact', head: true })
           .eq('organization_id', organizationId)
           .in('status', ['packed', 'final_packed', 'shipped', 'completed'])
           .gte('packed_at', `${today}T00:00:00`)
           .lte('packed_at', `${today}T23:59:59`),
-        // Today final packed
-        supabase
+        supabaseRead
           .from('outbound_to_data')
           .select('*', { count: 'exact', head: true })
           .eq('organization_id', organizationId)
@@ -487,14 +478,14 @@ export class RustOutboundTODataService {
 
       const [{ count: todayPacked }, { count: totalPending }] =
         await Promise.all([
-          supabase
+          supabaseRead
             .from('outbound_to_data')
             .select('*', { count: 'exact', head: true })
             .eq('organization_id', organizationId)
             .in('status', ['packed', 'final_packed', 'shipped', 'completed'])
             .gte('packed_at', `${today}T00:00:00`)
             .lte('packed_at', `${today}T23:59:59`),
-          supabase
+          supabaseRead
             .from('outbound_to_data')
             .select('*', { count: 'exact', head: true })
             .eq('organization_id', organizationId)
@@ -521,14 +512,14 @@ export class RustOutboundTODataService {
 
       const [{ count: todayFinalPacked }, { count: totalPending }] =
         await Promise.all([
-          supabase
+          supabaseRead
             .from('outbound_to_data')
             .select('*', { count: 'exact', head: true })
             .eq('organization_id', organizationId)
             .in('status', ['final_packed', 'shipped', 'completed'])
             .gte('final_packed_at', `${today}T00:00:00`)
             .lte('final_packed_at', `${today}T23:59:59`),
-          supabase
+          supabaseRead
             .from('outbound_to_data')
             .select('*', { count: 'exact', head: true })
             .eq('organization_id', organizationId)
@@ -555,14 +546,14 @@ export class RustOutboundTODataService {
 
       const [{ count: todayShipped }, { count: totalPending }] =
         await Promise.all([
-          supabase
+          supabaseRead
             .from('outbound_to_data')
             .select('*', { count: 'exact', head: true })
             .eq('organization_id', organizationId)
             .eq('status', 'shipped')
             .gte('shipped_at', `${today}T00:00:00`)
             .lte('shipped_at', `${today}T23:59:59`),
-          supabase
+          supabaseRead
             .from('outbound_to_data')
             .select('*', { count: 'exact', head: true })
             .eq('organization_id', organizationId)
@@ -589,11 +580,11 @@ export class RustOutboundTODataService {
 
       const [{ data: putbackTickets }, { count: todayCreated }] =
         await Promise.all([
-          supabase
+          supabaseRead
             .from('putback_tickets')
             .select('status')
             .eq('organization_id', organizationId),
-          supabase
+          supabaseRead
             .from('putback_tickets')
             .select('*', { count: 'exact', head: true })
             .eq('organization_id', organizationId)
@@ -626,4 +617,5 @@ export class RustOutboundTODataService {
 
 // Export singleton instance
 export const rustOutboundTODataService = RustOutboundTODataService.getInstance()
-// Developer and Creator: Jai Singh
+
+// Created and developed by Jai Singh

@@ -1,3 +1,4 @@
+// Created and developed by Jai Singh
 import React, { useEffect, useState } from 'react'
 import { Check, ChevronDown, Loader2, User, UserCheck } from 'lucide-react'
 import { toast } from 'sonner'
@@ -261,3 +262,5 @@ export const UserAssignmentModal: React.FC<UserAssignmentModalProps> = ({
     </Dialog>
   )
 }
+
+// Created and developed by Jai Singh

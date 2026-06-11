@@ -1,3 +1,4 @@
+// Created and developed by Jai Singh
 /**
  * RF Putaway Operations Service
  * Handles all putaway-related database operations for RF Terminal
@@ -510,10 +511,17 @@ export const validateTOLocation = (
 
 /**
  * Parse T.O. Number format: 3597367$I0001$IPDC
- * Extracts TO Number (before first $) and warehouse (last 3 characters)
+ * Extracts TO Number (before first $) and warehouse (last 3 characters).
+ *
+ * `knownWarehouses` (optional) is the allowlist of valid warehouse codes. When
+ * provided and non-empty, a parsed warehouse that isn't in the set is rejected
+ * (fix #1) — this hard-blocks scanner-corrupted codes (H52, -01, SF1, ...) at
+ * the source. Omitting the arg preserves the original behaviour so existing
+ * callers stay backward-compatible.
  */
 export const parseTONumber = (
-  rawTONumber: string
+  rawTONumber: string,
+  knownWarehouses?: ReadonlySet<string>
 ): {
   toNumber: string
   warehouse: string
@@ -557,6 +565,22 @@ export const parseTONumber = (
       // Extract warehouse as last 3 characters
       if (lastPart.length >= 3) {
         const warehouse = lastPart.slice(-3).toUpperCase()
+        // Allowlist guard (fix #1): scanner jitter shifts this fixed slice(-3)
+        // window and yields garbage. When the caller supplies the known codes,
+        // reject anything outside it so the operator must re-scan rather than
+        // silently persisting a bad warehouse.
+        if (
+          knownWarehouses &&
+          knownWarehouses.size > 0 &&
+          !knownWarehouses.has(warehouse)
+        ) {
+          return {
+            toNumber: '',
+            warehouse: '',
+            isValid: false,
+            message: `Unrecognized warehouse "${warehouse}". Re-scan the T.O. label.`,
+          }
+        }
         return { toNumber, warehouse, isValid: true }
       } else {
         return {
@@ -591,12 +615,11 @@ export const parseTONumber = (
 }
 
 export const validateTONumber = (
-  toNumber: string
+  toNumber: string,
+  knownWarehouses?: ReadonlySet<string>
 ): { isValid: boolean; message?: string } => {
-  const parseResult = parseTONumber(toNumber)
+  const parseResult = parseTONumber(toNumber, knownWarehouses)
   return { isValid: parseResult.isValid, message: parseResult.message }
-
-  return { isValid: true }
 }
 
 export const detectRelocator = (shelfLocation: string): boolean => {
@@ -809,4 +832,5 @@ export const completePutbackTicket = async (
 
 // Export singleton instance
 export const rfPutawayService = new RFPutawayService()
-// Developer and Creator: Jai Singh
+
+// Created and developed by Jai Singh

@@ -1,3 +1,4 @@
+// Created and developed by Jai Singh
 import { useEffect, useRef, useState } from 'react'
 import { cn } from '@/lib/utils'
 import {
@@ -83,3 +84,5 @@ const checkOverflow = (textContainer: HTMLDivElement | null) => {
   }
   return false
 }
+
+// Created and developed by Jai Singh

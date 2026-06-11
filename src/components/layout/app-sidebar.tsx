@@ -1,3 +1,4 @@
+// Created and developed by Jai Singh
 import { useUnifiedAuth } from '@/lib/auth/unified-auth-provider'
 import {
   Sidebar,
@@ -33,3 +34,5 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
     </Sidebar>
   )
 }
+
+// Created and developed by Jai Singh

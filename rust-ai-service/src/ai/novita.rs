@@ -1,3 +1,4 @@
+// Created and developed by Jai Singh
 //! Novita AI API Client (Fallback Provider)
 //! 
 //! Provides OpenAI-compatible API access to Qwen3-VL-8B-Instruct
@@ -145,3 +146,5 @@ impl NovitaClient {
             .ok_or_else(|| NovitaError::ApiError("No response content".to_string()))
     }
 }
+
+// Created and developed by Jai Singh

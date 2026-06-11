@@ -2,8 +2,8 @@
 name = "rust-mdm-service"
 version = "0.1.0"
 edition = "2021"
-description = "Mobile Device Management Service for OmniFrame - Apple MDM protocol, telemetry ingestion, command queue, and admin APIs"
-authors = ["Jai Singh"]
+description = "Mobile Device Management Service for OneBox AI - Apple MDM protocol, telemetry ingestion, command queue, and admin APIs"
+authors = ["OneBox AI Team"]
 
 [dependencies]
 # Web framework with WebSocket support
@@ -13,7 +13,7 @@ tower = "0.4"
 tower-http = { version = "0.5", features = ["cors", "trace", "compression-gzip"] }
 
 # Database (direct Postgres via DATABASE_URL)
-sqlx = { version = "0.7", features = ["postgres", "runtime-tokio", "tls-rustls", "uuid", "chrono", "json"] }
+sqlx = { version = "=0.8.6", features = ["postgres", "runtime-tokio", "tls-rustls", "uuid", "chrono", "json"] }
 
 # Redis connection pooling
 bb8 = "0.8"

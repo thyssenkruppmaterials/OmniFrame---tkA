@@ -1,3 +1,4 @@
+// Created and developed by Jai Singh
 import { useState, useEffect } from 'react'
 import { z } from 'zod'
 import { useForm } from 'react-hook-form'
@@ -147,3 +148,5 @@ export function PermissionEditDialog({
     </Dialog>
   )
 }
+
+// Created and developed by Jai Singh

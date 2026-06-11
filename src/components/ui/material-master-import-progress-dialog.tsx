@@ -1,3 +1,4 @@
+// Created and developed by Jai Singh
 import React from 'react'
 import { CheckCircle2, AlertCircle, Loader2 } from 'lucide-react'
 import type { ImportProgress } from '@/lib/supabase/material-master-data.service'
@@ -291,3 +292,5 @@ export const MaterialMasterImportProgressDialog = React.memo(
 
 MaterialMasterImportProgressDialog.displayName =
   'MaterialMasterImportProgressDialog'
+
+// Created and developed by Jai Singh

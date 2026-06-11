@@ -1,3 +1,4 @@
+// Created and developed by Jai Singh
 export const tasks = [
   {
     id: 'TASK-8782',
@@ -780,3 +781,5 @@ export const tasks = [
     priority: 'low',
   },
 ]
+
+// Created and developed by Jai Singh

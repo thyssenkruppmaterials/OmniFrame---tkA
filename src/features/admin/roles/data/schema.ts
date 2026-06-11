@@ -1,3 +1,4 @@
+// Created and developed by Jai Singh
 import { z } from 'zod'
 
 export const roleSchema = z.object({
@@ -47,3 +48,5 @@ export const userPermissionSchema = z.object({
 })
 
 export type UserPermission = z.infer<typeof userPermissionSchema>
+
+// Created and developed by Jai Singh

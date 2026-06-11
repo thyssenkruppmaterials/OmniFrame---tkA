@@ -1,3 +1,4 @@
+// Created and developed by Jai Singh
 import * as React from 'react'
 import {
   ChevronDownIcon,
@@ -208,3 +209,5 @@ function CalendarDayButton({
 }
 
 export { Calendar, CalendarDayButton }
+
+// Created and developed by Jai Singh

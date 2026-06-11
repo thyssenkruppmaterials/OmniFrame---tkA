@@ -1,3 +1,4 @@
+// Created and developed by Jai Singh
 /**
  * Work Service HTTP Client
  * Handles all HTTP communication with the Rust work service
@@ -5,6 +6,7 @@
  */
 import { supabase } from '@/lib/supabase/client'
 import { logger } from '@/lib/utils/logger'
+import { workEngineIdempotencyKey } from './idempotency'
 import type {
   ClaimResponse,
   CycleCountTask,
@@ -15,6 +17,7 @@ import type {
   WorkServiceError,
   WorkerStatus,
 } from './types'
+import type { WorkTypeId, WorkTask } from './work-task-types'
 
 // Work service base URL (defaults to localhost for development)
 const WORK_SERVICE_URL =
@@ -57,22 +60,37 @@ async function getAuthHeaders(
 }
 
 /**
+ * Per-request options for `fetchWithAuth` that aren't part of `RequestInit`.
+ *
+ * `allowFalseSuccess` opts a single endpoint out of the default
+ * "throw on `{ success: false }`" behaviour. The Rust `/api/v1/work/claim`
+ * route uses `success: false` + `task: null` as the canonical "queue is
+ * empty for this worker right now" signal — that's a normal idle state,
+ * not an error. Endpoints that opt in MUST type their response so the
+ * `success` discriminator is visible to callers.
+ */
+interface FetchWithAuthOptions extends RequestInit {
+  allowFalseSuccess?: boolean
+}
+
+/**
  * Generic fetch wrapper with authentication
  * Handles errors and response parsing
  */
 async function fetchWithAuth<T>(
   endpoint: string,
-  options: RequestInit = {}
+  options: FetchWithAuthOptions = {}
 ): Promise<T> {
-  const hasBody = options.body !== undefined
+  const { allowFalseSuccess = false, ...requestInit } = options
+  const hasBody = requestInit.body !== undefined
   const headers = await getAuthHeaders(hasBody)
   const url = `${WORK_SERVICE_URL}${endpoint}`
 
-  logger.log(`[WorkServiceClient] ${options.method || 'GET'} ${endpoint}`)
+  logger.log(`[WorkServiceClient] ${requestInit.method || 'GET'} ${endpoint}`)
 
   const response = await fetch(url, {
-    ...options,
-    headers: { ...headers, ...options.headers },
+    ...requestInit,
+    headers: { ...headers, ...requestInit.headers },
   })
 
   if (!response.ok) {
@@ -83,12 +101,34 @@ async function fetchWithAuth<T>(
     throw new Error(error.error || 'Request failed')
   }
 
-  // Handle empty responses (204 No Content)
   if (response.status === 204) {
     return undefined as T
   }
 
-  return response.json()
+  const body = await response.json()
+
+  if (
+    body &&
+    typeof body === 'object' &&
+    'success' in body &&
+    body.success === false
+  ) {
+    const msg = body.message || body.error || 'Operation failed'
+    if (allowFalseSuccess) {
+      // Caller knows about the `success: false` shape and handles it as
+      // a normal product state (e.g. empty work queue). Log at debug so
+      // a noisy idle state doesn't pollute the production console — but
+      // still emit something so it's diagnosable from a verbose build.
+      logger.debug(
+        `[WorkServiceClient] ${endpoint} returned success=false: ${msg}`
+      )
+      return body as T
+    }
+    logger.error(`[WorkServiceClient] Server returned success=false: ${msg}`)
+    throw new Error(msg)
+  }
+
+  return body as T
 }
 
 /**
@@ -117,12 +157,24 @@ export const workServiceClient = {
   },
 
   /**
-   * Claim the next available task (pull mode)
-   * Returns the claimed task or null if none available
+   * Claim the next available task (pull mode).
+   *
+   * The Rust `/api/v1/work/claim` route returns `200 OK` with
+   * `{ success: false, message: "No tasks available", task: null }` when
+   * the queue is empty for this worker (capacity exhausted, no eligible
+   * row, or every candidate filtered out by zone exclusivity). That is a
+   * normal idle state — NOT an error. We pass `allowFalseSuccess: true`
+   * so the wrapper returns the body verbatim instead of throwing, and
+   * downstream callers branch on `response.task` (truthy = claimed,
+   * `null` = waiting for work).
+   *
+   * Genuine failures (HTTP 4xx/5xx, malformed JSON, network) still throw
+   * via the wrapper's normal error path.
    */
   async claimNext(): Promise<ClaimResponse> {
     return fetchWithAuth<ClaimResponse>('/api/v1/work/claim', {
       method: 'POST',
+      allowFalseSuccess: true,
     })
   },
 
@@ -170,6 +222,13 @@ export const workServiceClient = {
   async releaseTask(taskId: string): Promise<void> {
     await fetchWithAuth<void>(`/api/v1/work/tasks/${taskId}/release`, {
       method: 'POST',
+    })
+  },
+
+  async skipTask(taskId: string, reason?: string): Promise<void> {
+    await fetchWithAuth<void>(`/api/v1/work/tasks/${taskId}/skip`, {
+      method: 'POST',
+      body: JSON.stringify({ reason: reason || null }),
     })
   },
 
@@ -241,10 +300,59 @@ export const workServiceClient = {
     }
     return response.json()
   },
+
+  // ============================================
+  // Phase 3.3 — Generic WorkType-aware methods
+  // (additive; existing claimNext/completeTask/etc. continue to work)
+  // ============================================
+
+  /**
+   * Generic claim — when `task_type` is omitted the server defaults to
+   * 'cycle_count' so existing callers (`claimNext()`) keep behaving the
+   * same.
+   */
+  async claimNextTask(taskType: WorkTypeId): Promise<WorkTask | null> {
+    const headers = await getAuthHeaders(true)
+    const response = await fetch(`${WORK_SERVICE_URL}/api/v1/work/claim`, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({ task_type: taskType }),
+    })
+    if (!response.ok) {
+      const err = (await response
+        .json()
+        .catch(() => ({ error: response.statusText }))) as WorkServiceError
+      throw new Error(err.error || 'Claim failed')
+    }
+    const body = await response.json()
+    return (body?.task ?? null) as WorkTask | null
+  },
+
+  /** Push the same set of tasks to one user atomically (Phase 2.3). */
+  async pushBatch(
+    taskIds: string[],
+    userId: string
+  ): Promise<Array<{ task_id: string; ok: boolean; error?: string }>> {
+    const headers = await getAuthHeaders(true)
+    headers['Idempotency-Key'] = workEngineIdempotencyKey()
+    const response = await fetch(`${WORK_SERVICE_URL}/api/v1/work/push_batch`, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({ task_ids: taskIds, user_id: userId }),
+    })
+    if (!response.ok) {
+      const err = (await response
+        .json()
+        .catch(() => ({ error: response.statusText }))) as WorkServiceError
+      throw new Error(err.error || 'Push batch failed')
+    }
+    return response.json()
+  },
 }
 
 /**
  * Export the work service URL for WebSocket connections
  */
 export const getWorkServiceUrl = (): string => WORK_SERVICE_URL
-// Developer and Creator: Jai Singh
+
+// Created and developed by Jai Singh

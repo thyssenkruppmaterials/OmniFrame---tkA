@@ -1,3 +1,4 @@
+// Created and developed by Jai Singh
 import { useState, type JSX } from 'react'
 import { useLocation, useNavigate } from '@tanstack/react-router'
 import { Link } from '@tanstack/react-router'
@@ -87,3 +88,5 @@ export default function SidebarNav({
     </>
   )
 }
+
+// Created and developed by Jai Singh

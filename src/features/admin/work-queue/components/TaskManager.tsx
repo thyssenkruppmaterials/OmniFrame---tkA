@@ -1,3 +1,4 @@
+// Created and developed by Jai Singh
 /**
  * Task Manager Component
  * Admin interface for creating, editing, prioritizing, and managing work queue tasks
@@ -70,8 +71,8 @@ export function TaskManager() {
   return (
     <div className='space-y-6'>
       {/* Header */}
-      <div className='flex items-center justify-between'>
-        <div>
+      <div className='flex flex-wrap items-center justify-between gap-2'>
+        <div className='min-w-0'>
           <h3 className='text-lg font-semibold'>Task Management</h3>
           <p className='text-muted-foreground text-sm'>
             Create, edit, and manage work queue tasks
@@ -131,20 +132,20 @@ export function TaskManager() {
       </div>
 
       {/* Filters */}
-      <div className='flex items-center space-x-2'>
-        <div className='relative'>
+      <div className='flex flex-wrap items-center gap-2'>
+        <div className='relative min-w-0 flex-1 sm:max-w-xs'>
           <Search className='text-muted-foreground absolute top-1/2 left-3 h-4 w-4 -translate-y-1/2 transform' />
           <Input
             placeholder='Search tasks...'
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
-            className='w-64 pl-9'
+            className='w-full pl-9'
           />
         </div>
         <select
           value={statusFilter}
           onChange={(e) => setStatusFilter(e.target.value)}
-          className='border-input bg-background h-9 rounded-md border px-3 text-sm'
+          className='border-input bg-background h-9 max-w-full min-w-0 rounded-md border px-3 text-sm'
         >
           <option value='all'>All Status</option>
           <option value='pending'>Pending</option>
@@ -294,3 +295,5 @@ export function TaskManager() {
     </div>
   )
 }
+
+// Created and developed by Jai Singh

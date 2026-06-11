@@ -1,3 +1,4 @@
+// Created and developed by Jai Singh
 /**
  * Labor Board Column Component
  * Droppable area column for the interactive labor board
@@ -285,3 +286,5 @@ export const LaborBoardColumn = memo(LaborBoardColumnInner, (prev, next) => {
 LaborBoardColumn.displayName = 'LaborBoardColumn'
 
 export default LaborBoardColumn
+
+// Created and developed by Jai Singh

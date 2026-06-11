@@ -1,3 +1,4 @@
+// Created and developed by Jai Singh
 /**
  * Time Tracker Settings Component
  * Configuration page for pay periods, overtime rules, break policies, and notifications.
@@ -552,3 +553,5 @@ function TimeTrackerSettings() {
 }
 
 export default TimeTrackerSettings
+
+// Created and developed by Jai Singh

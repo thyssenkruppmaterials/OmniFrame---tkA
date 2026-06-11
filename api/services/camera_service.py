@@ -1,5 +1,6 @@
+# Created and developed by Jai Singh
 """
-Camera Service for OmniFrame Logistics.
+Camera Service for OneBox AI Logistics.
 Handles camera device management, recordings, events, and ExacqVision integration.
 """
 
@@ -741,4 +742,4 @@ async def get_camera_service() -> CameraService:
         _camera_service = CameraService()
     return _camera_service
 
-# Developer and Creator: Jai Singh
+# Created and developed by Jai Singh

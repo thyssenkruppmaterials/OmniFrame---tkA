@@ -1,3 +1,4 @@
+// Created and developed by Jai Singh
 import {
   ReactNode,
   createContext,
@@ -77,3 +78,5 @@ export function useToastSettings() {
   }
   return context
 }
+
+// Created and developed by Jai Singh

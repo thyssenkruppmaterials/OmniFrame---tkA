@@ -1,3 +1,4 @@
+// Created and developed by Jai Singh
 /**
  * OmniFrame Rust Core Service Client
  * High-performance queries via Rust backend
@@ -344,4 +345,5 @@ export function initRustCoreClient(config: CoreConfig): RustCoreClient {
 }
 
 export { RustCoreClient }
-// Developer and Creator: Jai Singh
+
+// Created and developed by Jai Singh

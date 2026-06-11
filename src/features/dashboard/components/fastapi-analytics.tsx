@@ -1,3 +1,4 @@
+// Created and developed by Jai Singh
 import { useState, useEffect } from 'react'
 import { AlertCircle, TrendingUp, Package, Truck } from 'lucide-react'
 import { useUnifiedAuth } from '@/lib/auth/unified-auth-provider'
@@ -206,7 +207,7 @@ export function FastAPIAnalytics() {
             <Button
               onClick={() =>
                 window.open(
-                  `${SUPABASE_URL}/dashboard/project/functions`,
+                  `${SUPABASE_URL}/dashboard/project/wncpqxwmbxjgxvrpcake/functions`,
                   '_blank'
                 )
               }
@@ -409,3 +410,5 @@ export function FastAPIAnalytics() {
     </div>
   )
 }
+
+// Created and developed by Jai Singh

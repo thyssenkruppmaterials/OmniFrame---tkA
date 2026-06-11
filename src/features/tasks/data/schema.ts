@@ -1,3 +1,4 @@
+// Created and developed by Jai Singh
 import { z } from 'zod'
 
 // We're keeping a simple non-relational schema here.
@@ -11,3 +12,5 @@ export const taskSchema = z.object({
 })
 
 export type Task = z.infer<typeof taskSchema>
+
+// Created and developed by Jai Singh

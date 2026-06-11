@@ -1,4 +1,5 @@
-//! OmniFrame Rust Streaming Service
+// Created and developed by Jai Singh
+//! OneBox AI Rust Streaming Service
 //!
 //! High-performance ExacqVision camera streaming proxy.
 
@@ -65,7 +66,7 @@ async fn main() -> anyhow::Result<()> {
 
     tracing::info!(
         version = rust_streaming_service::VERSION,
-        "Starting OmniFrame Rust Streaming Service"
+        "Starting OneBox AI Rust Streaming Service"
     );
 
     // Load configuration
@@ -143,4 +144,5 @@ async fn main() -> anyhow::Result<()> {
 
     Ok(())
 }
-// Developer and Creator: Jai Singh
+
+// Created and developed by Jai Singh

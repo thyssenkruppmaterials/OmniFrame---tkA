@@ -1,3 +1,4 @@
+// Created and developed by Jai Singh
 import { Link } from '@tanstack/react-router'
 import {
   Card,
@@ -54,3 +55,5 @@ export default function SignIn() {
     </AuthLayout>
   )
 }
+
+// Created and developed by Jai Singh

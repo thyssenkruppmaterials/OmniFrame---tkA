@@ -1,8 +1,9 @@
+// Created and developed by Jai Singh
 import { logger } from '@/lib/utils/logger'
 
 export class EncryptedSessionStorage {
-  private static readonly STORAGE_KEY = 'omniframe_secure_session'
-  private static readonly ENCRYPTION_KEY = 'omniframe_session_key_v1'
+  private static readonly STORAGE_KEY = 'onebox_secure_session'
+  private static readonly ENCRYPTION_KEY = 'onebox_session_key_v1'
 
   static async storeSession(
     sessionData: Record<string, unknown>
@@ -131,4 +132,5 @@ export class EncryptedSessionStorage {
     }
   }
 }
-// Developer and Creator: Jai Singh
+
+// Created and developed by Jai Singh

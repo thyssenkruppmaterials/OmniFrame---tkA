@@ -5,7 +5,7 @@
 	<key>CFBundleDevelopmentRegion</key>
 	<string>en</string>
 	<key>CFBundleDisplayName</key>
-	<string>OmniFrame RF</string>
+	<string>OneBox RF</string>
 	<key>CFBundleExecutable</key>
 	<string>$(EXECUTABLE_NAME)</string>
 	<key>CFBundleIdentifier</key>
@@ -23,26 +23,26 @@
 	<key>LSRequiresIPhoneOS</key>
 	<true/>
 	<key>NSBluetoothAlwaysUsageDescription</key>
-	<string>OmniFrame RF needs Bluetooth access to connect to DJI drones.</string>
+	<string>OneBox RF needs Bluetooth access to connect to DJI drones.</string>
 	<key>NSBluetoothPeripheralUsageDescription</key>
-	<string>OmniFrame RF needs Bluetooth access to communicate with DJI drones.</string>
+	<string>OneBox RF needs Bluetooth access to communicate with DJI drones.</string>
 	<key>NSBonjourServices</key>
 	<array>
 		<string>_dji._tcp</string>
 		<string>_dji._udp</string>
 	</array>
 	<key>NSCameraUsageDescription</key>
-	<string>OmniFrame RF needs camera access to capture photos from the drone for warehouse scanning.</string>
+	<string>OneBox RF needs camera access to capture photos from the drone for warehouse scanning.</string>
 	<key>NSLocalNetworkUsageDescription</key>
-	<string>OmniFrame RF needs local network access to connect to DJI drones via WiFi.</string>
+	<string>OneBox RF needs local network access to connect to DJI drones via WiFi.</string>
 	<key>NSLocationAlwaysAndWhenInUseUsageDescription</key>
-	<string>OmniFrame RF needs location access to track drone position during warehouse scanning missions.</string>
+	<string>OneBox RF needs location access to track drone position during warehouse scanning missions.</string>
 	<key>NSLocationWhenInUseUsageDescription</key>
-	<string>OmniFrame RF needs location access to track drone position and tag scan images with GPS coordinates.</string>
+	<string>OneBox RF needs location access to track drone position and tag scan images with GPS coordinates.</string>
 	<key>NSPhotoLibraryAddUsageDescription</key>
-	<string>OmniFrame RF needs permission to save drone scan images to your photo library.</string>
+	<string>OneBox RF needs permission to save drone scan images to your photo library.</string>
 	<key>NSPhotoLibraryUsageDescription</key>
-	<string>OmniFrame RF needs photo library access to save drone scan images.</string>
+	<string>OneBox RF needs photo library access to save drone scan images.</string>
 	<key>UIBackgroundModes</key>
 	<array>
 		<string>location</string>

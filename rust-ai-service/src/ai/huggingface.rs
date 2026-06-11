@@ -1,3 +1,4 @@
+// Created and developed by Jai Singh
 //! Hugging Face Inference API Client
 //! 
 //! Provides async client for Qwen3-VL-8B-Instruct vision-language model.
@@ -187,3 +188,5 @@ mod tests {
         assert!(!client.api_key.is_empty());
     }
 }
+
+// Created and developed by Jai Singh

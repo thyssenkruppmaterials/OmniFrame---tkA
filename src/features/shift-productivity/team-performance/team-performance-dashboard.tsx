@@ -1,3 +1,4 @@
+// Created and developed by Jai Singh
 /**
  * Team Performance Dashboard
  * Main dashboard component - consolidated single view with date picker
@@ -33,7 +34,7 @@ import { useTeamPerformance } from './hooks/use-team-performance'
 
 // Stat Card Component - clean neutral design matching inbound scan search
 interface StatCardProps {
-  icon: React.ElementType
+  icon: React.ComponentType<{ className?: string }>
   title: string
   value: number | string
   description?: string
@@ -114,6 +115,8 @@ export function TeamPerformanceDashboard({
     departments,
     timelineEvents,
     approvedOvertime,
+    settings,
+    timezone,
 
     // Loading states
     isLoadingPerformance,
@@ -217,6 +220,17 @@ export function TeamPerformanceDashboard({
         </p>
       </div>
 
+      {!settings.tracking_enabled && (
+        <Alert>
+          <AlertCircle className='h-4 w-4' />
+          <AlertDescription>
+            Productivity tracking is currently disabled in Settings. Existing
+            data remains visible, but operators should re-enable tracking before
+            relying on live shift metrics.
+          </AlertDescription>
+        </Alert>
+      )}
+
       {/* Stat Cards - Above Tabs */}
       <div className='grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4'>
         <StatCard
@@ -269,6 +283,7 @@ export function TeamPerformanceDashboard({
         canGoForward={canGoForward}
         lastUpdated={lastUpdated}
         onExport={exportToCSV}
+        timezone={timezone}
       />
 
       {/* Performance Tips */}
@@ -283,9 +298,9 @@ export function TeamPerformanceDashboard({
             <strong className='text-blue-800 dark:text-blue-200'>
               Pro Tip:
             </strong>{' '}
-            Use the Real-time view for current shift monitoring with
-            auto-refresh. Switch to Historical view to analyze past performance
-            and identify trends.
+            Use the date controls for current and past shifts. Today refreshes
+            automatically; historical dates stay cached until settings, labor
+            standards, or activity sources change.
           </AlertDescription>
         </Alert>
       </motion.div>
@@ -294,3 +309,5 @@ export function TeamPerformanceDashboard({
 }
 
 export default TeamPerformanceDashboard
+
+// Created and developed by Jai Singh

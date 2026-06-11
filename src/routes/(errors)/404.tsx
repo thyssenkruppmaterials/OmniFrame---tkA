@@ -1,7 +1,9 @@
+// Created and developed by Jai Singh
 import { createFileRoute } from '@tanstack/react-router'
 import NotFoundError from '@/features/errors/not-found-error'
 
 export const Route = createFileRoute('/(errors)/404')({
   component: NotFoundError,
 })
-// Developer and Creator: Jai Singh
+
+// Created and developed by Jai Singh

@@ -1,3 +1,4 @@
+// Created and developed by Jai Singh
 // @ts-nocheck - Legacy component with complex type requirements
 import React from 'react'
 import { CheckCircle2, AlertCircle, Loader2 } from 'lucide-react'
@@ -277,3 +278,5 @@ export const LX03ImportProgressDialog = React.memo(
 )
 
 LX03ImportProgressDialog.displayName = 'LX03ImportProgressDialog'
+
+// Created and developed by Jai Singh

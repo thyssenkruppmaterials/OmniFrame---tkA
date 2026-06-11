@@ -1,3 +1,4 @@
+// Created and developed by Jai Singh
 /**
  * Tab Permissions Hook
  * Provides tab-level permission checking with automatic loading and caching
@@ -36,7 +37,7 @@ export const useTabPermissions = (
   autoLoad = true
 ): UseTabPermissionsReturn => {
   const { authState } = useUnifiedAuth()
-  const { profile } = authState
+  const { isAuthenticated, profile } = authState
   const currentRoleName = useNavigationStore((s) => s.currentRoleName)
   const {
     tabPermissions,
@@ -48,34 +49,49 @@ export const useTabPermissions = (
 
   const isAdminRole =
     currentRoleName === 'superadmin' || currentRoleName === 'admin'
+  const shouldAutoLoad = autoLoad && Boolean(pageResource)
+  const hasResolvedProfile = Boolean(profile?.id && profile?.role_id)
 
   // Load tab permissions when user or page resource changes
   useEffect(() => {
-    if (autoLoad && profile?.id && pageResource) {
+    if (shouldAutoLoad && hasResolvedProfile && profile?.id) {
       logger.log(
         `🔧 TAB LOADING TRIGGER: Loading tabs for ${profile.id} pageResource: ${pageResource}`
       )
       storeLoadTabPermissions(profile.id, pageResource, false)
     }
-  }, [autoLoad, profile?.id, pageResource, storeLoadTabPermissions])
+  }, [
+    shouldAutoLoad,
+    hasResolvedProfile,
+    profile?.id,
+    profile?.role_id,
+    pageResource,
+    storeLoadTabPermissions,
+  ])
 
   // Treat as loading if we should auto-load but have no data for this pageResource yet.
   // This closes the race between mount and the useEffect triggering the store load.
   const effectiveIsLoading = useMemo(() => {
     if (isTabLoading) return true
     if (isAdminRole) return false
-    if (autoLoad && profile?.id && pageResource) {
-      const hasDataForResource = tabPermissions.some(
-        (tp) => tp.page_resource === pageResource
-      )
-      if (!hasDataForResource) return true
-    }
+    if (!shouldAutoLoad) return false
+
+    // Session auth settles before the profile/role payload, so keep tab UIs in a
+    // loading state until we can issue a scoped tab permission query.
+    if (isAuthenticated && !hasResolvedProfile) return true
+
+    const hasDataForResource = tabPermissions.some(
+      (tp) => tp.page_resource === pageResource
+    )
+    if (!hasDataForResource) return true
+
     return false
   }, [
     isTabLoading,
     isAdminRole,
-    autoLoad,
-    profile?.id,
+    shouldAutoLoad,
+    isAuthenticated,
+    hasResolvedProfile,
     pageResource,
     tabPermissions,
   ])
@@ -238,3 +254,5 @@ export const useTabPermissionManagement = () => {
     currentUserId: profile?.id || null,
   }
 }
+
+// Created and developed by Jai Singh

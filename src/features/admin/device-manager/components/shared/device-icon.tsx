@@ -1,3 +1,4 @@
+// Created and developed by Jai Singh
 import {
   IconDeviceMobile,
   IconDeviceTablet,
@@ -66,3 +67,5 @@ export function DeviceIcon({
     />
   )
 }
+
+// Created and developed by Jai Singh

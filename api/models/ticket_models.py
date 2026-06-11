@@ -1,3 +1,4 @@
+# Created and developed by Jai Singh
 """
 Pydantic models for Customer Portal Ticketing System.
 Integrates with Smartsheet backend for ticket management.
@@ -255,3 +256,4 @@ class TicketEventResponse(BaseModel):
     
     model_config = ConfigDict(from_attributes=True)
 
+# Created and developed by Jai Singh

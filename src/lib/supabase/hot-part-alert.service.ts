@@ -1,3 +1,4 @@
+// Created and developed by Jai Singh
 import { logger } from '@/lib/utils/logger'
 import { supabase } from './client'
 
@@ -308,4 +309,5 @@ class HotPartAlertService {
 
 // Export singleton instance
 export const hotPartAlertService = HotPartAlertService.getInstance()
-// Developer and Creator: Jai Singh
+
+// Created and developed by Jai Singh

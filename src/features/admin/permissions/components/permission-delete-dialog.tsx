@@ -1,3 +1,4 @@
+// Created and developed by Jai Singh
 import { useState } from 'react'
 import { Loader2, AlertTriangle } from 'lucide-react'
 import { logger } from '@/lib/utils/logger'
@@ -107,3 +108,5 @@ export function PermissionDeleteDialog({
     </Dialog>
   )
 }
+
+// Created and developed by Jai Singh

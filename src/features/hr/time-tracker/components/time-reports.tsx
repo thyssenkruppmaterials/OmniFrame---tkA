@@ -1,3 +1,4 @@
+// Created and developed by Jai Singh
 /**
  * Time Reports Component
  * Reporting interface for attendance, overtime, punctuality, and department summary reports.
@@ -45,7 +46,7 @@ interface ReportOption {
   id: ReportType
   label: string
   description: string
-  icon: React.ElementType
+  icon: React.ComponentType<{ className?: string }>
   iconColor: string
 }
 
@@ -688,3 +689,5 @@ function TimeReports() {
 }
 
 export default TimeReports
+
+// Created and developed by Jai Singh

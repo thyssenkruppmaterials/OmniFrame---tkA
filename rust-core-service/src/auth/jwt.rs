@@ -1,3 +1,4 @@
+// Created and developed by Jai Singh
 //! JWT validation with full cryptographic verification
 //!
 //! **CRITICAL SECURITY**: This module properly validates JWT signatures,
@@ -221,3 +222,5 @@ mod tests {
         assert_eq!(hash.len(), 32); // MD5 produces 32 hex chars
     }
 }
+
+// Created and developed by Jai Singh

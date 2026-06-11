@@ -1,3 +1,4 @@
+// Created and developed by Jai Singh
 import { Suspense, lazy } from 'react'
 import { createFileRoute } from '@tanstack/react-router'
 import { useTabSearchParam } from '@/hooks/use-tab-search-param'
@@ -135,4 +136,5 @@ function HREmployeeReviews() {
 export const Route = createFileRoute('/_authenticated/hr/employee-reviews')({
   component: HREmployeeReviews,
 })
-// Developer and Creator: Jai Singh
+
+// Created and developed by Jai Singh

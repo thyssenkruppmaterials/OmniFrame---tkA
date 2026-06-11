@@ -1,3 +1,6 @@
+import { normalizePresetToThemeTokens } from '@/lib/theme/appearance-preferences'
+
+// Created and developed by Jai Singh
 /**
  * Theme Presets Library
  *
@@ -854,11 +857,11 @@ export const THEME_PRESETS: Record<string, ThemePreset> = {
 
   // ─── Tech & Brand Inspired ────────────────────────────────────────
 
-  terracottaDark: {
-    id: 'terracottaDark',
-    name: 'Terracotta Dark',
-    description: 'Warm terracotta tones on a deep terminal dark',
-    emoji: '🏜️',
+  claudeCode: {
+    id: 'claudeCode',
+    name: 'Claude Code',
+    description: "Anthropic's warm terracotta on a deep terminal dark",
+    emoji: '🤖',
     category: 'dark',
     colors: {
       primary: '#d97757',
@@ -875,11 +878,11 @@ export const THEME_PRESETS: Record<string, ThemePreset> = {
     },
   },
 
-  terracottaLight: {
-    id: 'terracottaLight',
-    name: 'Terracotta Light',
-    description: 'Warm, approachable light theme with terracotta accents',
-    emoji: '🧱',
+  claudeLight: {
+    id: 'claudeLight',
+    name: 'Claude Light',
+    description: 'Warm, approachable light theme inspired by Claude',
+    emoji: '☀️',
     category: 'light',
     colors: {
       primary: '#d97757',
@@ -1634,8 +1637,6 @@ export const PRESET_CATEGORIES = [
 
 export { normalizePresetToThemeTokens } from '@/lib/theme/appearance-preferences'
 
-import { normalizePresetToThemeTokens } from '@/lib/theme/appearance-preferences'
-
 export function getPresetTokens(
   presetId: string,
   mode: 'light' | 'dark' = 'light'
@@ -1644,3 +1645,5 @@ export function getPresetTokens(
   if (!preset) return null
   return normalizePresetToThemeTokens(preset.colors, mode)
 }
+
+// Created and developed by Jai Singh

@@ -1,3 +1,4 @@
+// Created and developed by Jai Singh
 import { useEffect, useRef } from 'react'
 import { useLocation, useRouter } from '@tanstack/react-router'
 import { Loader2 } from 'lucide-react'
@@ -112,3 +113,5 @@ export function ProtectedRoute({
 
   return <>{children}</>
 }
+
+// Created and developed by Jai Singh

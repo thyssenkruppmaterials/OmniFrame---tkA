@@ -1,3 +1,4 @@
+// Created and developed by Jai Singh
 import { useEffect, useRef } from 'react'
 import { useRouterState } from '@tanstack/react-router'
 import LoadingBar, { LoadingBarRef } from 'react-top-loading-bar'
@@ -23,3 +24,5 @@ export function NavigationProgress() {
     />
   )
 }
+
+// Created and developed by Jai Singh

@@ -1,3 +1,4 @@
+// Created and developed by Jai Singh
 //! JWKS (JSON Web Key Set) fetching and caching
 //!
 //! Provides automatic fetching and caching of Supabase Auth public keys
@@ -189,3 +190,5 @@ mod tests {
         assert!(cache.jwks_url.contains("/.well-known/jwks.json"));
     }
 }
+
+// Created and developed by Jai Singh

@@ -1,3 +1,4 @@
+// Created and developed by Jai Singh
 /**
  * Activity Source Configuration Service
  * Manages dynamic activity source configurations for timeline tracking
@@ -637,4 +638,5 @@ class ActivitySourceConfigService {
 
 export default ActivitySourceConfigService.getInstance()
 export { ActivitySourceConfigService }
-// Developer and Creator: Jai Singh
+
+// Created and developed by Jai Singh

@@ -1,3 +1,4 @@
+// Created and developed by Jai Singh
 // GRS Delivery Status Manager - Updated November 9, 2025 for GRS shipping points
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { format, formatDistanceToNow } from 'date-fns'
@@ -41,13 +42,6 @@ import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Calendar } from '@/components/ui/calendar'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogHeader,
-  DialogTitle,
-} from '@/components/ui/dialog'
 import { DispositionEditorDialog } from '@/components/ui/disposition-editor-dialog'
 import { DispositionSelect } from '@/components/ui/disposition-select'
 import {
@@ -59,12 +53,20 @@ import {
 import { ImportConfirmDialog } from '@/components/ui/import-confirm-dialog'
 import { ImportProgressDialog } from '@/components/ui/import-progress-dialog'
 import { Input } from '@/components/ui/input'
+import { KpiGrid } from '@/components/ui/kpi-grid'
 import {
   Popover,
   PopoverContent,
   PopoverTrigger,
 } from '@/components/ui/popover'
-import { Separator } from '@/components/ui/separator'
+import {
+  ResponsiveDialog,
+  ResponsiveDialogBody,
+  ResponsiveDialogDescription,
+  ResponsiveDialogHeader,
+  ResponsiveDialogTitle,
+} from '@/components/ui/responsive-dialog'
+import { StatTile } from '@/components/ui/stat-tile'
 import {
   Table,
   TableBody,
@@ -719,6 +721,10 @@ const GRSDeliveryStatusManager: React.FC<GRSDeliveryStatusManagerProps> =
           !item.goods_movement_status.toUpperCase().includes('C')
       )
 
+      // Cumulative aging counts — each value answers "how many open GRS
+      // deliveries are at least N days old?", matching the ">N Days" card
+      // labels. Buckets overlap by design (a 290-day delivery is counted in
+      // all three).
       return {
         over30: openGrsDeliveries.filter(
           (item) =>
@@ -730,15 +736,13 @@ const GRSDeliveryStatusManager: React.FC<GRSDeliveryStatusManagerProps> =
           (item) =>
             item.days_open !== null &&
             item.days_open !== undefined &&
-            item.days_open > 12 &&
-            item.days_open <= 30
+            item.days_open > 12
         ).length,
         over4: openGrsDeliveries.filter(
           (item) =>
             item.days_open !== null &&
             item.days_open !== undefined &&
-            item.days_open > 4 &&
-            item.days_open <= 12
+            item.days_open > 4
         ).length,
       }
     }, [data])
@@ -945,34 +949,23 @@ const GRSDeliveryStatusManager: React.FC<GRSDeliveryStatusManagerProps> =
               <FileText className='text-muted-foreground h-4 w-4' />
             </CardHeader>
             <CardContent>
-              <div className='flex items-center justify-around space-x-4'>
-                <div className='text-center'>
-                  <div className='text-2xl font-bold'>
-                    {(
-                      shippingPointCounts.unserv + shippingPointCounts.serv
-                    ).toLocaleString()}
-                  </div>
-                  <p className='text-muted-foreground text-xs'>Open</p>
-                </div>
-
-                <Separator orientation='vertical' className='bg-border h-14' />
-
-                <div className='text-center'>
-                  <div className='text-2xl font-bold'>
-                    {shippingPointCounts.unserv.toLocaleString()}
-                  </div>
-                  <p className='text-muted-foreground text-xs'>UNSERV</p>
-                </div>
-
-                <Separator orientation='vertical' className='bg-border h-14' />
-
-                <div className='text-center'>
-                  <div className='text-2xl font-bold'>
-                    {shippingPointCounts.serv.toLocaleString()}
-                  </div>
-                  <p className='text-muted-foreground text-xs'>SERV</p>
-                </div>
-              </div>
+              <KpiGrid columns={3} density='compact'>
+                <StatTile
+                  label='Open'
+                  value={shippingPointCounts.unserv + shippingPointCounts.serv}
+                  accent='default'
+                />
+                <StatTile
+                  label='UNSERV'
+                  value={shippingPointCounts.unserv}
+                  accent='sky'
+                />
+                <StatTile
+                  label='SERV'
+                  value={shippingPointCounts.serv}
+                  accent='emerald'
+                />
+              </KpiGrid>
             </CardContent>
           </Card>
 
@@ -982,32 +975,23 @@ const GRSDeliveryStatusManager: React.FC<GRSDeliveryStatusManagerProps> =
               <Users className='text-muted-foreground h-4 w-4' />
             </CardHeader>
             <CardContent>
-              <div className='flex items-center justify-around space-x-4'>
-                <div className='text-center'>
-                  <div className='text-2xl font-bold'>
-                    {daysOpenCounts.over30.toLocaleString()}
-                  </div>
-                  <p className='text-muted-foreground text-xs'>&gt;30 Days</p>
-                </div>
-
-                <Separator orientation='vertical' className='bg-border h-14' />
-
-                <div className='text-center'>
-                  <div className='text-2xl font-bold'>
-                    {daysOpenCounts.over12.toLocaleString()}
-                  </div>
-                  <p className='text-muted-foreground text-xs'>&gt;12 Days</p>
-                </div>
-
-                <Separator orientation='vertical' className='bg-border h-14' />
-
-                <div className='text-center'>
-                  <div className='text-2xl font-bold'>
-                    {daysOpenCounts.over4.toLocaleString()}
-                  </div>
-                  <p className='text-muted-foreground text-xs'>&gt;4 Days</p>
-                </div>
-              </div>
+              <KpiGrid columns={3} density='compact'>
+                <StatTile
+                  label='>30 Days'
+                  value={daysOpenCounts.over30}
+                  accent='rose'
+                />
+                <StatTile
+                  label='>12 Days'
+                  value={daysOpenCounts.over12}
+                  accent='orange'
+                />
+                <StatTile
+                  label='>4 Days'
+                  value={daysOpenCounts.over4}
+                  accent='amber'
+                />
+              </KpiGrid>
             </CardContent>
           </Card>
 
@@ -1019,32 +1003,23 @@ const GRSDeliveryStatusManager: React.FC<GRSDeliveryStatusManagerProps> =
               <AlertCircle className='text-muted-foreground h-4 w-4' />
             </CardHeader>
             <CardContent>
-              <div className='flex items-center justify-around space-x-4'>
-                <div className='text-center'>
-                  <div className='text-2xl font-bold'>
-                    {tkaNonControllableCounts.liftFan.toLocaleString()}
-                  </div>
-                  <p className='text-muted-foreground text-xs'>LiftFan</p>
-                </div>
-
-                <Separator orientation='vertical' className='bg-border h-14' />
-
-                <div className='text-center'>
-                  <div className='text-2xl font-bold'>
-                    {tkaNonControllableCounts.wawf.toLocaleString()}
-                  </div>
-                  <p className='text-muted-foreground text-xs'>WAWF</p>
-                </div>
-
-                <Separator orientation='vertical' className='bg-border h-14' />
-
-                <div className='text-center'>
-                  <div className='text-2xl font-bold'>
-                    {tkaNonControllableCounts.placeholder.toLocaleString()}
-                  </div>
-                  <p className='text-muted-foreground text-xs'>TBD</p>
-                </div>
-              </div>
+              <KpiGrid columns={3} density='compact'>
+                <StatTile
+                  label='LiftFan'
+                  value={tkaNonControllableCounts.liftFan}
+                  accent='violet'
+                />
+                <StatTile
+                  label='WAWF'
+                  value={tkaNonControllableCounts.wawf}
+                  accent='amber'
+                />
+                <StatTile
+                  label='TBD'
+                  value={tkaNonControllableCounts.placeholder}
+                  accent='default'
+                />
+              </KpiGrid>
             </CardContent>
           </Card>
 
@@ -1087,16 +1062,19 @@ const GRSDeliveryStatusManager: React.FC<GRSDeliveryStatusManagerProps> =
               <Truck className='text-muted-foreground h-4 w-4' />
             </CardHeader>
             <CardContent>
-              <div className='text-2xl font-bold'>
-                {isLoadingPgi ? (
-                  <Loader2 className='inline h-6 w-6 animate-spin' />
-                ) : (
-                  pgiCount.toLocaleString()
-                )}
-              </div>
-              <p className='text-muted-foreground text-xs'>
-                Actual Goods Movement Date
-              </p>
+              <StatTile
+                label='Actual Goods Movement Date'
+                accent='violet'
+                format='raw'
+                value={
+                  isLoadingPgi ? (
+                    <Loader2 className='inline h-6 w-6 animate-spin' />
+                  ) : (
+                    pgiCount.toLocaleString()
+                  )
+                }
+                valueTitle={String(pgiCount)}
+              />
             </CardContent>
           </Card>
         </div>
@@ -1537,146 +1515,143 @@ const GRSDeliveryStatusManager: React.FC<GRSDeliveryStatusManagerProps> =
         </Card>
 
         {/* Delivery Details Dialog */}
-        <Dialog
+        <ResponsiveDialog
           open={isDetailsDialogOpen}
           onOpenChange={setIsDetailsDialogOpen}
+          size='xl'
         >
-          <DialogContent className='max-h-[85vh] w-[95vw] max-w-[1400px] min-w-[1200px] overflow-y-auto'>
-            <DialogHeader>
-              <DialogTitle className='text-2xl font-bold'>
-                GRS Delivery Audit Trail
-              </DialogTitle>
-              <DialogDescription>
-                Complete delivery information and workflow history for delivery{' '}
-                {selectedItem?.delivery}
-              </DialogDescription>
-            </DialogHeader>
+          <ResponsiveDialogHeader>
+            <ResponsiveDialogTitle className='text-2xl font-bold'>
+              GRS Delivery Audit Trail
+            </ResponsiveDialogTitle>
+            <ResponsiveDialogDescription>
+              Complete delivery information and workflow history for delivery{' '}
+              {selectedItem?.delivery}
+            </ResponsiveDialogDescription>
+          </ResponsiveDialogHeader>
 
-            {selectedItem && (
-              <div className='space-y-6'>
-                {/* Basic Delivery Information */}
-                <Card className='bg-muted/50'>
-                  <CardHeader className='pb-3'>
-                    <CardTitle className='text-lg font-semibold'>
-                      Delivery Information
-                    </CardTitle>
-                  </CardHeader>
-                  <CardContent>
-                    <div className='grid grid-cols-2 gap-4 text-sm lg:grid-cols-4'>
-                      <div>
-                        <p className='text-muted-foreground'>Delivery Number</p>
-                        <p className='text-base font-semibold'>
-                          {selectedItem.delivery || 'N/A'}
-                        </p>
-                      </div>
-                      <div>
-                        <p className='text-muted-foreground'>
-                          Delivery Priority
-                        </p>
-                        <p className='text-base font-semibold'>
-                          {selectedItem.delivery_priority || 'N/A'}
-                        </p>
-                      </div>
-                      <div>
-                        <p className='text-muted-foreground'>Transfer Order</p>
-                        <p className='text-base font-semibold'>
-                          {selectedItem.transfer_order_number || 'N/A'}
-                        </p>
-                      </div>
-                      <div>
-                        <p className='text-muted-foreground'>Current Status</p>
-                        <div className='mt-1'>
-                          <StatusBadge status={selectedItem.status} />
-                        </div>
-                      </div>
-                      <div>
-                        <p className='text-muted-foreground'>Shipping Point</p>
-                        <p className='text-base font-medium'>
-                          {selectedItem.shipping_point || 'N/A'}
-                        </p>
-                      </div>
-                      <div>
-                        <p className='text-muted-foreground'>Customer Name</p>
-                        <p className='text-base font-medium'>
-                          {selectedItem.customer_name || 'N/A'}
-                        </p>
-                      </div>
-                      <div>
-                        <p className='text-muted-foreground'>Ship to Party</p>
-                        <p className='text-base font-medium'>
-                          {selectedItem.ship_to_party || 'N/A'}
-                        </p>
-                      </div>
-                      <div>
-                        <p className='text-muted-foreground'>Days Open</p>
-                        <p className='text-base font-semibold text-orange-600'>
-                          {selectedItem.days_open !== null
-                            ? `${selectedItem.days_open} days`
-                            : 'N/A'}
-                        </p>
+          {selectedItem && (
+            <ResponsiveDialogBody className='space-y-6'>
+              {/* Basic Delivery Information */}
+              <Card className='bg-muted/50'>
+                <CardHeader className='pb-3'>
+                  <CardTitle className='text-lg font-semibold'>
+                    Delivery Information
+                  </CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className='grid grid-cols-2 gap-4 text-sm lg:grid-cols-4'>
+                    <div>
+                      <p className='text-muted-foreground'>Delivery Number</p>
+                      <p className='text-base font-semibold'>
+                        {selectedItem.delivery || 'N/A'}
+                      </p>
+                    </div>
+                    <div>
+                      <p className='text-muted-foreground'>Delivery Priority</p>
+                      <p className='text-base font-semibold'>
+                        {selectedItem.delivery_priority || 'N/A'}
+                      </p>
+                    </div>
+                    <div>
+                      <p className='text-muted-foreground'>Transfer Order</p>
+                      <p className='text-base font-semibold'>
+                        {selectedItem.transfer_order_number || 'N/A'}
+                      </p>
+                    </div>
+                    <div>
+                      <p className='text-muted-foreground'>Current Status</p>
+                      <div className='mt-1'>
+                        <StatusBadge status={selectedItem.status} />
                       </div>
                     </div>
-                  </CardContent>
-                </Card>
-
-                {/* Record Tracking */}
-                <Card>
-                  <CardHeader className='pb-3'>
-                    <CardTitle className='text-lg font-semibold'>
-                      Record Information
-                    </CardTitle>
-                  </CardHeader>
-                  <CardContent>
-                    <div className='grid grid-cols-2 gap-4 text-sm lg:grid-cols-4'>
-                      <div>
-                        <p className='text-muted-foreground'>Record Created</p>
-                        <p className='text-base font-medium'>
-                          {format(
-                            new Date(selectedItem.created_at),
-                            'MMM dd, yyyy h:mm a'
-                          )}
-                        </p>
-                        <p className='text-muted-foreground text-xs'>
-                          {formatDistanceToNow(
-                            new Date(selectedItem.created_at),
-                            { addSuffix: true }
-                          )}
-                        </p>
-                      </div>
-                      <div>
-                        <p className='text-muted-foreground'>Last Updated</p>
-                        <p className='text-base font-medium'>
-                          {format(
-                            new Date(selectedItem.updated_at),
-                            'MMM dd, yyyy h:mm a'
-                          )}
-                        </p>
-                        <p className='text-muted-foreground text-xs'>
-                          {formatDistanceToNow(
-                            new Date(selectedItem.updated_at),
-                            { addSuffix: true }
-                          )}
-                        </p>
-                      </div>
-                      <div>
-                        <p className='text-muted-foreground'>Record ID</p>
-                        <p className='text-muted-foreground font-mono text-xs'>
-                          {selectedItem.id}
-                        </p>
-                      </div>
-                      <div>
-                        <p className='text-muted-foreground'>Organization ID</p>
-                        <p className='text-muted-foreground font-mono text-xs'>
-                          {selectedItem.organization_id}
-                        </p>
-                      </div>
+                    <div>
+                      <p className='text-muted-foreground'>Shipping Point</p>
+                      <p className='text-base font-medium'>
+                        {selectedItem.shipping_point || 'N/A'}
+                      </p>
                     </div>
-                  </CardContent>
-                </Card>
-              </div>
-            )}
-          </DialogContent>
-        </Dialog>
+                    <div>
+                      <p className='text-muted-foreground'>Customer Name</p>
+                      <p className='text-base font-medium'>
+                        {selectedItem.customer_name || 'N/A'}
+                      </p>
+                    </div>
+                    <div>
+                      <p className='text-muted-foreground'>Ship to Party</p>
+                      <p className='text-base font-medium'>
+                        {selectedItem.ship_to_party || 'N/A'}
+                      </p>
+                    </div>
+                    <div>
+                      <p className='text-muted-foreground'>Days Open</p>
+                      <p className='text-base font-semibold text-orange-600'>
+                        {selectedItem.days_open !== null
+                          ? `${selectedItem.days_open} days`
+                          : 'N/A'}
+                      </p>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+
+              {/* Record Tracking */}
+              <Card>
+                <CardHeader className='pb-3'>
+                  <CardTitle className='text-lg font-semibold'>
+                    Record Information
+                  </CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className='grid grid-cols-2 gap-4 text-sm lg:grid-cols-4'>
+                    <div>
+                      <p className='text-muted-foreground'>Record Created</p>
+                      <p className='text-base font-medium'>
+                        {format(
+                          new Date(selectedItem.created_at),
+                          'MMM dd, yyyy h:mm a'
+                        )}
+                      </p>
+                      <p className='text-muted-foreground text-xs'>
+                        {formatDistanceToNow(
+                          new Date(selectedItem.created_at),
+                          { addSuffix: true }
+                        )}
+                      </p>
+                    </div>
+                    <div>
+                      <p className='text-muted-foreground'>Last Updated</p>
+                      <p className='text-base font-medium'>
+                        {format(
+                          new Date(selectedItem.updated_at),
+                          'MMM dd, yyyy h:mm a'
+                        )}
+                      </p>
+                      <p className='text-muted-foreground text-xs'>
+                        {formatDistanceToNow(
+                          new Date(selectedItem.updated_at),
+                          { addSuffix: true }
+                        )}
+                      </p>
+                    </div>
+                    <div>
+                      <p className='text-muted-foreground'>Record ID</p>
+                      <p className='text-muted-foreground font-mono text-xs'>
+                        {selectedItem.id}
+                      </p>
+                    </div>
+                    <div>
+                      <p className='text-muted-foreground'>Organization ID</p>
+                      <p className='text-muted-foreground font-mono text-xs'>
+                        {selectedItem.organization_id}
+                      </p>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+            </ResponsiveDialogBody>
+          )}
+        </ResponsiveDialog>
       </div>
     )
   })
@@ -1684,3 +1659,5 @@ const GRSDeliveryStatusManager: React.FC<GRSDeliveryStatusManagerProps> =
 GRSDeliveryStatusManager.displayName = 'GRSDeliveryStatusManager'
 
 export default GRSDeliveryStatusManager
+
+// Created and developed by Jai Singh

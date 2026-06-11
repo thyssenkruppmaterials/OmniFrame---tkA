@@ -1,3 +1,4 @@
+// Created and developed by Jai Singh
 //! Rate limiting middleware
 
 use axum::{
@@ -124,3 +125,5 @@ impl Default for TieredRateLimits {
         }
     }
 }
+
+// Created and developed by Jai Singh

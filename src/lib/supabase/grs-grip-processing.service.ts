@@ -1,3 +1,4 @@
+// Created and developed by Jai Singh
 import type { QueryData } from '@supabase/supabase-js'
 import { logger } from '@/lib/utils/logger'
 import { getTodayEST } from '@/lib/utils/timezone'
@@ -649,4 +650,5 @@ export class GRSGRIPProcessingService {
 
 // Export singleton instance
 export const grsGripProcessingService = GRSGRIPProcessingService.getInstance()
-// Developer and Creator: Jai Singh
+
+// Created and developed by Jai Singh

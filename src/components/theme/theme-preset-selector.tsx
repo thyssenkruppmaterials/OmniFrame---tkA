@@ -1,3 +1,4 @@
+// Created and developed by Jai Singh
 import { useMemo, useState } from 'react'
 import { Check, Grid2x2, LayoutList, Search } from 'lucide-react'
 import {
@@ -262,3 +263,5 @@ export function ThemePresetSelector({
     </div>
   )
 }
+
+// Created and developed by Jai Singh

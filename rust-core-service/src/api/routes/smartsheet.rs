@@ -1,3 +1,4 @@
+// Created and developed by Jai Singh
 //! SmartSheet API endpoints
 //!
 //! High-performance SmartSheet operations with parallel processing
@@ -927,3 +928,5 @@ pub async fn get_dashboard_stats(
         data: stats,
     }))
 }
+
+// Created and developed by Jai Singh

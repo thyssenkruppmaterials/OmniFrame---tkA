@@ -1,3 +1,4 @@
+// Created and developed by Jai Singh
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { format, toZonedTime } from 'date-fns-tz'
 import {
@@ -843,3 +844,5 @@ const GRIPProcessingSearch: React.FC<GRIPProcessingSearchProps> = React.memo(
 GRIPProcessingSearch.displayName = 'GRIPProcessingSearch'
 
 export default GRIPProcessingSearch
+
+// Created and developed by Jai Singh

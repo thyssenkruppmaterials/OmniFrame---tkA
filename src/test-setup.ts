@@ -1,3 +1,4 @@
+// Created and developed by Jai Singh
 /**
  * Vitest global setup file.
  *
@@ -17,3 +18,5 @@ Object.defineProperty(globalThis, 'crypto', {
   writable: true,
   configurable: true,
 })
+
+// Created and developed by Jai Singh

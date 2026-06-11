@@ -1,3 +1,4 @@
+// Created and developed by Jai Singh
 'use client'
 
 import React, { useCallback, useEffect, useRef, useState } from 'react'
@@ -17,6 +18,7 @@ import {
 import { toast } from 'sonner'
 import {
   isPotentialKitPoNumber,
+  isPotentialKitSerialNumber,
   rfKittingPickingService,
 } from '@/lib/supabase/rf-kitting-picking.service'
 import type {
@@ -34,6 +36,7 @@ import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader } from '@/components/ui/card'
 import { Label } from '@/components/ui/label'
 import { ScannerInput } from '@/components/ui/scanner-input'
+import { RFScreenHeader } from '@/features/rf-interface/_shell'
 
 // Types
 interface PickingFormData {
@@ -220,7 +223,7 @@ const ExceptionOptionCard = ({
 }: {
   title: string
   description: string
-  icon: React.ElementType
+  icon: React.ComponentType<{ className?: string }>
   scanValue: string
   isSelected?: boolean
   onClick: () => void
@@ -493,45 +496,73 @@ const RFPickingForm: React.FC<RFPickingFormProps> = ({
         `🔍 RF Picking: Starting delivery validation for: ${deliveryNumber}`
       )
 
-      // Check if this could be a Kit PO Number instead of a delivery number
-      if (isPotentialKitPoNumber(deliveryNumber)) {
+      // Smart-detect: the operator may scan EITHER a kit serial
+      // number (`KIT-YYYYMMDD-NNN`) OR a legacy kit PO number into the
+      // delivery field. Both should hand off to the Kit Picking form.
+      // We probe the serial path first (it's a direct PK lookup with
+      // no disambiguation) and fall back to the PO path.
+      if (
+        isPotentialKitSerialNumber(deliveryNumber) ||
+        isPotentialKitPoNumber(deliveryNumber)
+      ) {
         logger.log(
-          `🔍 RF Picking: Detected potential Kit PO Number: ${deliveryNumber}`
+          `🔍 RF Picking: Detected potential Kit identifier: ${deliveryNumber}`
         )
         setState((prev) => ({ ...prev, isProcessing: true }))
 
         try {
-          // Verify it's actually a valid Kit PO in the database
-          const { data: kitData, error: kitError } =
-            await rfKittingPickingService.verifyKitForPicking(deliveryNumber)
+          let isKit = false
 
-          if (kitData && !kitError) {
+          if (isPotentialKitSerialNumber(deliveryNumber)) {
+            const { data: kitData, error: kitError } =
+              await rfKittingPickingService.verifyKitForPickingBySerialNumber(
+                deliveryNumber
+              )
+            isKit = !!(kitData && !kitError)
+          } else {
+            // PO fallback: `verifyKitForPicking` returns either
+            // resolved `data` (single kit) or a `kits[]` array
+            // (multi-kit disambiguation). Either confirms this is a
+            // Kit PO that should hand off — the Kit Picking form
+            // will render the picker for the multi-kit case.
+            const {
+              data: kitData,
+              error: kitError,
+              kits: kitOptions,
+            } = await rfKittingPickingService.verifyKitForPicking(
+              deliveryNumber
+            )
+            isKit =
+              (!!kitData && !kitError) ||
+              (!!kitOptions && kitOptions.length > 0 && !kitError)
+          }
+
+          if (isKit) {
             logger.log(
-              `✅ RF Picking: Valid Kit PO detected, switching to kitting mode`
+              `✅ RF Picking: Valid Kit identifier detected, switching to kitting mode`
             )
             setState((prev) => ({ ...prev, isProcessing: false }))
 
             if (onSwitchToKitting) {
-              toast.info(`Kit PO detected! Switching to Kit Picking mode...`)
+              toast.info(`Kit detected! Switching to Kit Picking mode...`)
               onSwitchToKitting(deliveryNumber)
               return
             } else {
-              // No callback provided, show info message
               toast.info(
-                `This is a Kit PO Number. Please use Kit Picking tool for kitting operations.`
+                `This is a Kit identifier. Please use Kit Picking tool for kitting operations.`
               )
               return
             }
           }
 
-          // Not a valid Kit PO, continue with delivery validation
+          // Not a valid Kit identifier, continue with delivery validation
           logger.log(
-            `ℹ️ RF Picking: Not a valid Kit PO, continuing with delivery validation`
+            `ℹ️ RF Picking: Not a valid Kit identifier, continuing with delivery validation`
           )
           setState((prev) => ({ ...prev, isProcessing: false }))
-        } catch (error) {
+        } catch (_error) {
           logger.log(
-            `ℹ️ RF Picking: Kit PO check failed, continuing with delivery validation`
+            `ℹ️ RF Picking: Kit identifier check failed, continuing with delivery validation`
           )
           setState((prev) => ({ ...prev, isProcessing: false }))
         }
@@ -1207,19 +1238,11 @@ const RFPickingForm: React.FC<RFPickingFormProps> = ({
       {/* Step Content */}
       <Card className='min-h-[400px]'>
         <CardHeader>
-          <div className='flex items-center'>
-            {onBack && (
-              <Button
-                variant='ghost'
-                size='sm'
-                onClick={onBack}
-                className='flex-shrink-0'
-              >
-                <ChevronLeft className='h-3 w-3' />
-                Back
-              </Button>
-            )}
-          </div>
+          <RFScreenHeader
+            title='Picking'
+            subtitle='Outbound orders'
+            onBack={onBack}
+          />
         </CardHeader>
         <CardContent>
           <AnimatePresence mode='wait'>
@@ -1687,3 +1710,5 @@ const RFPickingForm: React.FC<RFPickingFormProps> = ({
 }
 
 export default RFPickingForm
+
+// Created and developed by Jai Singh

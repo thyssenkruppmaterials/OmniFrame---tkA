@@ -1,3 +1,4 @@
+// Created and developed by Jai Singh
 /**
  * Camera System Types
  *
@@ -173,3 +174,5 @@ export interface CameraAlert {
   snapshot_url?: string
   timestamp: string
 }
+
+// Created and developed by Jai Singh

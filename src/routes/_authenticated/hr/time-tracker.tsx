@@ -1,3 +1,4 @@
+// Created and developed by Jai Singh
 import { Suspense, lazy } from 'react'
 import { createFileRoute } from '@tanstack/react-router'
 import { useTabSearchParam } from '@/hooks/use-tab-search-param'
@@ -132,4 +133,5 @@ function HRTimeTracker() {
 export const Route = createFileRoute('/_authenticated/hr/time-tracker')({
   component: HRTimeTracker,
 })
-// Developer and Creator: Jai Singh
+
+// Created and developed by Jai Singh

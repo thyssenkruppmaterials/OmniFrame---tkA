@@ -1,3 +1,4 @@
+// Created and developed by Jai Singh
 import { useState } from 'react'
 import {
   IconAlertTriangle,
@@ -229,3 +230,5 @@ export function SecurityDashboard() {
     </div>
   )
 }
+
+// Created and developed by Jai Singh

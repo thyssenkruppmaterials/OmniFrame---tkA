@@ -1,3 +1,4 @@
+// Created and developed by Jai Singh
 //! Data Models for Drone AI Analysis
 //! 
 //! Defines the structures for AI analysis results and database operations.
@@ -184,3 +185,5 @@ pub struct HealthResponse {
     pub database: String,
     pub ai_provider: String,
 }
+
+// Created and developed by Jai Singh

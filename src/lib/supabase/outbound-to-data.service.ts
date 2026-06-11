@@ -1,3 +1,4 @@
+// Created and developed by Jai Singh
 import { toast } from 'sonner'
 import { singletonAuthManager } from '@/lib/auth/singleton-auth-manager'
 import { rustOutboundTODataService } from '@/lib/rust-core/outbound-to-data.service'
@@ -8,7 +9,7 @@ import {
   getEndOfTodayEST,
   getDaysAgoEST,
 } from '@/lib/utils/timezone'
-import { supabase } from './client'
+import { supabase, supabaseRead } from './client'
 import type {
   Database,
   PutbackTicket,
@@ -182,9 +183,9 @@ export class OutboundTODataService {
               '🔄 Fallback: Using controlled chunking for outbound data...'
             )
 
-            // Get total count for fallback
+            // Read-only — route to replica when configured.
             const { count: fallbackCount, error: fallbackCountError } =
-              await supabase
+              await supabaseRead
                 .from('outbound_to_data')
                 .select('*', { count: 'exact', head: true })
                 .eq('organization_id', fallbackOrgId)
@@ -209,7 +210,7 @@ export class OutboundTODataService {
               const start = i * chunkSize
               const end = start + chunkSize - 1
 
-              const { data: chunkData, error: chunkError } = await supabase
+              const { data: chunkData, error: chunkError } = await supabaseRead
                 .from('outbound_to_data')
                 .select('*')
                 .eq('organization_id', fallbackOrgId)
@@ -245,7 +246,7 @@ export class OutboundTODataService {
 
             if (deliveryNumbers.length > 0) {
               const { data: priorityData, error: priorityError } =
-                await supabase
+                await supabaseRead
                   .from('rr_all_deliveries')
                   .select('delivery, delivery_priority')
                   .in(
@@ -293,7 +294,7 @@ export class OutboundTODataService {
         `🚀 Fetching outbound data (limit: ${limit}, offset: ${offset})...`
       )
 
-      const { data: outboundData, error: outboundError } = await supabase
+      const { data: outboundData, error: outboundError } = await supabaseRead
         .from('outbound_to_data')
         .select('*')
         .eq('organization_id', organizationId)
@@ -324,7 +325,7 @@ export class OutboundTODataService {
       let deliveryPriorities: { [key: string]: string } = {}
 
       if (deliveryNumbers.length > 0) {
-        const { data: priorityData, error: priorityError } = await supabase
+        const { data: priorityData, error: priorityError } = await supabaseRead
           .from('rr_all_deliveries')
           .select('delivery, delivery_priority')
           .in('delivery', deliveryNumbers)
@@ -426,59 +427,43 @@ export class OutboundTODataService {
         return result
       }
 
-      // Use standard insert with error handling for constraint violations
-      // The unique index will prevent duplicates at database level
+      // Use UPSERT with ignoreDuplicates so the matching unique constraint
+      // silently absorbs duplicate keys instead of producing 23505 errors
+      // that flood Postgres logs. PostgREST translates this to:
+      //   INSERT ... ON CONFLICT (
+      //     organization_id, delivery, transfer_order_number,
+      //     material, batch, source_storage_bin
+      //   ) DO NOTHING
+      //
+      // The columns MUST exactly match a unique constraint or simple-column
+      // unique index. Migration 320 added
+      //   CONSTRAINT outbound_to_data_unique_record
+      //     UNIQUE NULLS NOT DISTINCT (...)
+      // for that purpose, replacing the old COALESCE expression index from
+      // migration 047 (which `ON CONFLICT (cols)` cannot match — see
+      // [[Debug/Fix-Outbound-Import-OnConflict-Constraint]]).
+      //
+      // The returned `data` array only contains the rows that were actually
+      // inserted (duplicates are silently skipped).
       const { data, error } = await supabase
         .from('outbound_to_data')
-        .insert(insertData)
+        .upsert(insertData, {
+          onConflict:
+            'organization_id,delivery,transfer_order_number,material,batch,source_storage_bin',
+          ignoreDuplicates: true,
+        })
         .select()
 
       if (error) {
-        // Check if it's a unique constraint violation
-        if (error.code === '23505') {
-          // Unique constraint violation - handle gracefully
-          logger.warn(
-            'Duplicate records detected during import:',
-            error.message
-          )
-
-          // Try inserting records one by one to identify which are duplicates
-          let successCount = 0
-          let duplicateCount = 0
-
-          for (const record of insertData) {
-            const { error: singleError } = await supabase
-              .from('outbound_to_data')
-              .insert(record)
-              .select()
-              .single()
-
-            if (singleError) {
-              if (singleError.code === '23505') {
-                duplicateCount++
-              } else {
-                result.errors.push(`Row error: ${singleError.message}`)
-                result.errorRows++
-              }
-            } else {
-              successCount++
-            }
-          }
-
-          result.insertedRows = successCount
-          result.duplicateRows = duplicateCount
-          result.success = true
-        } else {
-          // Other error
-          logger.error('Bulk insert error:', error)
-          result.errors.push(error.message)
-          result.errorRows = insertData.length
-        }
+        logger.error('Bulk upsert error:', error)
+        result.errors.push(error.message)
+        result.errorRows = insertData.length
         return result
       }
 
-      // Success - all records inserted
-      result.insertedRows = data?.length || 0
+      const insertedCount = data?.length || 0
+      result.insertedRows = insertedCount
+      result.duplicateRows = insertData.length - insertedCount
       result.success = true
 
       return result
@@ -1579,8 +1564,9 @@ export class OutboundTODataService {
         '🚀 Fetching outbound statistics using optimized count queries...'
       )
 
-      // Get accurate total count (bypasses 1000 record limit)
-      const { count: totalCount, error: countError } = await supabase
+      // All statistics reads route to the replica via supabaseRead. None of them
+      // chain to a write, so replication lag is irrelevant for correctness.
+      const { count: totalCount, error: countError } = await supabaseRead
         .from('outbound_to_data')
         .select('*', { count: 'exact', head: true })
         .eq('organization_id', organizationId)
@@ -1602,44 +1588,39 @@ export class OutboundTODataService {
         `📅 Outbound Statistics: Using EST dates - Today: ${today}, Week Ago: ${weekAgo}`
       )
 
-      // Get today's count efficiently using EST boundaries
-      const { count: todayCount, error: todayError } = await supabase
+      const { count: todayCount, error: todayError } = await supabaseRead
         .from('outbound_to_data')
         .select('*', { count: 'exact', head: true })
         .eq('organization_id', organizationId)
         .gte('created_at', startOfToday)
         .lte('created_at', endOfToday)
 
-      // Get this week's count efficiently using EST date
-      const { count: weekCount, error: weekError } = await supabase
+      const { count: weekCount, error: weekError } = await supabaseRead
         .from('outbound_to_data')
         .select('*', { count: 'exact', head: true })
         .eq('organization_id', organizationId)
         .gte('created_at', `${weekAgo}T00:00:00`)
 
-      // Get distinct counts for unique values (more efficient than loading all data)
       const { data: transferOrderData, error: transferOrderError } =
-        await supabase
+        await supabaseRead
           .from('outbound_to_data')
           .select('transfer_order_number')
           .eq('organization_id', organizationId)
           .not('transfer_order_number', 'is', null)
 
-      const { data: materialData, error: materialError } = await supabase
+      const { data: materialData, error: materialError } = await supabaseRead
         .from('outbound_to_data')
         .select('material')
         .eq('organization_id', organizationId)
         .not('material', 'is', null)
 
-      // Get status breakdown efficiently
-      const { data: statusData, error: statusError } = await supabase
+      const { data: statusData, error: statusError } = await supabaseRead
         .from('outbound_to_data')
         .select('status')
         .eq('organization_id', organizationId)
 
-      // Get picked today count using EST boundaries
       const { count: pickedTodayCount, error: pickedTodayError } =
-        await supabase
+        await supabaseRead
           .from('outbound_to_data')
           .select('*', { count: 'exact', head: true })
           .eq('organization_id', organizationId)
@@ -1649,9 +1630,8 @@ export class OutboundTODataService {
       if (pickedTodayError)
         logger.warn('⚠️ Picked today count error:', pickedTodayError)
 
-      // Get packed today count using EST boundaries
       const { count: packedTodayCount, error: packedTodayError } =
-        await supabase
+        await supabaseRead
           .from('outbound_to_data')
           .select('*', { count: 'exact', head: true })
           .eq('organization_id', organizationId)
@@ -1661,9 +1641,8 @@ export class OutboundTODataService {
       if (packedTodayError)
         logger.warn('⚠️ Packed today count error:', packedTodayError)
 
-      // Get final packed today count using EST boundaries
       const { count: finalPackedTodayCount, error: finalPackedTodayError } =
-        await supabase
+        await supabaseRead
           .from('outbound_to_data')
           .select('*', { count: 'exact', head: true })
           .eq('organization_id', organizationId)
@@ -1673,32 +1652,29 @@ export class OutboundTODataService {
       if (finalPackedTodayError)
         logger.warn('⚠️ Final packed today count error:', finalPackedTodayError)
 
-      // Get pending deliveries count (November 9, 2025)
-      const { count: pendingCount, error: pendingCountError } = await supabase
-        .from('outbound_to_data')
-        .select('*', { count: 'exact', head: true })
-        .eq('organization_id', organizationId)
-        .eq('status', 'pending')
+      const { count: pendingCount, error: pendingCountError } =
+        await supabaseRead
+          .from('outbound_to_data')
+          .select('*', { count: 'exact', head: true })
+          .eq('organization_id', organizationId)
+          .eq('status', 'pending')
 
       if (pendingCountError)
         logger.warn('⚠️ Pending count error:', pendingCountError)
 
-      // Get deliveries waved today count using EST boundaries (November 9, 2025)
-      const { count: wavedTodayCount, error: wavedTodayError } = await supabase
-        .from('outbound_to_data')
-        .select('*', { count: 'exact', head: true })
-        .eq('organization_id', organizationId)
-        .gte('waved_at', startOfToday)
-        .lte('waved_at', endOfToday)
+      const { count: wavedTodayCount, error: wavedTodayError } =
+        await supabaseRead
+          .from('outbound_to_data')
+          .select('*', { count: 'exact', head: true })
+          .eq('organization_id', organizationId)
+          .gte('waved_at', startOfToday)
+          .lte('waved_at', endOfToday)
 
       if (wavedTodayError)
         logger.warn('⚠️ Waved today count error:', wavedTodayError)
 
-      // Get critical deliveries count (November 14, 2025)
-      // Critical: not final packed AND priority is 10, 12, or 13
-      // Only count deliveries after 11/12/2025 (prior deliveries are exceptions due to application implementation)
       const { count: criticalDeliveriesCount, error: criticalError } =
-        await supabase
+        await supabaseRead
           .from('outbound_to_data')
           .select('*', { count: 'exact', head: true })
           .eq('organization_id', organizationId)
@@ -1709,14 +1685,10 @@ export class OutboundTODataService {
       if (criticalError)
         logger.warn('⚠️ Critical deliveries count error:', criticalError)
 
-      // Cutoff date for "available" metrics - only count items from 2026 onwards
       const availableCutoffDate = '2026-01-01'
 
-      // Get picks available count (December 16, 2025, updated January 2026)
-      // Items with status 'processing' (waved) are ready to be picked
-      // Only count items created on or after January 1, 2026
       const { count: picksAvailableCount, error: picksAvailableError } =
-        await supabase
+        await supabaseRead
           .from('outbound_to_data')
           .select('*', { count: 'exact', head: true })
           .eq('organization_id', organizationId)
@@ -1726,11 +1698,8 @@ export class OutboundTODataService {
       if (picksAvailableError)
         logger.warn('⚠️ Picks available count error:', picksAvailableError)
 
-      // Get packing available count (December 16, 2025, updated January 2026)
-      // Items with status 'picked' are ready to be packed
-      // Only count items created on or after January 1, 2026
       const { count: packingAvailableCount, error: packingAvailableError } =
-        await supabase
+        await supabaseRead
           .from('outbound_to_data')
           .select('*', { count: 'exact', head: true })
           .eq('organization_id', organizationId)
@@ -1740,9 +1709,8 @@ export class OutboundTODataService {
       if (packingAvailableError)
         logger.warn('⚠️ Packing available count error:', packingAvailableError)
 
-      // Get shipped today count (December 16, 2025)
       const { count: shippedTodayCount, error: shippedTodayError } =
-        await supabase
+        await supabaseRead
           .from('outbound_to_data')
           .select('*', { count: 'exact', head: true })
           .eq('organization_id', organizationId)
@@ -1752,11 +1720,8 @@ export class OutboundTODataService {
       if (shippedTodayError)
         logger.warn('⚠️ Shipped today count error:', shippedTodayError)
 
-      // Get shipped available count (December 16, 2025, updated January 2026)
-      // Items with status 'shipped' are ready for final packing
-      // Only count items created on or after January 1, 2026
       const { count: shippedAvailableCount, error: shippedAvailableError } =
-        await supabase
+        await supabaseRead
           .from('outbound_to_data')
           .select('*', { count: 'exact', head: true })
           .eq('organization_id', organizationId)
@@ -1875,7 +1840,7 @@ export class OutboundTODataService {
         '🔍 Fetching critical deliveries (priority 10, 12, 13, creation_date > 2025-11-12, not final_packed)'
       )
 
-      const { data, error } = await supabase
+      const { data, error } = await supabaseRead
         .from('outbound_to_data')
         .select('*')
         .eq('organization_id', userProfile.organization_id)
@@ -1917,7 +1882,7 @@ export class OutboundTODataService {
         `🔍 Fetching outbound data by statuses: ${statuses.join(', ')} (cutoff: ${cutoffDate})`
       )
 
-      const { data, error } = await supabase
+      const { data, error } = await supabaseRead
         .from('outbound_to_data')
         .select('*')
         .eq('organization_id', userProfile.organization_id)
@@ -2018,8 +1983,8 @@ export class OutboundTODataService {
         }
       }
 
-      // Build base query
-      let searchQuery = supabase
+      // Build base query (search is read-only; replica is safe).
+      let searchQuery = supabaseRead
         .from('outbound_to_data')
         .select('*')
         .eq('organization_id', userProfile.organization_id)
@@ -2978,4 +2943,5 @@ export class OutboundTODataService {
 
 // Export singleton instance
 export const outboundTODataService = OutboundTODataService.getInstance()
-// Developer and Creator: Jai Singh
+
+// Created and developed by Jai Singh

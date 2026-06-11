@@ -1,3 +1,4 @@
+// Created and developed by Jai Singh
 import { z } from 'zod'
 
 // User Roles - Updated to support both system and custom roles (December 20, 2025)
@@ -456,3 +457,5 @@ export interface UserManagementContextType {
   getUserActivity: (userId: string) => Promise<UserActivity[]>
   getUserStatusHistory: (userId: string) => Promise<UserStatusHistory[]>
 }
+
+// Created and developed by Jai Singh

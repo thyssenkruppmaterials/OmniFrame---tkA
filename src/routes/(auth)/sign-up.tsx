@@ -1,7 +1,9 @@
+// Created and developed by Jai Singh
 import { createFileRoute } from '@tanstack/react-router'
 import SignUp from '@/features/auth/sign-up'
 
 export const Route = createFileRoute('/(auth)/sign-up')({
   component: SignUp,
 })
-// Developer and Creator: Jai Singh
+
+// Created and developed by Jai Singh

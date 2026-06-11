@@ -1,3 +1,4 @@
+// Created and developed by Jai Singh
 import { useState } from 'react'
 import { format } from 'date-fns'
 import {
@@ -161,3 +162,5 @@ export function SecurityTimeline({ expanded }: SecurityTimelineProps) {
     </div>
   )
 }
+
+// Created and developed by Jai Singh

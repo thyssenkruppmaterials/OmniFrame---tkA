@@ -1,3 +1,4 @@
+// Created and developed by Jai Singh
 import React, { useState, useMemo, useCallback, useRef, useEffect } from 'react'
 import {
   Upload,
@@ -956,3 +957,5 @@ const LX03DataManager: React.FC<LX03DataManagerProps> = React.memo(
 LX03DataManager.displayName = 'LX03DataManager'
 
 export default LX03DataManager
+
+// Created and developed by Jai Singh

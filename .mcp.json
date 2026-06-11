@@ -1,0 +1,21 @@
+{
+  "mcpServers": {
+    "railway-mcp-server": {
+      "command": "/opt/homebrew/bin/npx",
+      "args": ["-y", "@railway/mcp-server@latest"]
+    },
+    "obsidian-mcp": {
+      "command": "/opt/homebrew/bin/obsidian-mcp",
+      "args": [
+        "/Users/jaisingh/Documents/Projects/OneBoxFullStack/memorybank/OmniFrame"
+      ]
+    },
+    "supabase": {
+      "command": "/opt/homebrew/bin/npx",
+      "args": ["-y", "@supabase/mcp-server-supabase@latest"],
+      "env": {
+        "SUPABASE_ACCESS_TOKEN": "${SUPABASE_ACCESS_TOKEN}"
+      }
+    }
+  }
+}

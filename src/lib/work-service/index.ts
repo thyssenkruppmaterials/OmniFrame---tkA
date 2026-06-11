@@ -1,3 +1,4 @@
+// Created and developed by Jai Singh
 /**
  * Work Service Module
  * Central export for all work service functionality
@@ -12,6 +13,7 @@ export type {
   CycleCountPriority,
   CycleCountTask,
   HeartbeatData,
+  OmnibeltConfigChangedPayload,
   PushMode,
   PushWorkRequest,
   QueueStats,
@@ -43,3 +45,5 @@ export {
   type ErrorHandler,
   type WsEventHandler,
 } from './websocket'
+
+// Created and developed by Jai Singh

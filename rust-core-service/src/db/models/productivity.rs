@@ -1,3 +1,4 @@
+// Created and developed by Jai Singh
 //! Productivity and labor management models
 
 use chrono::{DateTime, Utc, NaiveDate};
@@ -83,3 +84,5 @@ pub struct ProductivityQuery {
     pub department: Option<String>,
     pub team: Option<String>,
 }
+
+// Created and developed by Jai Singh

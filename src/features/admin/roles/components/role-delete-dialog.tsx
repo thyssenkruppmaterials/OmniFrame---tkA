@@ -1,3 +1,4 @@
+// Created and developed by Jai Singh
 import { useState, useEffect } from 'react'
 import { Loader2, AlertTriangle } from 'lucide-react'
 import { toast } from 'sonner'
@@ -161,3 +162,5 @@ export function RoleDeleteDialog({
     </Dialog>
   )
 }
+
+// Created and developed by Jai Singh

@@ -1,3 +1,4 @@
+// Created and developed by Jai Singh
 import { useState } from 'react'
 import {
   IconClipboardList,
@@ -536,3 +537,5 @@ export function LoggingAuditingSettings() {
     </div>
   )
 }
+
+// Created and developed by Jai Singh

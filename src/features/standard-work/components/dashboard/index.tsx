@@ -1,3 +1,4 @@
+// Created and developed by Jai Singh
 /**
  * Standard Work Dashboard - Main Entry
  * Dashboard components for task tracking and progress
@@ -9,3 +10,5 @@ export { TodayTasksSection } from './today-tasks'
 export { ProgressStatsCard } from './progress-stats'
 export { UpcomingTasksSection } from './upcoming-tasks'
 export { SubmissionHistory } from './submission-history'
+
+// Created and developed by Jai Singh

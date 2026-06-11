@@ -45,7 +45,7 @@ console.log(`   File: ${buildInfoPath}`)
 const swPath = path.join(distDir, 'sw.js')
 if (fs.existsSync(swPath)) {
   let swContent = fs.readFileSync(swPath, 'utf8')
-  swContent = swContent.replace(/cacheId: '[^']*'/, `cacheId: 'omniframe-v${buildInfo.buildId}'`)
+  swContent = swContent.replace(/cacheId: '[^']*'/, `cacheId: 'onebox-ai-v${buildInfo.buildId}'`)
   fs.writeFileSync(swPath, swContent)
   console.log('✅ Service worker cache ID updated')
 }

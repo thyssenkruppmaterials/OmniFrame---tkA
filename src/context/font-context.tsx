@@ -1,3 +1,4 @@
+// Created and developed by Jai Singh
 import React, { createContext, useContext, useEffect, useState } from 'react'
 import { fonts } from '@/config/fonts'
 
@@ -48,3 +49,5 @@ export const useFont = () => {
   }
   return context
 }
+
+// Created and developed by Jai Singh

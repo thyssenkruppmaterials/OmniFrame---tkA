@@ -1,3 +1,4 @@
+// Created and developed by Jai Singh
 import { rbacService } from '@/lib/auth/rbac-service'
 import { supabase } from '@/lib/supabase/client'
 import type {
@@ -1053,3 +1054,5 @@ export const exportRoleConfiguration = async (
     return null
   }
 }
+
+// Created and developed by Jai Singh

@@ -1,3 +1,4 @@
+# Created and developed by Jai Singh
 """
 FastAPI router for LX03 data import operations.
 Handles large dataset imports server-side to avoid browser timeout limitations.
@@ -272,5 +273,4 @@ async def lx03_health_check():
         "version": "1.0.0"
     }
 
-# Developer and Creator: Jai Singh
-
+# Created and developed by Jai Singh

@@ -1,3 +1,4 @@
+// Created and developed by Jai Singh
 export interface UserSession {
   id: string
   user_id: string
@@ -115,3 +116,5 @@ export type SessionDialogType =
   | 'security-alert-details'
   | 'session-details'
   | 'bulk-terminate'
+
+// Created and developed by Jai Singh

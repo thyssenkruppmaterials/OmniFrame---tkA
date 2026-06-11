@@ -1,3 +1,4 @@
+# Created and developed by Jai Singh
 """
 Reports API endpoints for data processing and export.
 Provides advanced reporting capabilities that leverage Python's data processing strengths.
@@ -15,10 +16,12 @@ try:
     from ..auth.supabase_auth import get_current_user, AuthenticatedUser
     from ..services.analytics import AnalyticsService
     from ..utils.error_responses import sanitized_error
+    from ..config.database import db as _db
 except ImportError:
     from auth.supabase_auth import get_current_user, AuthenticatedUser
     from services.analytics import AnalyticsService
     from api.utils.error_responses import sanitized_error
+    from config.database import db as _db
 
 router = APIRouter()
 
@@ -42,8 +45,8 @@ async def export_outbound_data(
         raise HTTPException(status_code=403, detail="Organization access required")
     
     try:
-        # Build query
-        query = current_user.supabase_client.table("outbound_to_data").select(
+        # Build query. Export is read-only — route to read replica.
+        query = _db.read_client.table("outbound_to_data").select(
             "*"
         ).eq("organization_id", current_user.organization_id)
         
@@ -92,7 +95,7 @@ async def export_outbound_data(
                 df.to_excel(writer, sheet_name='Outbound Data', index=False)
                 
                 if include_analytics:
-                    analytics_service = AnalyticsService(current_user.supabase_client)
+                    analytics_service = AnalyticsService(current_user.supabase_client, read_client=_db.read_client)
                     analytics = await analytics_service.get_outbound_analytics(
                         organization_id=current_user.organization_id,
                         date_from=date_from,
@@ -159,8 +162,8 @@ async def export_delivery_status_data(
         raise HTTPException(status_code=403, detail="Organization access required")
     
     try:
-        # Get delivery data
-        delivery_result = current_user.supabase_client.table("rr_all_deliveries").select(
+        # Get delivery data. Read-only export — route to read replica.
+        delivery_result = _db.read_client.table("rr_all_deliveries").select(
             "*"
         ).eq("organization_id", current_user.organization_id).execute()
         
@@ -170,8 +173,8 @@ async def export_delivery_status_data(
         df_deliveries = pd.DataFrame(delivery_result.data)
         
         if include_status_join:
-            # Get outbound status data
-            outbound_result = current_user.supabase_client.table("outbound_to_data").select(
+            # Get outbound status data (also read-only — replica safe).
+            outbound_result = _db.read_client.table("outbound_to_data").select(
                 "delivery, status, packed_at, final_packed_at, shipped_at"
             ).eq("organization_id", current_user.organization_id).execute()
             
@@ -274,7 +277,7 @@ async def generate_custom_report(
     async def generate_report_task():
         """Background task for report generation."""
         try:
-            analytics_service = AnalyticsService(current_user.supabase_client)
+            analytics_service = AnalyticsService(current_user.supabase_client, read_client=_db.read_client)
             
             if report_type == "performance":
                 # Generate comprehensive performance report
@@ -411,5 +414,4 @@ async def get_report_templates(
     
     return JSONResponse(content={"templates": templates})
 
-# Developer and Creator: Jai Singh
-
+# Created and developed by Jai Singh

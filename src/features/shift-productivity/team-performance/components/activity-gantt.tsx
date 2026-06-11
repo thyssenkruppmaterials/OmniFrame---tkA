@@ -1,3 +1,4 @@
+// Created and developed by Jai Singh
 /**
  * Activity Gantt Component
  * Visual timeline showing work activity blocks throughout the day
@@ -220,6 +221,8 @@ interface ActivityGanttProps {
   enableExport?: boolean
   /** Custom filename for the exported PNG (defaults to activity-timeline-{timestamp}.png) */
   exportFilename?: string
+  /** IANA timezone used for block positioning and time labels. */
+  timezone?: string
 }
 
 /**
@@ -278,6 +281,7 @@ export function ActivityGantt({
   enableZoom = false,
   enableExport = false,
   exportFilename,
+  timezone = DEFAULT_TIMEZONE,
 }: ActivityGanttProps) {
   // Load dynamic activity configuration from database
   const { getActivityColors } = useActivityConfig()
@@ -446,8 +450,11 @@ export function ActivityGantt({
     const processedBlocks = timeline.activityBlocks
       .map((block, originalIndex) => {
         // Get minutes since midnight in EST for start and end times
-        const startMinutes = getESTMinutesSinceMidnight(block.startTime)
-        const endMinutes = getESTMinutesSinceMidnight(block.endTime)
+        const startMinutes = getESTMinutesSinceMidnight(
+          block.startTime,
+          timezone
+        )
+        const endMinutes = getESTMinutesSinceMidnight(block.endTime, timezone)
 
         // Clamp to visible range
         const clampedStart = Math.max(startMinutes, visibleStartMinutes)
@@ -504,6 +511,7 @@ export function ActivityGantt({
     visibleStartMinutes,
     visibleEndMinutes,
     VISIBLE_MINUTES,
+    timezone,
   ])
 
   // Calculate total event minutes from activity blocks
@@ -818,7 +826,7 @@ export function ActivityGantt({
                 const activityLabel = isEvent
                   ? block.eventName || 'Event'
                   : block.activityLabel || colors.label
-                const ariaLabel = `${activityLabel}: ${formatTime(block.startTime)} to ${formatTime(block.endTime)}, ${formatDuration(block.duration)}${block.taskCount > 0 ? `, ${block.taskCount} ${block.taskCount === 1 ? 'task' : 'tasks'}` : ''}`
+                const ariaLabel = `${activityLabel}: ${formatTime(block.startTime, timezone)} to ${formatTime(block.endTime, timezone)}, ${formatDuration(block.duration)}${block.taskCount > 0 ? `, ${block.taskCount} ${block.taskCount === 1 ? 'task' : 'tasks'}` : ''}`
 
                 return (
                   <Tooltip key={idx}>
@@ -859,9 +867,9 @@ export function ActivityGantt({
                               borderColor: block.eventColor,
                             }),
                         }}
-                        initial={{ opacity: 0, scaleY: 0.5 }}
+                        initial={{ opacity: 0, scaleY: 0.6 }}
                         animate={{ opacity: 1, scaleY: 1 }}
-                        transition={{ duration: 0.3, delay: idx * 0.015 }}
+                        transition={{ duration: 0.2 }}
                       >
                         {/* Activity label inside block if wide enough */}
                         {block.width > 6 && (
@@ -937,8 +945,8 @@ export function ActivityGantt({
                             isEvent && '!text-purple-700 dark:!text-purple-300'
                           )}
                         >
-                          {formatTime(block.startTime)} —{' '}
-                          {formatTime(block.endTime)}
+                          {formatTime(block.startTime, timezone)} —{' '}
+                          {formatTime(block.endTime, timezone)}
                         </div>
 
                         {/* Quantity for work activities */}
@@ -1097,14 +1105,18 @@ export function ActivityGantt({
                 new Date(timeline.dayStart).toDateString() &&
               (() => {
                 const currentMinutes = getESTMinutesSinceMidnight(
-                  new Date().toISOString()
+                  new Date().toISOString(),
+                  timezone
                 )
                 const position =
                   ((currentMinutes - visibleStartMinutes) / VISIBLE_MINUTES) *
                   100
                 // Only show if current time is within visible range
                 if (position >= 0 && position <= 100) {
-                  const currentTimeLabel = formatTime(new Date().toISOString())
+                  const currentTimeLabel = formatTime(
+                    new Date().toISOString(),
+                    timezone
+                  )
                   return (
                     <div
                       className='absolute top-0 bottom-0 z-20 w-0.5 bg-emerald-500'
@@ -1156,13 +1168,13 @@ export function ActivityGantt({
               {timeline.firstActivity && (
                 <span className='text-muted-foreground'>
                   <span className='text-foreground font-medium'>First:</span>{' '}
-                  {formatTime(timeline.firstActivity)}
+                  {formatTime(timeline.firstActivity, timezone)}
                 </span>
               )}
               {timeline.lastActivity && (
                 <span className='text-muted-foreground'>
                   <span className='text-foreground font-medium'>Last:</span>{' '}
-                  {formatTime(timeline.lastActivity)}
+                  {formatTime(timeline.lastActivity, timezone)}
                 </span>
               )}
             </div>
@@ -1415,3 +1427,5 @@ export function ActivityLegend({
 }
 
 export default ActivityGantt
+
+// Created and developed by Jai Singh

@@ -1,3 +1,4 @@
+// Created and developed by Jai Singh
 /**
  * Camera List Panel Component
  *
@@ -386,3 +387,5 @@ function CameraCardSkeleton() {
     </div>
   )
 }
+
+// Created and developed by Jai Singh

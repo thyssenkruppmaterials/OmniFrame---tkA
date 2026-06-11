@@ -1,3 +1,4 @@
+# Created and developed by Jai Singh
 """Attachment mixin for SmartsheetService."""
 
 import asyncio
@@ -381,4 +382,4 @@ class _AttachmentsMixin:
                                     status="error", error_message=str(e), details={"comment_id": comment_id})
             return await self._handle_api_error(e)
 
-# Developer and Creator: Jai Singh
+# Created and developed by Jai Singh

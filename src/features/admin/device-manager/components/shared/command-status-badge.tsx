@@ -1,3 +1,4 @@
+// Created and developed by Jai Singh
 import { cn } from '@/lib/utils'
 import type { CommandStatus } from '../../types/device-manager.types'
 
@@ -36,3 +37,5 @@ export function CommandStatusBadge({ status }: CommandStatusBadgeProps) {
     </span>
   )
 }
+
+// Created and developed by Jai Singh

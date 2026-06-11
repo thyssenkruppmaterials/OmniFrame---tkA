@@ -1,3 +1,4 @@
+// Created and developed by Jai Singh
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { format } from 'date-fns'
 import { AnimatePresence, motion } from 'framer-motion'
@@ -1415,3 +1416,5 @@ const GRSInventoryManager: React.FC<GRSInventoryManagerProps> = React.memo(
 GRSInventoryManager.displayName = 'GRSInventoryManager'
 
 export default GRSInventoryManager
+
+// Created and developed by Jai Singh

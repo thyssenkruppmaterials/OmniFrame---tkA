@@ -1,3 +1,4 @@
+// Created and developed by Jai Singh
 /**
  * Work Queue Service
  * Production service for managing work queue operations
@@ -300,4 +301,5 @@ class WorkQueueService {
 
 // Export singleton instance
 export const workQueueService = new WorkQueueService()
-// Developer and Creator: Jai Singh
+
+// Created and developed by Jai Singh

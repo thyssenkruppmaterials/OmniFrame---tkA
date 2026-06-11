@@ -1,3 +1,4 @@
+// Created and developed by Jai Singh
 /**
  * Step 5: Shift Schedule
  * Configure work schedule and targets
@@ -72,7 +73,7 @@ export function Step5ShiftSchedule() {
   )
 
   const form = useForm<ShiftScheduleData>({
-    resolver: zodResolver(shiftScheduleSchema),
+    resolver: zodResolver(shiftScheduleSchema) as never,
     defaultValues: state.shiftSchedule || {
       shift_pattern: 'fixed',
       shift_start_time: '08:00',
@@ -595,3 +596,5 @@ export function Step5ShiftSchedule() {
 }
 
 export default Step5ShiftSchedule
+
+// Created and developed by Jai Singh

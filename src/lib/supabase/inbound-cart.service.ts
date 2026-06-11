@@ -1,3 +1,4 @@
+// Created and developed by Jai Singh
 import { logger } from '@/lib/utils/logger'
 import { supabase } from './client'
 
@@ -560,4 +561,5 @@ class InboundCartService {
 }
 
 export const inboundCartService = InboundCartService.getInstance()
-// Developer and Creator: Jai Singh
+
+// Created and developed by Jai Singh

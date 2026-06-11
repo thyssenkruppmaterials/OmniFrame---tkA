@@ -1,3 +1,4 @@
+// Created and developed by Jai Singh
 /**
  * Visitor Log Hooks
  *
@@ -522,3 +523,5 @@ export function useUpdateVisitorField() {
     isPending: updateCellsMutation.isPending,
   }
 }
+
+// Created and developed by Jai Singh

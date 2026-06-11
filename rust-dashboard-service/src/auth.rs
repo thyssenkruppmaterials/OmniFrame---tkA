@@ -1,3 +1,4 @@
+// Created and developed by Jai Singh
 //! Authentication client for rust-dashboard-service
 //!
 //! Validates JWT tokens by calling rust-core-service.
@@ -119,7 +120,7 @@ impl AuthClient {
     /// Validate service API key (for internal service-to-service calls)
     pub fn validate_service_key(&self, key: &str) -> bool {
         // SECURITY: Only accept the exact configured service API key.
-        // The previous starts_with("omf_") pattern accepted ANY key with that prefix,
+        // The previous starts_with("onbx_") pattern accepted ANY key with that prefix,
         // bypassing proper authentication. Centralized DB validation is done by rust-core-service.
         key == self.config.service_api_key
     }
@@ -197,29 +198,29 @@ mod tests {
     #[test]
     fn extract_service_key_returns_key_when_present() {
         let mut headers = HeaderMap::new();
-        headers.insert("X-Service-Key", "omf_da_secret_key_abc".parse().unwrap());
-        assert_eq!(extract_service_key(&headers), Some("omf_da_secret_key_abc"));
+        headers.insert("X-Service-Key", "onbx_da_secret_key_abc".parse().unwrap());
+        assert_eq!(extract_service_key(&headers), Some("onbx_da_secret_key_abc"));
     }
 
     #[test]
     fn validate_service_key_accepts_exact_match_and_rejects_others() {
         let config = AuthConfig {
             rust_core_url: "http://localhost:8010".to_string(),
-            service_api_key: "omf_da_correct_key".to_string(),
+            service_api_key: "onbx_da_correct_key".to_string(),
         };
         let client = AuthClient::new(config);
 
-        assert!(client.validate_service_key("omf_da_correct_key"));
-        assert!(!client.validate_service_key("omf_da_wrong_key"));
+        assert!(client.validate_service_key("onbx_da_correct_key"));
+        assert!(!client.validate_service_key("onbx_da_wrong_key"));
         assert!(!client.validate_service_key(""));
-        assert!(!client.validate_service_key("omf_da_correct_key_extra"));
+        assert!(!client.validate_service_key("onbx_da_correct_key_extra"));
     }
 
     #[test]
     fn authenticated_user_serializes_all_fields_correctly() {
         let user = AuthenticatedUser {
             user_id: "user-abc-123".to_string(),
-            email: Some("test@omniframe.app".to_string()),
+            email: Some("test@onebox.ai".to_string()),
             organization_id: Some("org-xyz-789".to_string()),
             role: Some("admin".to_string()),
             permissions: vec!["read".to_string(), "write".to_string()],
@@ -227,7 +228,7 @@ mod tests {
         let json = serde_json::to_value(&user).unwrap();
 
         assert_eq!(json["user_id"], "user-abc-123");
-        assert_eq!(json["email"], "test@omniframe.app");
+        assert_eq!(json["email"], "test@onebox.ai");
         assert_eq!(json["organization_id"], "org-xyz-789");
         assert_eq!(json["role"], "admin");
         assert_eq!(json["permissions"], serde_json::json!(["read", "write"]));
@@ -251,3 +252,5 @@ mod tests {
         assert!(user.permissions.is_empty());
     }
 }
+
+// Created and developed by Jai Singh

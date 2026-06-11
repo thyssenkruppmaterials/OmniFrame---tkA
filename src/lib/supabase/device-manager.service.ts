@@ -1,3 +1,4 @@
+// Created and developed by Jai Singh
 import type {
   MdmDevice,
   MdmDeviceGroup,
@@ -376,37 +377,14 @@ export class DeviceManagerService {
     return data || []
   }
 
-  static subscribeToDeviceChanges(callback: (payload: unknown) => void) {
-    return supabase
-      .channel('mdm-devices-changes')
-      .on(
-        'postgres_changes',
-        { event: '*', schema: 'public', table: 'mdm_devices' },
-        callback
-      )
-      .subscribe()
-  }
-
-  static subscribeToCommandChanges(callback: (payload: unknown) => void) {
-    return supabase
-      .channel('mdm-commands-changes')
-      .on(
-        'postgres_changes',
-        { event: '*', schema: 'public', table: 'mdm_commands' },
-        callback
-      )
-      .subscribe()
-  }
-
-  static subscribeToLocationChanges(callback: (payload: unknown) => void) {
-    return supabase
-      .channel('mdm-locations-changes')
-      .on(
-        'postgres_changes',
-        { event: 'INSERT', schema: 'public', table: 'mdm_device_locations' },
-        callback
-      )
-      .subscribe()
-  }
+  // Removed 2026-05-06 (Phase 1 of rust-work-service integration plan):
+  // static subscribeToDeviceChanges / subscribeToCommandChanges /
+  // subscribeToLocationChanges had no live consumers. use-mdm-commands.ts
+  // is pure polling and use-device-locations.ts uses the dedicated
+  // mdm-service WebSocket on port 8040 (NOT Supabase Realtime). Removing
+  // the dead code here also removes three unfiltered postgres_changes
+  // channels that would have leaked cross-tenant if ever wired up.
+  // See memorybank/OmniFrame/Implementations/Migrate-Tier1-Deferred-Channels-To-Rust-WS.md.
 }
-// Developer and Creator: Jai Singh
+
+// Created and developed by Jai Singh

@@ -1,3 +1,4 @@
+// Created and developed by Jai Singh
 /**
  * Enterprise Audit Service for OmniFrame RBAC System
  * Comprehensive audit logging, anomaly detection, and security monitoring
@@ -1092,4 +1093,5 @@ export type {
   SecurityAlert,
   AuditMetrics,
 }
-// Developer and Creator: Jai Singh
+
+// Created and developed by Jai Singh

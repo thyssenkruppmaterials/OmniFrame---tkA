@@ -1,3 +1,4 @@
+// Created and developed by Jai Singh
 /**
  * Cycle Count Draft Auto-Save Hook
  * Automatically saves cycle count progress to localStorage
@@ -248,3 +249,5 @@ export function getCycleCountDraftCount(): number {
     return 0
   }
 }
+
+// Created and developed by Jai Singh

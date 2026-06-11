@@ -1,19 +1,19 @@
-import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+// Created and developed by Jai Singh
+import React, { useCallback, useEffect, useRef, useState } from 'react'
 import { useNavigate } from '@tanstack/react-router'
 import { AnimatePresence, motion } from 'framer-motion'
 import {
   AlertTriangle,
+  ArrowRightLeft,
   ArrowUpFromLine,
   BarChart3,
   Boxes,
   Calendar,
-  ChevronLeft,
   ClipboardCheck,
   ClipboardList,
   Clock,
   Edit2,
   Flame,
-  Gamepad2,
   Hammer,
   Home,
   Loader2,
@@ -32,6 +32,7 @@ import {
   Truck,
   User,
   X,
+  Zap,
 } from 'lucide-react'
 import { toast } from 'sonner'
 import { useUnifiedAuth } from '@/lib/auth/unified-auth-provider'
@@ -41,16 +42,21 @@ import {
   MATCH_TYPE_LABELS,
 } from '@/lib/supabase/hot-part-alert.service'
 import { InboundScanService } from '@/lib/supabase/inbound-scans'
+import { deriveZone } from '@/lib/supabase/zone-rules.service'
+import { cn } from '@/lib/utils'
 import {
   getDeviceRegistration,
   parseDeviceInfo,
   updateDeviceName,
 } from '@/lib/utils/device-fingerprint'
 import { logger } from '@/lib/utils/logger'
+import { setWorkServiceOrganization } from '@/lib/work-service/client'
 import type { WsEvent } from '@/lib/work-service/types'
 import { workServiceWs } from '@/lib/work-service/websocket'
 import { useTheme } from '@/context/theme-context'
+import { useKitInspectionRequired } from '@/hooks/use-kitting-workflow-settings'
 import { usePushedWork, useWorkerHeartbeat } from '@/hooks/use-pushed-work'
+import { useRfPresenceActivity } from '@/hooks/use-rf-presence-activity'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
@@ -63,8 +69,9 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import RFBuildKitForm from '@/components/ui/rf-build-kit-form'
 import { RFCycleCountUnified } from '@/components/ui/rf-cycle-count-unified'
-import RFDroneControl from '@/components/ui/rf-drone-control'
+import RFDockStagingForm from '@/components/ui/rf-dock-staging-form'
 import RFGRSCycleCountForm from '@/components/ui/rf-grs-cycle-count-form'
+import RFInboundPartTransferForm from '@/components/ui/rf-inbound-part-transfer-form'
 import RFInspectKitForm from '@/components/ui/rf-inspect-kit-form'
 import RFKittingPickingForm from '@/components/ui/rf-kitting-picking-form'
 import RFLocationScanner from '@/components/ui/rf-location-scanner'
@@ -80,151 +87,23 @@ import {
   ActivityLegend,
 } from '@/features/shift-productivity/team-performance/components/activity-gantt'
 import { useTeamPerformance } from '@/features/shift-productivity/team-performance/hooks/use-team-performance'
+import {
+  MeshBackdrop,
+  RFDock,
+  type RFDockItem,
+  RFHero,
+  RFScreenHeader,
+  RFStatusPill,
+  RFTile,
+  type RFTileAccent,
+  fadeUpFast,
+  pagePush,
+  staggerContainer,
+} from './_shell'
 
-// Utils function
-function cn(...inputs: (string | number | boolean | undefined | null)[]) {
-  return inputs.filter(Boolean).join(' ')
-}
-
-// Dock Component
+// Legacy alias kept for any external consumer of this module's types.
+export type DockMenuItem = RFDockItem
 type IconComponentType = React.ElementType<{ className?: string }>
-
-export interface DockMenuItem {
-  label: string
-  icon: IconComponentType
-  action?: () => void
-}
-
-export interface DockProps {
-  items?: DockMenuItem[]
-  accentColor?: string
-  activeIndex?: number
-  onActiveIndexChange?: (index: number) => void
-}
-
-const defaultDockItems: DockMenuItem[] = [
-  { label: 'Inventory', icon: Package },
-  { label: 'Locations', icon: MapPin },
-  { label: 'Picking', icon: ClipboardList },
-  { label: 'Profile', icon: User },
-  { label: 'Reports', icon: BarChart3 },
-]
-
-const Dock: React.FC<DockProps> = ({
-  items,
-  accentColor,
-  activeIndex: controlledActiveIndex,
-  onActiveIndexChange,
-}) => {
-  const finalItems = useMemo(() => {
-    const isValid =
-      items && Array.isArray(items) && items.length >= 2 && items.length <= 6
-    if (!isValid) {
-      return defaultDockItems
-    }
-    return items
-  }, [items])
-
-  const [internalActiveIndex, setInternalActiveIndex] = useState(0)
-  const textRefs = useRef<(HTMLElement | null)[]>([])
-  const itemRefs = useRef<(HTMLButtonElement | null)[]>([])
-
-  // Use controlled activeIndex if provided, otherwise use internal state
-  const activeIndex =
-    controlledActiveIndex !== undefined
-      ? controlledActiveIndex
-      : internalActiveIndex
-
-  useEffect(() => {
-    if (activeIndex >= finalItems.length) {
-      const newIndex = 0
-      if (controlledActiveIndex !== undefined && onActiveIndexChange) {
-        onActiveIndexChange(newIndex)
-      } else {
-        setInternalActiveIndex(newIndex)
-      }
-    }
-  }, [finalItems, activeIndex, controlledActiveIndex, onActiveIndexChange])
-
-  useEffect(() => {
-    const setLineWidth = () => {
-      const activeItemElement = itemRefs.current[activeIndex]
-      const activeTextElement = textRefs.current[activeIndex]
-
-      if (activeItemElement && activeTextElement) {
-        const textWidth = activeTextElement.offsetWidth
-        activeItemElement.style.setProperty('--lineWidth', `${textWidth}px`)
-      }
-    }
-
-    setLineWidth()
-    window.addEventListener('resize', setLineWidth)
-    return () => {
-      window.removeEventListener('resize', setLineWidth)
-    }
-  }, [activeIndex, finalItems])
-
-  const handleItemClick = (index: number) => {
-    if (controlledActiveIndex !== undefined && onActiveIndexChange) {
-      onActiveIndexChange(index)
-    } else {
-      setInternalActiveIndex(index)
-    }
-    if (finalItems[index].action) {
-      finalItems[index].action!()
-    }
-  }
-
-  const navStyle = useMemo(() => {
-    const activeColor = accentColor || 'var(--primary)'
-    return { '--component-active-color': activeColor } as React.CSSProperties
-  }, [accentColor])
-
-  return (
-    <nav
-      className='bg-card border-border fixed left-1/2 z-50 -translate-x-1/2 transform rounded-2xl border p-2 shadow-lg'
-      style={{
-        ...navStyle,
-        bottom: 'calc(env(safe-area-inset-bottom, 0px) + 16px)',
-      }}
-    >
-      <div className='flex items-center space-x-2'>
-        {finalItems.map((item, index) => {
-          const isActive = index === activeIndex
-          const IconComponent = item.icon
-
-          return (
-            <button
-              key={item.label}
-              className={cn(
-                'relative flex h-16 w-16 flex-col items-center justify-center rounded-xl p-3 transition-all duration-300',
-                isActive
-                  ? 'bg-primary text-primary-foreground'
-                  : 'text-muted-foreground hover:text-foreground hover:bg-accent'
-              )}
-              onClick={() => handleItemClick(index)}
-              ref={(el) => {
-                if (el) itemRefs.current[index] = el
-              }}
-            >
-              <div className='flex flex-col items-center'>
-                <IconComponent className='mb-1 h-5 w-5' />
-                <span
-                  className='text-xs font-medium'
-                  ref={(el) => {
-                    if (el) textRefs.current[index] = el
-                  }}
-                >
-                  {item.label}
-                </span>
-              </div>
-            </button>
-          )
-        })}
-      </div>
-    </nav>
-  )
-}
 
 // Theme Toggle Button Component for RF Interface
 // 4-Option Theme Selector for Profile Section
@@ -304,60 +183,6 @@ const SafeAreaTop = () => {
 const StatusBar = () => {
   // Theme toggle has been moved to the Profile section
   return null
-}
-
-// Quick Action Button Component
-const QuickActionButton = ({
-  icon: Icon,
-  label,
-  onClick,
-  variant = 'default',
-}: {
-  icon: IconComponentType
-  label: string
-  onClick: () => void
-  variant?:
-    | 'default'
-    | 'success'
-    | 'warning'
-    | 'destructive'
-    | 'info'
-    | 'orange'
-    | 'teal'
-    | 'slate'
-}) => {
-  const variantStyles = {
-    default: 'bg-card hover:bg-accent text-foreground',
-    success:
-      'bg-green-50 hover:bg-green-100 text-green-700 border-green-200 dark:bg-green-900/40 dark:hover:bg-green-900/60 dark:text-green-100 dark:border-green-800/40',
-    warning:
-      'bg-yellow-50 hover:bg-yellow-100 text-yellow-700 border-yellow-200 dark:bg-yellow-900/40 dark:hover:bg-yellow-900/60 dark:text-yellow-100 dark:border-yellow-800/40',
-    destructive:
-      'bg-red-50 hover:bg-red-100 text-red-700 border-red-200 dark:bg-red-900/40 dark:hover:bg-red-900/60 dark:text-red-100 dark:border-red-800/40',
-    info: 'bg-blue-50 hover:bg-blue-100 text-blue-700 border-blue-200 dark:bg-blue-900/40 dark:hover:bg-blue-900/60 dark:text-blue-100 dark:border-blue-800/40',
-    orange:
-      'bg-orange-50 hover:bg-orange-100 text-orange-700 border-orange-200 dark:bg-orange-900/40 dark:hover:bg-orange-900/60 dark:text-orange-100 dark:border-orange-800/40',
-    teal: 'bg-teal-50 hover:bg-teal-100 text-teal-700 border-teal-200 dark:bg-teal-900/40 dark:hover:bg-teal-900/60 dark:text-teal-100 dark:border-teal-800/40',
-    slate:
-      'bg-slate-50 hover:bg-slate-100 text-slate-700 border-slate-200 dark:bg-slate-800/60 dark:hover:bg-slate-800/80 dark:text-slate-100 dark:border-slate-700/60',
-  }
-
-  return (
-    <Button
-      variant='outline'
-      size='sm'
-      className={cn(
-        'h-16 w-full flex-col space-y-1 border-2 text-center transition-all duration-200',
-        variantStyles[variant]
-      )}
-      onClick={onClick}
-    >
-      <Icon className='h-5 w-5 transition-colors duration-200' />
-      <span className='text-xs font-medium transition-colors duration-200'>
-        {label}
-      </span>
-    </Button>
-  )
 }
 
 // Enhanced Inbound Scan Form Component (5 Fields + Hot Truck Checkbox) with Auto-Advance
@@ -707,251 +532,220 @@ const InboundScanForm = ({
   }
 
   return (
-    <div className='mx-auto flex w-full max-w-md flex-1 flex-col space-y-3 p-2'>
-      {/* Form Content */}
-      <Card className='flex w-full flex-1 flex-col'>
-        <CardHeader className='relative pb-2 text-center'>
-          {onBackClick && (
-            <Button
-              variant='ghost'
-              size='sm'
-              onClick={onBackClick}
-              className='absolute top-2 left-2'
-            >
-              <ChevronLeft className='h-4 w-4' />
-              Back
-            </Button>
-          )}
-          <CardTitle className='flex flex-col items-center gap-2 text-sm'>
-            <Scan className='h-8 w-8' />
-            Inbound Scanner
-          </CardTitle>
-        </CardHeader>
-        <CardContent className='flex flex-1 flex-col'>
-          <form
-            onSubmit={handleScanItem}
-            className='flex flex-1 flex-col space-y-3'
-          >
-            <div className='flex-1 space-y-3'>
-              {/* Tracking Number */}
-              <div className='space-y-1'>
-                <Label
-                  htmlFor='tracking_number'
-                  className='text-xs font-medium'
-                >
-                  Tracking Number *
-                </Label>
-                <ScannerInput
-                  ref={trackingRef}
-                  id='tracking_number'
-                  type='text'
-                  placeholder='Scan or enter tracking number'
-                  value={formData.tracking_number}
-                  onChange={(e) =>
-                    updateField('tracking_number', e.target.value)
-                  }
-                  onKeyDown={(e) => handleKeyPress(e, 'tracking_number')}
-                  onFocus={() => setCurrentActiveField('tracking_number')}
-                  className={cn(
-                    'h-10 text-center font-mono text-sm',
-                    currentActiveField === 'tracking_number'
-                      ? 'ring-primary ring-opacity-20 border-primary ring-2'
-                      : ''
-                  )}
-                  disabled={isScanning}
-                />
-              </div>
-
-              {/* SO/Line, RMA/AFA# */}
-              <div className='space-y-1'>
-                <Label
-                  htmlFor='so_line_rma_afa'
-                  className='text-xs font-medium'
-                >
-                  SO/Line, RMA/AFA # *
-                </Label>
-                <ScannerInput
-                  ref={soLineRef}
-                  id='so_line_rma_afa'
-                  type='text'
-                  placeholder='Scan or enter SO/Line, RMA/AFA #'
-                  value={formData.so_line_rma_afa}
-                  onChange={(e) =>
-                    updateField('so_line_rma_afa', e.target.value)
-                  }
-                  onKeyDown={(e) => handleKeyPress(e, 'so_line_rma_afa')}
-                  onFocus={() => setCurrentActiveField('so_line_rma_afa')}
-                  className={cn(
-                    'h-10 text-center font-mono text-sm',
-                    currentActiveField === 'so_line_rma_afa'
-                      ? 'ring-primary ring-opacity-20 border-primary ring-2'
-                      : ''
-                  )}
-                  disabled={isScanning}
-                />
-              </div>
-
-              {/* Material Number */}
-              <div className='space-y-1'>
-                <Label
-                  htmlFor='material_number'
-                  className='text-xs font-medium'
-                >
-                  Material Number *
-                </Label>
-                <ScannerInput
-                  ref={materialRef}
-                  id='material_number'
-                  type='text'
-                  placeholder='Scan or enter material number'
-                  value={formData.material_number}
-                  onChange={(e) =>
-                    updateField('material_number', e.target.value)
-                  }
-                  onKeyDown={(e) => handleKeyPress(e, 'material_number')}
-                  onFocus={() => setCurrentActiveField('material_number')}
-                  className={cn(
-                    'h-10 text-center font-mono text-sm',
-                    currentActiveField === 'material_number'
-                      ? 'ring-primary ring-opacity-20 border-primary ring-2'
-                      : ''
-                  )}
-                  disabled={isScanning}
-                />
-              </div>
-
-              {/* Quantity */}
-              <div className='space-y-1'>
-                <Label htmlFor='quantity' className='text-xs font-medium'>
-                  Quantity *
-                </Label>
-                <ScannerInput
-                  ref={quantityRef}
-                  id='quantity'
-                  type='number'
-                  step='0.001'
-                  min='0.001'
-                  placeholder='Enter quantity'
-                  value={formData.quantity}
-                  onChange={(e) => updateField('quantity', e.target.value)}
-                  onKeyDown={(e) => handleKeyPress(e, 'quantity')}
-                  onFocus={() => setCurrentActiveField('quantity')}
-                  className={cn(
-                    'h-10 text-center font-mono text-sm',
-                    currentActiveField === 'quantity'
-                      ? 'ring-primary ring-opacity-20 border-primary ring-2'
-                      : ''
-                  )}
-                  disabled={isScanning}
-                />
-              </div>
-
-              {/* TKA Batch Number */}
-              <div className='space-y-1'>
-                <Label
-                  htmlFor='tka_batch_number'
-                  className='text-xs font-medium'
-                >
-                  TKA Batch Number * (Must be exactly 10 characters)
-                </Label>
-                <ScannerInput
-                  ref={tkaBatchRef}
-                  id='tka_batch_number'
-                  type='text'
-                  placeholder='TK2XXXXXXXX'
-                  value={formData.tka_batch_number}
-                  onChange={(e) =>
-                    updateField(
-                      'tka_batch_number',
-                      e.target.value.toUpperCase()
-                    )
-                  }
-                  onKeyDown={(e) => handleKeyPress(e, 'tka_batch_number')}
-                  onFocus={() => setCurrentActiveField('tka_batch_number')}
-                  className={cn(
-                    'h-10 text-center font-mono text-sm',
-                    currentActiveField === 'tka_batch_number'
-                      ? 'ring-primary ring-opacity-20 border-primary ring-2'
-                      : '',
-                    formData.tka_batch_number &&
-                      formData.tka_batch_number.length !== 10
-                      ? 'border-red-500'
-                      : ''
-                  )}
-                  disabled={isScanning}
-                  minLength={10}
-                  maxLength={10}
-                  pattern='TK2[A-Z0-9]{7}'
-                  title='TK Batch Number must be exactly 10 characters starting with TK2'
-                />
-                {formData.tka_batch_number &&
-                  formData.tka_batch_number.length !== 10 && (
-                    <p className='text-xs text-red-500'>
-                      Current length: {formData.tka_batch_number.length}/10
-                      characters
-                    </p>
-                  )}
-              </div>
-
-              {/* Hot Truck Checkbox */}
-              <div className='rounded-lg border border-orange-200 bg-orange-50 p-3 dark:border-orange-800 dark:bg-orange-950/20'>
-                <div className='flex items-center space-x-2'>
-                  <Checkbox
-                    id='hot_truck'
-                    checked={formData.hot_truck}
-                    onCheckedChange={(checked) =>
-                      updateField('hot_truck', String(checked))
-                    }
-                    disabled={isScanning}
-                    className='h-4 w-4 data-[state=checked]:border-orange-600 data-[state=checked]:bg-orange-600'
-                  />
-                  <Label
-                    htmlFor='hot_truck'
-                    className='flex cursor-pointer items-center text-xs font-medium'
-                  >
-                    🚛 Hot Truck Item (Priority)
-                  </Label>
-                </div>
-              </div>
-            </div>
-
-            {/* Action Buttons */}
-            <div className='mt-auto flex space-x-2 pt-3'>
-              <Button
-                type='button'
-                onClick={handleClear}
-                variant='outline'
-                className='h-10 flex-1'
-                disabled={isScanning}
-              >
-                <RotateCcw className='mr-1 h-3 w-3' />
-                Clear
-              </Button>
-
-              <Button
-                type='submit'
+    <div className='flex w-full flex-1 flex-col gap-3'>
+      <RFScreenHeader
+        title='Inbound Scanner'
+        subtitle='Receive incoming items'
+        onBack={onBackClick}
+        right={
+          <div className='bg-rf-accent-scan/15 ring-rf-accent-scan/30 flex h-9 w-9 items-center justify-center rounded-full ring-1'>
+            <Scan className='text-rf-accent-scan h-4 w-4' />
+          </div>
+        }
+      />
+      <div className='glass-card flex w-full flex-1 flex-col rounded-2xl p-4'>
+        <form
+          onSubmit={handleScanItem}
+          className='flex flex-1 flex-col space-y-3'
+        >
+          <div className='flex-1 space-y-3'>
+            {/* Tracking Number */}
+            <div className='space-y-1'>
+              <Label htmlFor='tracking_number' className='text-xs font-medium'>
+                Tracking Number *
+              </Label>
+              <ScannerInput
+                ref={trackingRef}
+                id='tracking_number'
+                type='text'
+                placeholder='Scan or enter tracking number'
+                value={formData.tracking_number}
+                onChange={(e) => updateField('tracking_number', e.target.value)}
+                onKeyDown={(e) => handleKeyPress(e, 'tracking_number')}
+                onFocus={() => setCurrentActiveField('tracking_number')}
                 className={cn(
-                  'h-10 flex-1',
-                  formData.hot_truck ? 'bg-orange-600 hover:bg-orange-700' : ''
+                  'h-10 text-center font-mono text-sm',
+                  currentActiveField === 'tracking_number'
+                    ? 'ring-primary ring-opacity-20 border-primary ring-2'
+                    : ''
                 )}
-                disabled={!isFormValid || isScanning}
-              >
-                {isScanning ? (
-                  <>
-                    <Loader2 className='mr-1 h-3 w-3 animate-spin' />
-                    Recording...
-                  </>
-                ) : (
-                  <>
-                    <Scan className='mr-1 h-3 w-3' />
-                    Scan Item {formData.hot_truck ? '🚛' : ''}
-                  </>
-                )}
-              </Button>
+                disabled={isScanning}
+              />
             </div>
-          </form>
-        </CardContent>
-      </Card>
+
+            {/* SO/Line, RMA/AFA# */}
+            <div className='space-y-1'>
+              <Label htmlFor='so_line_rma_afa' className='text-xs font-medium'>
+                SO/Line, RMA/AFA # *
+              </Label>
+              <ScannerInput
+                ref={soLineRef}
+                id='so_line_rma_afa'
+                type='text'
+                placeholder='Scan or enter SO/Line, RMA/AFA #'
+                value={formData.so_line_rma_afa}
+                onChange={(e) => updateField('so_line_rma_afa', e.target.value)}
+                onKeyDown={(e) => handleKeyPress(e, 'so_line_rma_afa')}
+                onFocus={() => setCurrentActiveField('so_line_rma_afa')}
+                className={cn(
+                  'h-10 text-center font-mono text-sm',
+                  currentActiveField === 'so_line_rma_afa'
+                    ? 'ring-primary ring-opacity-20 border-primary ring-2'
+                    : ''
+                )}
+                disabled={isScanning}
+              />
+            </div>
+
+            {/* Material Number */}
+            <div className='space-y-1'>
+              <Label htmlFor='material_number' className='text-xs font-medium'>
+                Material Number *
+              </Label>
+              <ScannerInput
+                ref={materialRef}
+                id='material_number'
+                type='text'
+                placeholder='Scan or enter material number'
+                value={formData.material_number}
+                onChange={(e) => updateField('material_number', e.target.value)}
+                onKeyDown={(e) => handleKeyPress(e, 'material_number')}
+                onFocus={() => setCurrentActiveField('material_number')}
+                className={cn(
+                  'h-10 text-center font-mono text-sm',
+                  currentActiveField === 'material_number'
+                    ? 'ring-primary ring-opacity-20 border-primary ring-2'
+                    : ''
+                )}
+                disabled={isScanning}
+              />
+            </div>
+
+            {/* Quantity */}
+            <div className='space-y-1'>
+              <Label htmlFor='quantity' className='text-xs font-medium'>
+                Quantity *
+              </Label>
+              <ScannerInput
+                ref={quantityRef}
+                id='quantity'
+                type='number'
+                step='0.001'
+                min='0.001'
+                placeholder='Enter quantity'
+                value={formData.quantity}
+                onChange={(e) => updateField('quantity', e.target.value)}
+                onKeyDown={(e) => handleKeyPress(e, 'quantity')}
+                onFocus={() => setCurrentActiveField('quantity')}
+                className={cn(
+                  'h-10 text-center font-mono text-sm',
+                  currentActiveField === 'quantity'
+                    ? 'ring-primary ring-opacity-20 border-primary ring-2'
+                    : ''
+                )}
+                disabled={isScanning}
+              />
+            </div>
+
+            {/* TKA Batch Number */}
+            <div className='space-y-1'>
+              <Label htmlFor='tka_batch_number' className='text-xs font-medium'>
+                TKA Batch Number * (Must be exactly 10 characters)
+              </Label>
+              <ScannerInput
+                ref={tkaBatchRef}
+                id='tka_batch_number'
+                type='text'
+                placeholder='TK2XXXXXXXX'
+                value={formData.tka_batch_number}
+                onChange={(e) =>
+                  updateField('tka_batch_number', e.target.value.toUpperCase())
+                }
+                onKeyDown={(e) => handleKeyPress(e, 'tka_batch_number')}
+                onFocus={() => setCurrentActiveField('tka_batch_number')}
+                className={cn(
+                  'h-10 text-center font-mono text-sm',
+                  currentActiveField === 'tka_batch_number'
+                    ? 'ring-primary ring-opacity-20 border-primary ring-2'
+                    : '',
+                  formData.tka_batch_number &&
+                    formData.tka_batch_number.length !== 10
+                    ? 'border-red-500'
+                    : ''
+                )}
+                disabled={isScanning}
+                minLength={10}
+                maxLength={10}
+                pattern='TK2[A-Z0-9]{7}'
+                title='TK Batch Number must be exactly 10 characters starting with TK2'
+              />
+              {formData.tka_batch_number &&
+                formData.tka_batch_number.length !== 10 && (
+                  <p className='text-xs text-red-500'>
+                    Current length: {formData.tka_batch_number.length}/10
+                    characters
+                  </p>
+                )}
+            </div>
+
+            {/* Hot Truck Checkbox */}
+            <div className='rounded-lg border border-orange-200 bg-orange-50 p-3 dark:border-orange-800 dark:bg-orange-950/20'>
+              <div className='flex items-center space-x-2'>
+                <Checkbox
+                  id='hot_truck'
+                  checked={formData.hot_truck}
+                  onCheckedChange={(checked) =>
+                    updateField('hot_truck', String(checked))
+                  }
+                  disabled={isScanning}
+                  className='h-4 w-4 data-[state=checked]:border-orange-600 data-[state=checked]:bg-orange-600'
+                />
+                <Label
+                  htmlFor='hot_truck'
+                  className='flex cursor-pointer items-center text-xs font-medium'
+                >
+                  🚛 Hot Truck Item (Priority)
+                </Label>
+              </div>
+            </div>
+          </div>
+
+          {/* Action Buttons */}
+          <div className='mt-auto flex space-x-2 pt-3'>
+            <Button
+              type='button'
+              onClick={handleClear}
+              variant='outline'
+              className='h-10 flex-1'
+              disabled={isScanning}
+            >
+              <RotateCcw className='mr-1 h-3 w-3' />
+              Clear
+            </Button>
+
+            <Button
+              type='submit'
+              className={cn(
+                'h-10 flex-1',
+                formData.hot_truck ? 'bg-orange-600 hover:bg-orange-700' : ''
+              )}
+              disabled={!isFormValid || isScanning}
+            >
+              {isScanning ? (
+                <>
+                  <Loader2 className='mr-1 h-3 w-3 animate-spin' />
+                  Recording...
+                </>
+              ) : (
+                <>
+                  <Scan className='mr-1 h-3 w-3' />
+                  Scan Item {formData.hot_truck ? '🚛' : ''}
+                </>
+              )}
+            </Button>
+          </div>
+        </form>
+      </div>
     </div>
   )
 }
@@ -975,21 +769,48 @@ const RFInterface = () => {
     so_line_rma_afa: string
     tracking_number: string
   } | null>(null)
-  const { authState, signOut } = useUnifiedAuth()
+  const { authState, isLoading: authContextLoading, signOut } = useUnifiedAuth()
   const { user, profile } = authState
   const navigate = useNavigate()
+
+  // When the org disables kit inspections in Kitting Apps Settings, the
+  // RF "Inspect Kit" tile is hidden from the kitting-apps menu so the
+  // operator never sees a workflow step that won't apply.
+  const kitInspectionRequired = useKitInspectionRequired()
 
   // Pushed work tracking for Cycle Count OUT
   const { pushedCount, newPushAlert: _newPushAlert } = usePushedWork()
 
-  // Track current task for heartbeat
-  // Note: setCurrentTask and setCurrentZone are intentionally unused for now
-  // They will be used when task tracking is fully implemented
-  const [currentTask, _setCurrentTask] = useState<{
+  // Online state for hero status pill (browser-level connectivity).
+  const [isOnline, setIsOnline] = useState(
+    typeof navigator !== 'undefined' ? navigator.onLine : true
+  )
+  useEffect(() => {
+    const onOnline = () => setIsOnline(true)
+    const onOffline = () => setIsOnline(false)
+    window.addEventListener('online', onOnline)
+    window.addEventListener('offline', onOffline)
+    return () => {
+      window.removeEventListener('online', onOnline)
+      window.removeEventListener('offline', onOffline)
+    }
+  }, [])
+
+  const [currentTask, setCurrentTask] = useState<{
     id: string
     location: string
   } | null>(null)
-  const [currentZone, _setCurrentZone] = useState<string | null>(null)
+  const [currentZone, setCurrentZone] = useState<string | null>(null)
+
+  const handleCycleCountTaskChange = useCallback(
+    (task: { id: string; location: string } | null) => {
+      setCurrentTask(task)
+      // Derive the zone (e.g. K1-08-02-2 → K1) instead of shoving the full
+      // location into worker_heartbeats.current_zone.
+      setCurrentZone(task?.location ? deriveZone(task.location) : null)
+    },
+    []
+  )
 
   // WebSocket event handler
   const handleWsEvent = useCallback((event: WsEvent) => {
@@ -1006,44 +827,34 @@ const RFInterface = () => {
     }
   }, [])
 
-  // Connect WebSocket and start heartbeat on mount
+  // Set organization context for work service HTTP client
+  useEffect(() => {
+    const orgId = authState.profile?.organization_id ?? null
+    setWorkServiceOrganization(orgId)
+    return () => setWorkServiceOrganization(null)
+  }, [authState.profile?.organization_id])
+
+  // Connect WebSocket once per organization and keep it stable.
+  // The WS heartbeat is presence-only ('online' / 'offline') because the
+  // server WS handler does not yet persist heartbeat payloads to
+  // worker_heartbeats. State (task_id, zone, location, busy/idle) goes
+  // through useWorkerHeartbeat below, which uses the authoritative HTTP
+  // path that the server normalizes + persists. Single authoritative
+  // heartbeat per concern (review fix 2026-04-24).
   useEffect(() => {
     const orgId = authState.profile?.organization_id
     if (!orgId) return
 
-    // Connect to WebSocket
     workServiceWs.connect(orgId, handleWsEvent)
-
-    // Start heartbeat interval (every 30 seconds)
-    const heartbeatInterval = setInterval(() => {
-      workServiceWs.sendHeartbeat({
-        task_id: currentTask?.id,
-        task_type: 'cycle_count',
-        zone: currentZone || undefined,
-        location: currentTask?.location,
-        status: currentTask ? 'busy' : 'idle',
-      })
-    }, 30000)
-
-    // Send initial heartbeat
-    workServiceWs.sendHeartbeat({
-      status: 'online',
-    })
+    workServiceWs.sendHeartbeat({ status: 'online' })
 
     return () => {
-      clearInterval(heartbeatInterval)
-      // Send offline status before disconnecting
       workServiceWs.sendHeartbeat({ status: 'offline' })
       workServiceWs.disconnect()
     }
-  }, [
-    authState.profile?.organization_id,
-    currentTask,
-    currentZone,
-    handleWsEvent,
-  ])
+  }, [authState.profile?.organization_id, handleWsEvent])
 
-  // Use the worker heartbeat hook as well for redundancy
+  // Authoritative stateful heartbeat — HTTP, persisted in worker_heartbeats.
   useWorkerHeartbeat({
     enabled: !!authState.profile?.organization_id,
     interval: 30000,
@@ -1051,6 +862,41 @@ const RFInterface = () => {
     taskType: 'cycle_count',
     zone: currentZone || undefined,
     location: currentTask?.location,
+  })
+
+  // Granular RF activity telemetry (2026-05-07) — bridges the
+  // operator's current RF screen / task / zone / scan stream onto
+  // the presence payload's `rf_activity` field so supervisors
+  // browsing `<LiveOperatorStatus>` see what each RF operator is
+  // actually doing. Privacy-scoped to the same single consumer
+  // surface as `current_page` (Inventory Counts tab, RBAC-gated by
+  // `view inventory_apps`). See
+  // `memorybank/OmniFrame/Decisions/ADR-RF-Activity-Telemetry.md`.
+  // No-ops when the presence service is disabled (env / kiosk /
+  // permission); see `useRfPresenceActivity` for the gating logic.
+  //
+  // 2026-05-07 PM hardening: gate `workTaskId` / `workZone` so they
+  // ONLY ride the broadcast while the operator is actually inside
+  // the cycle-count screen. `currentTask` / `currentZone` parent
+  // state is populated by `<RFCycleCountUnified>` via
+  // `handleCycleCountTaskChange` and is NOT cleared on its unmount
+  // — so navigating cycle-count → home → inbound-part-transfer
+  // (without releasing the claim) would otherwise leak a stale
+  // `K3-26-07-1` zone onto the rf_activity payload of an unrelated
+  // workflow. The supervisor panel would then show
+  // "Inbound Part Transfer" on the new sub-row but the tooltip
+  // would still hand them a cycle-count zone — confusing.
+  // See Debug/Fix-RF-Activity-Step-Source-Confusion. The
+  // `worker_heartbeats` staleness on the same root cause
+  // (hardcoded `taskType: 'cycle_count'` above + parent task state
+  // not cleared on cycle-count unmount) is tracked separately —
+  // those edits live in the work-engine path and are out of scope
+  // for the publisher hook.
+  const isInsideCycleCount = currentView === 'cycle-count'
+  useRfPresenceActivity({
+    currentView,
+    workTaskId: isInsideCycleCount ? (currentTask?.id ?? null) : null,
+    workZone: isInsideCycleCount ? currentZone : null,
   })
 
   // Use team performance service for activity timeline
@@ -1107,10 +953,6 @@ const RFInterface = () => {
               }
             )
           }
-        } else if (user && !profile?.organization_id) {
-          logger.warn(
-            '⚠️ Cannot sync device - no organization_id available yet'
-          )
         }
       } else {
         setDeviceName(info.deviceType)
@@ -1122,10 +964,10 @@ const RFInterface = () => {
     }
 
     // Only run when we have auth state loaded
-    if (user !== undefined) {
+    if (user !== undefined && !authContextLoading) {
       loadAndSyncDeviceInfo()
     }
-  }, [user, profile])
+  }, [user, profile, authContextLoading, authState.isLoading])
 
   // Show registration dialog on first login
   useEffect(() => {
@@ -1175,6 +1017,14 @@ const RFInterface = () => {
       refreshPerformanceData()
     }
   }, [currentView, refreshPerformanceData])
+
+  // One-shot load of today's performance data so the hero strip on
+  // /home has real numbers without waiting for the user to open the
+  // Productivity tab.
+  useEffect(() => {
+    refreshPerformanceData()
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- intentional mount-only fetch
+  }, [])
 
   const handleScanSubmit = async (formData: {
     tracking_number: string
@@ -1284,108 +1134,203 @@ const RFInterface = () => {
 
   const renderView = () => {
     switch (currentView) {
-      case 'home':
-        return (
-          <div className='flex flex-1 flex-col space-y-3'>
-            <div className='mb-3 text-center'>
-              <h1 className='mb-1 text-lg font-bold'>
-                Welcome,{' '}
-                {profile?.full_name || user?.email?.split('@')[0] || 'User'}
-              </h1>
-              <p className='text-muted-foreground text-sm'>
-                OmniFrame RF Intelligence
-              </p>
-            </div>
-
-            <div className='flex-1'>
-              <h2 className='mb-3 text-base font-bold'>Application Cluster</h2>
-              <div className='grid grid-cols-2 gap-3'>
-                <QuickActionButton
-                  icon={Scan}
-                  label='Inbound Scanner'
-                  onClick={() => setCurrentView('scan')}
-                  variant='info'
-                />
-                <QuickActionButton
-                  icon={Package}
-                  label='Put Away'
-                  onClick={() => setCurrentView('putaway')}
-                  variant='success'
-                />
-                <QuickActionButton
-                  icon={ClipboardList}
-                  label='Picking'
-                  onClick={() => setCurrentView('picking')}
-                  variant='warning'
-                />
-                <QuickActionButton
-                  icon={Boxes}
-                  label='Kitting Apps'
-                  onClick={() => setCurrentView('kitting-apps')}
-                  variant='teal'
-                />
-                <div className='relative w-full'>
-                  <QuickActionButton
-                    icon={BarChart3}
-                    label='Cycle Count'
-                    onClick={() => setCurrentView('cycle-count')}
-                    variant='info'
-                  />
-                  {pushedCount > 0 && (
-                    <Badge
-                      variant='destructive'
-                      className='absolute -top-1 -right-1 flex h-5 min-w-5 animate-pulse items-center justify-center text-xs'
-                    >
-                      {pushedCount}
-                    </Badge>
-                  )}
-                </div>
-                <QuickActionButton
-                  icon={RotateCcw}
-                  label='GRS Cycle Count'
-                  onClick={() => setCurrentView('grs-cycle-count')}
-                  variant='orange'
-                />
-                <QuickActionButton
-                  icon={ArrowUpFromLine}
-                  label='GRS Core Pulls'
-                  onClick={() => setCurrentView('grs-core-pulls')}
-                  variant='teal'
-                />
-                <QuickActionButton
-                  icon={Gamepad2}
-                  label='Drone Control'
-                  onClick={() => setCurrentView('drone-control')}
-                  variant='destructive'
-                />
-                <QuickActionButton
-                  icon={TrendingUp}
-                  label='My Productivity'
-                  onClick={() => setCurrentView('my-productivity')}
-                  variant='slate'
-                />
-                <QuickActionButton
-                  icon={ClipboardList}
-                  label='Work Queue'
-                  onClick={() => setCurrentView('work-queue')}
-                  variant='info'
-                />
-                <QuickActionButton
-                  icon={Package}
-                  label='Claim Tasks'
-                  onClick={() => setCurrentView('claim-tasks')}
-                  variant='success'
-                />
-                <QuickActionButton
-                  icon={Truck}
-                  label='SAP MIGO'
-                  onClick={() => setCurrentView('sap-migo')}
-                  variant='orange'
-                />
-              </div>
-            </div>
-          </div>
+      case 'home': {
+        const firstName =
+          profile?.first_name ||
+          profile?.full_name?.split(' ')[0] ||
+          user?.email?.split('@')[0] ||
+          'Operator'
+        const hour = new Date().getHours()
+        const timeLabel =
+          hour < 5
+            ? 'Good night'
+            : hour < 12
+              ? 'Good morning'
+              : hour < 18
+                ? 'Good afternoon'
+                : 'Good evening'
+        const currentUserData = performanceData?.associates?.find(
+          (a) => a.user_id === user?.id
         )
+        const todaysTasks = currentUserData
+          ? (currentUserData.inbound_scans || 0) +
+            (currentUserData.put_aways || 0) +
+            (currentUserData.picking || 0) +
+            (currentUserData.packed || 0) +
+            (currentUserData.shipped || 0) +
+            (currentUserData.cycle_counts || 0) +
+            (currentUserData.putbacks || 0) +
+            (currentUserData.final_packed || 0)
+          : 0
+        const tiles: Array<{
+          icon: IconComponentType
+          label: string
+          description: string
+          view: string
+          accent: RFTileAccent
+          badge?: number
+        }> = [
+          {
+            icon: Scan,
+            label: 'Inbound Scanner',
+            description: 'Receive items',
+            view: 'scan',
+            accent: 'scan',
+          },
+          {
+            icon: Package,
+            label: 'Put Away',
+            description: 'Stock locations',
+            view: 'putaway',
+            accent: 'putaway',
+          },
+          {
+            icon: ClipboardList,
+            label: 'Picking',
+            description: 'Outbound orders',
+            view: 'picking',
+            accent: 'pick',
+          },
+          {
+            icon: Boxes,
+            label: 'Kitting Apps',
+            description: 'Build & inspect',
+            view: 'kitting-apps',
+            accent: 'kit',
+          },
+          {
+            icon: BarChart3,
+            label: 'Cycle Count',
+            description: 'Count tasks',
+            view: 'cycle-count',
+            accent: 'count',
+            badge: pushedCount,
+          },
+          {
+            icon: RotateCcw,
+            label: 'GRS Cycle Count',
+            description: 'Goods receipt',
+            view: 'grs-cycle-count',
+            accent: 'grs',
+          },
+          {
+            icon: ArrowUpFromLine,
+            label: 'GRS Core Pulls',
+            description: 'Retrieve cores',
+            view: 'grs-core-pulls',
+            accent: 'grs',
+          },
+          {
+            icon: ArrowRightLeft,
+            label: 'Part Transfer',
+            description: 'Move material',
+            view: 'inbound-part-transfer',
+            accent: 'transfer',
+          },
+          {
+            icon: TrendingUp,
+            label: 'My Productivity',
+            description: "Today's stats",
+            view: 'my-productivity',
+            accent: 'productivity',
+          },
+          {
+            icon: ClipboardList,
+            label: 'Work Queue',
+            description: 'Active work',
+            view: 'work-queue',
+            accent: 'queue',
+          },
+          {
+            icon: Package,
+            label: 'Claim Tasks',
+            description: 'Pick up tasks',
+            view: 'claim-tasks',
+            accent: 'claim',
+          },
+          {
+            icon: Truck,
+            label: 'SAP MIGO',
+            description: 'Direct posting',
+            view: 'sap-migo',
+            accent: 'sap',
+          },
+        ]
+        return (
+          <motion.div
+            variants={staggerContainer}
+            initial='hidden'
+            animate='visible'
+            className='flex flex-1 flex-col gap-4'
+          >
+            <RFHero
+              greeting={`${timeLabel}, ${firstName}`}
+              caption='OmniFrame RF Intelligence'
+              status={
+                <RFStatusPill
+                  status={isOnline ? 'online' : 'offline'}
+                  label={isOnline ? 'Online' : 'Offline'}
+                />
+              }
+              stats={[
+                {
+                  label: 'Pushed',
+                  value: pushedCount,
+                  hint: pushedCount > 0 ? 'Awaiting' : 'Idle',
+                },
+                {
+                  label: 'Tasks',
+                  value: todaysTasks,
+                  hint: 'Today',
+                },
+                {
+                  label: 'Zone',
+                  value: currentZone || '—',
+                  hint: currentTask ? 'Active' : 'No claim',
+                },
+              ]}
+            />
+
+            <motion.div
+              variants={fadeUpFast}
+              className='flex items-baseline justify-between px-1'
+            >
+              <div className='flex items-center gap-1.5'>
+                <Zap className='text-primary/70 h-3 w-3' />
+                <h2 className='text-foreground/90 text-[11px] font-medium tracking-[0.16em] uppercase'>
+                  Application Cluster
+                </h2>
+              </div>
+              <span className='text-muted-foreground text-[10px]'>
+                {tiles.length} apps
+              </span>
+            </motion.div>
+
+            <div className='grid grid-cols-2 gap-3 pb-2'>
+              {tiles.map((tile) => (
+                <RFTile
+                  key={tile.view}
+                  icon={tile.icon}
+                  label={tile.label}
+                  description={tile.description}
+                  accent={tile.accent}
+                  onClick={() => setCurrentView(tile.view)}
+                  badge={
+                    tile.badge && tile.badge > 0 ? (
+                      <Badge
+                        variant='destructive'
+                        className='flex h-5 min-w-5 animate-pulse items-center justify-center px-1.5 text-[10px]'
+                      >
+                        {tile.badge}
+                      </Badge>
+                    ) : undefined
+                  }
+                />
+              ))}
+            </div>
+          </motion.div>
+        )
+      }
 
       case 'scan':
         return (
@@ -1407,65 +1352,62 @@ const RFInterface = () => {
 
       case 'inventory':
         return (
-          <div className='flex flex-1 flex-col space-y-3'>
-            <div className='flex items-center'>
-              <Button
-                variant='ghost'
-                size='sm'
-                onClick={() => navigateToView('home', 0)}
-              >
-                <ChevronLeft className='mr-1 h-3 w-3' />
-                Back
-              </Button>
-              <h2 className='flex-1 text-center text-base font-bold'>
-                Inventory
-              </h2>
-              <div className='w-14 shrink-0' />
-            </div>
-
-            <div className='relative'>
-              <Search className='text-muted-foreground absolute top-1/2 left-3 h-3 w-3 -translate-y-1/2 transform' />
+          <motion.div
+            variants={staggerContainer}
+            initial='hidden'
+            animate='visible'
+            className='flex flex-1 flex-col gap-3'
+          >
+            <RFScreenHeader
+              title='Inventory'
+              subtitle='Browse stock'
+              onBack={() => navigateToView('home', 0)}
+            />
+            <motion.div variants={fadeUpFast} className='relative'>
+              <Search className='text-muted-foreground pointer-events-none absolute top-1/2 left-3 h-3.5 w-3.5 -translate-y-1/2' />
               <Input
                 placeholder='Search inventory...'
-                className='h-10 pl-8 text-sm'
+                className='glass-light h-11 rounded-xl border-transparent pl-9 text-sm'
               />
-            </div>
-
+            </motion.div>
             <div className='flex-1 overflow-y-auto'>
-              <div className='space-y-2'>
+              <div className='flex flex-col gap-2'>
                 {inventoryItems.map((item) => (
-                  <Card key={item.id} className='p-3'>
-                    <div className='flex items-start justify-between'>
-                      <div className='flex-1'>
-                        <h4 className='text-sm font-semibold'>{item.name}</h4>
-                        <p className='text-muted-foreground text-xs'>
-                          {item.id}
-                        </p>
-                        <p className='text-muted-foreground text-xs'>
-                          {item.location}
-                        </p>
-                      </div>
-                      <div className='text-right'>
-                        <p className='text-sm font-bold'>{item.quantity}</p>
-                        <Badge
-                          variant={
-                            item.status === 'In Stock'
-                              ? 'default'
-                              : item.status === 'Low Stock'
-                                ? 'secondary'
-                                : 'destructive'
-                          }
-                          className='text-xs'
-                        >
-                          {item.status}
-                        </Badge>
-                      </div>
+                  <motion.div
+                    key={item.id}
+                    variants={fadeUpFast}
+                    className='glass-card flex items-start justify-between rounded-xl p-3'
+                  >
+                    <div className='min-w-0 flex-1'>
+                      <h4 className='truncate text-sm font-semibold tracking-tight'>
+                        {item.name}
+                      </h4>
+                      <p className='text-muted-foreground font-mono text-[11px]'>
+                        {item.id} · {item.location}
+                      </p>
                     </div>
-                  </Card>
+                    <div className='flex flex-col items-end gap-1'>
+                      <p className='text-sm font-semibold tabular-nums'>
+                        {item.quantity}
+                      </p>
+                      <Badge
+                        variant={
+                          item.status === 'In Stock'
+                            ? 'default'
+                            : item.status === 'Low Stock'
+                              ? 'secondary'
+                              : 'destructive'
+                        }
+                        className='h-4 px-1.5 text-[10px]'
+                      >
+                        {item.status}
+                      </Badge>
+                    </div>
+                  </motion.div>
                 ))}
               </div>
             </div>
-          </div>
+          </motion.div>
         )
 
       case 'locations':
@@ -1491,54 +1433,53 @@ const RFInterface = () => {
 
       case 'kitting-apps':
         return (
-          <div className='flex flex-1 flex-col space-y-3'>
-            <div className='flex items-center'>
-              <Button
-                variant='ghost'
-                size='sm'
-                onClick={() => navigateToView('home', 0)}
-              >
-                <ChevronLeft className='mr-1 h-3 w-3' />
-                Back
-              </Button>
-              <h2 className='flex-1 text-center text-base font-bold'>
-                Kitting Apps
-              </h2>
-              <div className='w-14 shrink-0' />
-            </div>
-
-            <div className='mb-2 text-center'>
-              <p className='text-muted-foreground text-sm'>
-                Select a kitting application
-              </p>
-            </div>
-
-            <div className='flex-1'>
-              <div className='grid grid-cols-2 gap-3'>
-                <QuickActionButton
-                  icon={Package}
-                  label='Kit Picking'
-                  onClick={() => {
-                    setKittingPickingKitPo(null)
-                    setCurrentView('kitting-picking')
-                  }}
-                  variant='teal'
-                />
-                <QuickActionButton
-                  icon={Hammer}
-                  label='Build Kit'
-                  onClick={() => setCurrentView('build-kit')}
-                  variant='warning'
-                />
-                <QuickActionButton
+          <motion.div
+            variants={staggerContainer}
+            initial='hidden'
+            animate='visible'
+            className='flex flex-1 flex-col gap-3'
+          >
+            <RFScreenHeader
+              title='Kitting Apps'
+              subtitle='Select a kitting application'
+              onBack={() => navigateToView('home', 0)}
+            />
+            <div className='grid grid-cols-2 gap-3 pt-1'>
+              <RFTile
+                icon={Package}
+                label='Kit Picking'
+                description='Pick kit lines'
+                accent='kit'
+                onClick={() => {
+                  setKittingPickingKitPo(null)
+                  setCurrentView('kitting-picking')
+                }}
+              />
+              <RFTile
+                icon={Hammer}
+                label='Build Kit'
+                description='Assemble parts'
+                accent='pick'
+                onClick={() => setCurrentView('build-kit')}
+              />
+              {kitInspectionRequired && (
+                <RFTile
                   icon={ClipboardCheck}
                   label='Inspect Kit'
+                  description='Quality check'
+                  accent='count'
                   onClick={() => setCurrentView('inspect-kit')}
-                  variant='info'
                 />
-              </div>
+              )}
+              <RFTile
+                icon={Truck}
+                label='Dock Staging'
+                description='Stage to dock'
+                accent='putaway'
+                onClick={() => setCurrentView('dock-staging')}
+              />
             </div>
-          </div>
+          </motion.div>
         )
 
       case 'build-kit':
@@ -1552,6 +1493,13 @@ const RFInterface = () => {
         return (
           <div className='flex flex-1 flex-col'>
             <RFInspectKitForm onBack={() => setCurrentView('kitting-apps')} />
+          </div>
+        )
+
+      case 'dock-staging':
+        return (
+          <div className='flex flex-1 flex-col'>
+            <RFDockStagingForm onBack={() => setCurrentView('kitting-apps')} />
           </div>
         )
 
@@ -1575,6 +1523,7 @@ const RFInterface = () => {
               <RFCycleCountUnified
                 onBack={() => navigateToView('home', 0)}
                 initialMode='auto'
+                onTaskChange={handleCycleCountTaskChange}
               />
             </CycleCountErrorBoundary>
           </div>
@@ -1589,101 +1538,109 @@ const RFInterface = () => {
 
       case 'grs-cycle-count-old':
         return (
-          <div className='space-y-6'>
-            <div className='flex items-center'>
-              <Button
-                variant='ghost'
-                size='sm'
-                onClick={() => navigateToView('home', 0)}
-              >
-                <ChevronLeft className='mr-1 h-4 w-4' />
-                Back
-              </Button>
-              <h2 className='flex-1 text-center text-2xl font-bold'>
-                GRS Cycle Count
-              </h2>
-              <div className='w-14 shrink-0' />
-            </div>
-
-            <div className='py-8 text-center'>
-              <RotateCcw className='text-muted-foreground mx-auto mb-4 h-16 w-16' />
-              <h3 className='mb-2 text-base font-semibold'>
-                GRS Cycle Count Module
-              </h3>
-              <p className='text-muted-foreground mb-4'>
-                Initialize GRS cycle counting process for goods receipt
-                verification
-              </p>
-              <Button size='lg' className='w-full'>
+          <motion.div
+            variants={staggerContainer}
+            initial='hidden'
+            animate='visible'
+            className='flex flex-1 flex-col gap-4'
+          >
+            <RFScreenHeader
+              title='GRS Cycle Count'
+              subtitle='Goods receipt verification'
+              onBack={() => navigateToView('home', 0)}
+            />
+            <motion.div
+              variants={fadeUpFast}
+              className='glass-strong flex flex-col items-center gap-3 rounded-2xl px-4 py-8 text-center'
+            >
+              <div className='bg-rf-accent-grs/15 ring-rf-accent-grs/30 flex h-14 w-14 items-center justify-center rounded-2xl ring-1'>
+                <RotateCcw className='text-rf-accent-grs h-7 w-7' />
+              </div>
+              <div>
+                <h3 className='text-base font-semibold tracking-tight'>
+                  GRS Cycle Count Module
+                </h3>
+                <p className='text-muted-foreground mt-1 text-xs'>
+                  Initialize GRS cycle counting for goods receipt verification
+                </p>
+              </div>
+              <Button size='lg' className='mt-2 w-full'>
                 Start GRS Cycle Count
               </Button>
-            </div>
-
-            <Card className='p-4'>
-              <h4 className='mb-3 font-semibold'>Instructions</h4>
-              <div className='text-muted-foreground space-y-2 text-sm'>
-                <p>• Scan GRS location barcode to begin count</p>
-                <p>• Verify receipt quantities and conditions</p>
-                <p>• Document any discrepancies or damages</p>
-                <p>• Submit count for GRS variance analysis</p>
-              </div>
-            </Card>
-          </div>
+            </motion.div>
+            <motion.div
+              variants={fadeUpFast}
+              className='glass-card rounded-xl p-4'
+            >
+              <h4 className='mb-2 text-xs font-semibold tracking-[0.12em] uppercase'>
+                Instructions
+              </h4>
+              <ul className='text-muted-foreground space-y-1.5 text-xs'>
+                <li>• Scan GRS location barcode to begin count</li>
+                <li>• Verify receipt quantities and conditions</li>
+                <li>• Document any discrepancies or damages</li>
+                <li>• Submit count for GRS variance analysis</li>
+              </ul>
+            </motion.div>
+          </motion.div>
         )
 
       case 'grs-core-pulls':
         return (
-          <div className='space-y-6'>
-            <div className='flex items-center'>
-              <Button
-                variant='ghost'
-                size='sm'
-                onClick={() => navigateToView('home', 0)}
-              >
-                <ChevronLeft className='mr-1 h-4 w-4' />
-                Back
-              </Button>
-              <h2 className='flex-1 text-center text-2xl font-bold'>
-                GRS Core Pulls
-              </h2>
-              <div className='w-14 shrink-0' />
-            </div>
-
-            <div className='py-8 text-center'>
-              <ArrowUpFromLine className='text-muted-foreground mx-auto mb-4 h-16 w-16' />
-              <h3 className='mb-2 text-base font-semibold'>
-                GRS Core Pulls Module
-              </h3>
-              <p className='text-muted-foreground mb-4'>
-                Manage core item pulls from goods receipt staging areas
-              </p>
-              <Button size='lg' className='w-full'>
+          <motion.div
+            variants={staggerContainer}
+            initial='hidden'
+            animate='visible'
+            className='flex flex-1 flex-col gap-4'
+          >
+            <RFScreenHeader
+              title='GRS Core Pulls'
+              subtitle='Retrieve core items'
+              onBack={() => navigateToView('home', 0)}
+            />
+            <motion.div
+              variants={fadeUpFast}
+              className='glass-strong flex flex-col items-center gap-3 rounded-2xl px-4 py-8 text-center'
+            >
+              <div className='bg-rf-accent-grs/15 ring-rf-accent-grs/30 flex h-14 w-14 items-center justify-center rounded-2xl ring-1'>
+                <ArrowUpFromLine className='text-rf-accent-grs h-7 w-7' />
+              </div>
+              <div>
+                <h3 className='text-base font-semibold tracking-tight'>
+                  GRS Core Pulls Module
+                </h3>
+                <p className='text-muted-foreground mt-1 text-xs'>
+                  Manage core item pulls from goods receipt staging areas
+                </p>
+              </div>
+              <Button size='lg' className='mt-2 w-full'>
                 Initialize Core Pulls
               </Button>
-            </div>
-
-            <Card className='p-4'>
-              <h4 className='mb-3 font-semibold'>Instructions</h4>
-              <div className='text-muted-foreground space-y-2 text-sm'>
-                <p>• Scan core item barcodes for retrieval</p>
-                <p>• Verify item conditions and quantities</p>
-                <p>• Update pull status in real-time</p>
-                <p>• Document any issues or exceptions</p>
-              </div>
-            </Card>
-          </div>
+            </motion.div>
+            <motion.div
+              variants={fadeUpFast}
+              className='glass-card rounded-xl p-4'
+            >
+              <h4 className='mb-2 text-xs font-semibold tracking-[0.12em] uppercase'>
+                Instructions
+              </h4>
+              <ul className='text-muted-foreground space-y-1.5 text-xs'>
+                <li>• Scan core item barcodes for retrieval</li>
+                <li>• Verify item conditions and quantities</li>
+                <li>• Update pull status in real-time</li>
+                <li>• Document any issues or exceptions</li>
+              </ul>
+            </motion.div>
+          </motion.div>
         )
 
-      case 'drone-control':
+      case 'inbound-part-transfer':
         return (
-          <RFDroneControl
-            onBack={() => navigateToView('home', 0)}
-            onScanCaptured={(scan) => {
-              // Handle captured scan - could upload to API here
-              logger.log('Drone scan captured:', scan)
-              toast.success('Photo captured and ready for AI analysis')
-            }}
-          />
+          <div className='flex flex-1 flex-col'>
+            <RFInboundPartTransferForm
+              onBack={() => navigateToView('home', 0)}
+            />
+          </div>
         )
 
       case 'work-queue':
@@ -1790,32 +1747,26 @@ const RFInterface = () => {
         const totalTasks = taskMetrics.reduce((sum, m) => sum + m.value, 0)
 
         return (
-          <div className='flex flex-1 flex-col space-y-3 overflow-hidden'>
-            {/* Header */}
-            <div className='flex items-center'>
-              <Button
-                variant='ghost'
-                size='sm'
-                onClick={() => navigateToView('home', 0)}
-                className='h-8 w-8 p-0'
-              >
-                <ChevronLeft className='h-4 w-4' />
-              </Button>
-              <h2 className='flex-1 text-center text-base font-bold'>
-                My Productivity
-              </h2>
-              <Button
-                variant='ghost'
-                size='sm'
-                onClick={refreshPerformanceData}
-                disabled={isLoadingData}
-                className='h-8 w-8 p-0'
-              >
-                <RotateCcw
-                  className={`h-4 w-4 ${isLoadingData ? 'animate-spin' : ''}`}
-                />
-              </Button>
-            </div>
+          <div className='flex flex-1 flex-col gap-3 overflow-hidden'>
+            <RFScreenHeader
+              title='My Productivity'
+              subtitle="Today's activity"
+              onBack={() => navigateToView('home', 0)}
+              right={
+                <Button
+                  variant='ghost'
+                  size='sm'
+                  onClick={refreshPerformanceData}
+                  disabled={isLoadingData}
+                  className='h-9 w-9 rounded-full p-0'
+                  aria-label='Refresh'
+                >
+                  <RotateCcw
+                    className={`h-4 w-4 ${isLoadingData ? 'animate-spin' : ''}`}
+                  />
+                </Button>
+              }
+            />
 
             {/* Scrollable Content */}
             <div className='flex-1 space-y-3 overflow-y-auto pb-4'>
@@ -1977,15 +1928,21 @@ const RFInterface = () => {
                       {taskMetrics.map((metric, idx) => (
                         <div
                           key={idx}
-                          className='bg-muted/50 flex flex-col items-center rounded-lg p-2'
+                          className='bg-muted/50 flex min-w-0 flex-col items-center rounded-lg p-2'
                         >
                           <div
                             className={`h-2 w-2 rounded-full ${metric.color} mb-1`}
                           />
-                          <span className='text-lg font-bold'>
+                          <span
+                            className='w-full truncate text-center text-lg font-bold tabular-nums'
+                            title={String(metric.value)}
+                          >
                             {metric.value}
                           </span>
-                          <span className='text-muted-foreground text-center text-[10px] leading-tight'>
+                          <span
+                            className='text-muted-foreground w-full truncate text-center text-[10px] leading-tight'
+                            title={metric.label}
+                          >
                             {metric.label}
                           </span>
                         </div>
@@ -2092,22 +2049,12 @@ const RFInterface = () => {
 
       case 'profile':
         return (
-          <div className='flex flex-1 flex-col space-y-3'>
-            <div className='flex items-center'>
-              <Button
-                variant='ghost'
-                size='sm'
-                onClick={() => navigateToView('home', 0)}
-              >
-                <ChevronLeft className='mr-1 h-3 w-3' />
-                Back
-              </Button>
-              <h2 className='flex-1 text-center text-base font-bold'>
-                Profile
-              </h2>
-              <div className='w-14 shrink-0' />
-            </div>
-
+          <div className='flex flex-1 flex-col gap-3'>
+            <RFScreenHeader
+              title='Profile'
+              subtitle='Account & terminal'
+              onBack={() => navigateToView('home', 0)}
+            />
             <div className='flex-1 space-y-3 overflow-y-auto'>
               {/* User Avatar and Name */}
               <Card className='p-4'>
@@ -2349,19 +2296,21 @@ const RFInterface = () => {
   }
 
   return (
-    <div className='bg-background flex h-screen flex-col overflow-hidden'>
+    <div className='rf-cinematic-scope bg-background relative flex h-[100dvh] flex-col overflow-hidden'>
+      <MeshBackdrop />
+
       {/* iOS Safe Area - Top spacing for notch/Dynamic Island */}
       <SafeAreaTop />
       <StatusBar />
 
-      <main className='container mx-auto flex max-w-md flex-1 flex-col overflow-y-auto px-4 py-4'>
-        <AnimatePresence mode='wait'>
+      <main className='relative z-10 mx-auto flex w-full max-w-md flex-1 flex-col overflow-y-auto px-4 pt-3 pb-2'>
+        <AnimatePresence mode='wait' initial={false}>
           <motion.div
             key={currentView}
-            initial={{ opacity: 0, x: 20 }}
-            animate={{ opacity: 1, x: 0 }}
-            exit={{ opacity: 0, x: -20 }}
-            transition={{ duration: 0.2 }}
+            variants={pagePush}
+            initial='hidden'
+            animate='visible'
+            exit='exit'
             className='flex flex-1 flex-col'
           >
             {renderView()}
@@ -2374,7 +2323,7 @@ const RFInterface = () => {
         className='flex-shrink-0'
         style={{ height: 'calc(env(safe-area-inset-bottom, 0px) + 96px)' }}
       />
-      <Dock
+      <RFDock
         items={dockItems}
         activeIndex={dockActiveIndex}
         onActiveIndexChange={setDockActiveIndex}
@@ -2571,3 +2520,5 @@ const RFInterface = () => {
 }
 
 export default RFInterface
+
+// Created and developed by Jai Singh

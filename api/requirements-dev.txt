@@ -1,4 +1,4 @@
-# Test dependencies for OmniFrame Python backend
+# Test dependencies for OneBox AI Python backend
 pytest
 pytest-asyncio>=0.23.0
 pytest-cov

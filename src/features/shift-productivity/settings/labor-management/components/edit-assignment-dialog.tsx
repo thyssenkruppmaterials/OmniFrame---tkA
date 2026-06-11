@@ -1,3 +1,4 @@
+// Created and developed by Jai Singh
 /**
  * Edit Assignment Dialog Component
  * Form modal for editing existing user assignments
@@ -101,7 +102,7 @@ export function EditAssignmentDialog({
   >([])
 
   const form = useForm<AssignmentFormData>({
-    resolver: zodResolver(assignmentSchema),
+    resolver: zodResolver(assignmentSchema) as never,
     defaultValues: {
       position_id: '',
       working_area_id: '__none__',
@@ -290,7 +291,7 @@ export function EditAssignmentDialog({
                 Position & Location
               </h4>
 
-              <div className='grid grid-cols-4 gap-6'>
+              <div className='grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-4'>
                 <FormField
                   control={form.control}
                   name='position_id'
@@ -377,7 +378,7 @@ export function EditAssignmentDialog({
                 Assignment Details
               </h4>
 
-              <div className='grid grid-cols-4 gap-4'>
+              <div className='grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4'>
                 <FormField
                   control={form.control}
                   name='assignment_type'
@@ -483,7 +484,7 @@ export function EditAssignmentDialog({
                 />
               </div>
 
-              <div className='grid grid-cols-4 gap-6'>
+              <div className='grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-4'>
                 <FormField
                   control={form.control}
                   name='start_date'
@@ -764,3 +765,5 @@ export function EditAssignmentDialog({
     </Dialog>
   )
 }
+
+// Created and developed by Jai Singh

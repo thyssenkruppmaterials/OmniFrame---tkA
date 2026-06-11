@@ -1,3 +1,4 @@
+// Created and developed by Jai Singh
 /**
  * Device Registration Service
  * Manages device registrations in Supabase database
@@ -187,4 +188,5 @@ export class DeviceRegistrationService {
     }
   }
 }
-// Developer and Creator: Jai Singh
+
+// Created and developed by Jai Singh

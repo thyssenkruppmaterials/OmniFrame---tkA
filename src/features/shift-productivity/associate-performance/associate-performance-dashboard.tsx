@@ -1,3 +1,4 @@
+// Created and developed by Jai Singh
 /**
  * Associate Performance Dashboard
  * Single-associate focused view with comprehensive performance metrics
@@ -154,6 +155,7 @@ export function AssociatePerformanceDashboard({
     // Timeline events and overtime for activity visualization
     timelineEvents,
     approvedOvertime,
+    timezone,
   } = useTeamPerformance({
     autoRefresh: true,
     refreshInterval: 60000,
@@ -591,6 +593,7 @@ export function AssociatePerformanceDashboard({
             selectedDate={selectedDate}
             timelineEvents={timelineEvents}
             approvedOvertime={approvedOvertime}
+            timezone={timezone}
           />
 
           {/* Work Over Time Chart */}
@@ -1026,7 +1029,7 @@ function AssociateScorecard({
 
 // Scorecard Card Component - clean neutral design matching inbound scan search
 interface ScorecardCardProps {
-  icon: React.ElementType
+  icon: React.ComponentType<{ className?: string }>
   title: string
   value: string | number
   description: string
@@ -1078,6 +1081,7 @@ interface AssociateGanttSectionProps {
   selectedDate: Date
   timelineEvents?: import('@/lib/supabase/timeline-events.service').TimelineEventWithCategory[]
   approvedOvertime?: import('@/lib/supabase/overtime.service').ApprovedOvertimeForTimeline[]
+  timezone?: string
 }
 
 function AssociateGanttSection({
@@ -1085,6 +1089,7 @@ function AssociateGanttSection({
   selectedDate,
   timelineEvents = [],
   approvedOvertime = [],
+  timezone,
 }: AssociateGanttSectionProps) {
   const dateLabel = isToday(selectedDate)
     ? 'today'
@@ -1351,6 +1356,7 @@ function AssociateGanttSection({
           showSummary={true}
           showShiftMarkers={true}
           overtimeMarker={userOvertime}
+          timezone={timezone}
         />
 
         {/* Legend */}
@@ -1735,3 +1741,5 @@ function AssociatePerformanceSkeleton() {
     </div>
   )
 }
+
+// Created and developed by Jai Singh

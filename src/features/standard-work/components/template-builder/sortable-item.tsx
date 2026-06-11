@@ -1,24 +1,45 @@
+// Created and developed by Jai Singh
 /**
- * Sortable Item Component
- * Draggable item within the canvas
+ * Sortable Item
+ *
+ * Draggable row rendered inside the canvas. The drag handle is a real
+ * `<button>` with an aria-label so screen reader users get a clear name;
+ * keyboard users can also use it (sortable already wires keyboard sensors).
+ *
+ * Secondary actions (duplicate, delete) live in a hover-revealed kebab menu
+ * so the row stays visually calm in the default state but power users can
+ * still act on items quickly.
  */
 import { useSortable } from '@dnd-kit/sortable'
 import { CSS } from '@dnd-kit/utilities'
 import {
-  GripVertical,
-  Trash2,
+  Asterisk,
+  Calendar,
+  Camera,
   Check,
-  Type,
+  Clock,
+  Copy,
+  EyeOff,
+  GripVertical,
   Hash,
   List,
-  Calendar,
-  Clock,
-  Asterisk,
+  ListChecks,
+  MoreHorizontal,
+  PenTool,
+  Trash2,
+  Type,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import type { StandardWorkItem } from '@/hooks/use-standard-work'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu'
 import { ITEM_TYPE_CONFIG } from './types'
 
 const iconMap = {
@@ -26,9 +47,11 @@ const iconMap = {
   Type,
   Hash,
   List,
-  ListChecks: List,
+  ListChecks,
   Calendar,
   Clock,
+  Camera,
+  PenTool,
 }
 
 interface SortableItemProps {
@@ -36,6 +59,9 @@ interface SortableItemProps {
   isSelected: boolean
   onClick: () => void
   onDelete: () => void
+  onDuplicate?: () => void
+  /** When true the row hides the drag handle and action buttons (preview). */
+  readOnly?: boolean
 }
 
 export function SortableItem({
@@ -43,10 +69,13 @@ export function SortableItem({
   isSelected,
   onClick,
   onDelete,
+  onDuplicate,
+  readOnly = false,
 }: SortableItemProps) {
   const config =
     ITEM_TYPE_CONFIG[item.item_type as keyof typeof ITEM_TYPE_CONFIG]
   const Icon = iconMap[config?.icon as keyof typeof iconMap] || Check
+  const hasConditional = !!item.conditional_display?.depends_on
 
   const {
     attributes,
@@ -61,6 +90,7 @@ export function SortableItem({
       type: 'canvas-item',
       item,
     },
+    disabled: readOnly,
   })
 
   const style = {
@@ -76,32 +106,52 @@ export function SortableItem({
         'group bg-background flex items-center gap-3 rounded-lg border p-3 transition-all',
         isSelected && 'ring-primary border-primary ring-2',
         isDragging && 'opacity-50 shadow-lg',
-        !isDragging && 'hover:border-primary/50'
+        !isDragging && !readOnly && 'hover:border-primary/50',
+        readOnly && 'cursor-default'
       )}
-      onClick={onClick}
+      onClick={readOnly ? undefined : onClick}
     >
-      {/* Drag Handle */}
-      <button
-        {...attributes}
-        {...listeners}
-        className='hover:bg-muted -ml-1 cursor-grab touch-none rounded p-1 active:cursor-grabbing'
-      >
-        <GripVertical className='text-muted-foreground h-4 w-4' />
-      </button>
+      {!readOnly && (
+        <button
+          type='button'
+          {...attributes}
+          {...listeners}
+          aria-label={`Drag to reorder: ${item.item_title}`}
+          className='hover:bg-muted -ml-1 cursor-grab touch-none rounded p-1 focus-visible:outline-2 focus-visible:outline-offset-2 active:cursor-grabbing'
+          onClick={(e) => e.stopPropagation()}
+        >
+          <GripVertical
+            className='text-muted-foreground h-4 w-4'
+            aria-hidden='true'
+          />
+        </button>
+      )}
 
-      {/* Type Icon */}
-      <div className='bg-muted flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-md'>
-        <Icon className='text-muted-foreground h-4 w-4' />
+      <div className='bg-muted flex h-8 w-8 shrink-0 items-center justify-center rounded-md'>
+        <Icon className='text-muted-foreground h-4 w-4' aria-hidden='true' />
       </div>
 
-      {/* Item Info */}
       <div className='min-w-0 flex-1'>
         <div className='flex items-center gap-2'>
-          <span className='truncate text-sm font-medium'>
-            {item.item_title}
+          <span
+            className={cn(
+              'truncate text-sm font-medium',
+              !item.item_title.trim() && 'text-muted-foreground italic'
+            )}
+          >
+            {item.item_title.trim() || '(untitled item)'}
           </span>
           {item.is_required && (
-            <Asterisk className='text-destructive h-3 w-3 flex-shrink-0' />
+            <Asterisk
+              className='text-destructive h-3 w-3 shrink-0'
+              aria-label='Required'
+            />
+          )}
+          {hasConditional && (
+            <EyeOff
+              className='text-muted-foreground/70 h-3 w-3 shrink-0'
+              aria-label='Has conditional display rule'
+            />
           )}
         </div>
         {item.item_description && (
@@ -111,23 +161,43 @@ export function SortableItem({
         )}
       </div>
 
-      {/* Type Badge */}
-      <Badge variant='outline' className='flex-shrink-0 text-xs capitalize'>
-        {config?.label || item.item_type}
+      <Badge variant='outline' className='shrink-0 text-xs capitalize'>
+        {config?.label || item.item_type.replace('_', ' ')}
       </Badge>
 
-      {/* Delete Button */}
-      <Button
-        variant='ghost'
-        size='icon'
-        className='text-muted-foreground hover:text-destructive h-7 w-7 flex-shrink-0 opacity-0 group-hover:opacity-100'
-        onClick={(e) => {
-          e.stopPropagation()
-          onDelete()
-        }}
-      >
-        <Trash2 className='h-4 w-4' />
-      </Button>
+      {!readOnly && (
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <Button
+              variant='ghost'
+              size='icon'
+              aria-label={`Actions for: ${item.item_title}`}
+              className='text-muted-foreground hover:text-foreground h-7 w-7 shrink-0 opacity-0 group-hover:opacity-100 focus-visible:opacity-100 data-[state=open]:opacity-100'
+              onClick={(e) => e.stopPropagation()}
+            >
+              <MoreHorizontal className='h-4 w-4' aria-hidden='true' />
+            </Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align='end' onClick={(e) => e.stopPropagation()}>
+            {onDuplicate && (
+              <DropdownMenuItem onClick={onDuplicate}>
+                <Copy className='mr-2 h-4 w-4' aria-hidden='true' />
+                Duplicate item
+              </DropdownMenuItem>
+            )}
+            {onDuplicate && <DropdownMenuSeparator />}
+            <DropdownMenuItem
+              onClick={onDelete}
+              className='text-destructive focus:text-destructive'
+            >
+              <Trash2 className='mr-2 h-4 w-4' aria-hidden='true' />
+              Delete item
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
+      )}
     </div>
   )
 }
+
+// Created and developed by Jai Singh

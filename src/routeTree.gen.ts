@@ -9,7 +9,11 @@
 // Additionally, you should also exclude this file from your linter and/or formatter to prevent it from being checked or modified.
 
 import { Route as rootRouteImport } from './routes/__root'
+import { Route as SupplyChainHarnessRouteImport } from './routes/supply-chain-harness'
+import { Route as Scene3dHarnessRouteImport } from './routes/scene3d-harness'
 import { Route as RfInterfaceRouteImport } from './routes/rf-interface'
+import { Route as PrototypeRouteImport } from './routes/prototype'
+import { Route as IntroRouteImport } from './routes/intro'
 import { Route as AuthenticatedRouteRouteImport } from './routes/_authenticated/route'
 import { Route as TimeclockappIndexRouteImport } from './routes/timeclockapp/index'
 import { Route as RfInterfaceIndexRouteImport } from './routes/rf-interface/index'
@@ -59,6 +63,7 @@ import { Route as AuthenticatedAppsStandardWorkRouteImport } from './routes/_aut
 import { Route as AuthenticatedAppsSmartsheetIntegrationsRouteImport } from './routes/_authenticated/apps/smartsheet-integrations'
 import { Route as AuthenticatedAppsShiftProductivityRouteImport } from './routes/_authenticated/apps/shift-productivity'
 import { Route as AuthenticatedAppsQualityRouteImport } from './routes/_authenticated/apps/quality'
+import { Route as AuthenticatedAppsProductionBoardsRouteImport } from './routes/_authenticated/apps/production-boards'
 import { Route as AuthenticatedAppsOutboundRouteImport } from './routes/_authenticated/apps/outbound'
 import { Route as AuthenticatedAppsMyProductivityRouteImport } from './routes/_authenticated/apps/my-productivity'
 import { Route as AuthenticatedAppsKittingRouteImport } from './routes/_authenticated/apps/kitting'
@@ -69,19 +74,42 @@ import { Route as AuthenticatedAppsDataManagerRouteImport } from './routes/_auth
 import { Route as AuthenticatedAppsCustomerPortalRouteImport } from './routes/_authenticated/apps/customer-portal'
 import { Route as AuthenticatedAdminTabPermissionsDebugRouteImport } from './routes/_authenticated/admin/tab-permissions-debug'
 import { Route as AuthenticatedAdminSystemSettingsRouteImport } from './routes/_authenticated/admin/system-settings'
+import { Route as AuthenticatedAdminSupplyChainMappingRouteImport } from './routes/_authenticated/admin/supply-chain-mapping'
 import { Route as AuthenticatedAdminSessionManagementRouteImport } from './routes/_authenticated/admin/session-management'
 import { Route as AuthenticatedAdminSapTestingRouteImport } from './routes/_authenticated/admin/sap-testing'
 import { Route as AuthenticatedAdminPerformanceMonitorRouteImport } from './routes/_authenticated/admin/performance-monitor'
 import { Route as AuthenticatedAdminDeviceManagerRouteImport } from './routes/_authenticated/admin/device-manager'
 import { Route as AuthenticatedAdminWorkQueueIndexRouteImport } from './routes/_authenticated/admin/work-queue/index'
+import { Route as AuthenticatedAdminWorkEngineIndexRouteImport } from './routes/_authenticated/admin/work-engine/index'
 import { Route as AuthenticatedAdminUserManagementIndexRouteImport } from './routes/_authenticated/admin/user-management/index'
 import { Route as AuthenticatedAdminRolesIndexRouteImport } from './routes/_authenticated/admin/roles/index'
 import { Route as AuthenticatedAdminPermissionsIndexRouteImport } from './routes/_authenticated/admin/permissions/index'
 import { Route as AuthenticatedAdminOnboardingIndexRouteImport } from './routes/_authenticated/admin/onboarding/index'
+import { Route as AuthenticatedAdminOmnibeltIndexRouteImport } from './routes/_authenticated/admin/omnibelt/index'
 
+const SupplyChainHarnessRoute = SupplyChainHarnessRouteImport.update({
+  id: '/supply-chain-harness',
+  path: '/supply-chain-harness',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const Scene3dHarnessRoute = Scene3dHarnessRouteImport.update({
+  id: '/scene3d-harness',
+  path: '/scene3d-harness',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const RfInterfaceRoute = RfInterfaceRouteImport.update({
   id: '/rf-interface',
   path: '/rf-interface',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const PrototypeRoute = PrototypeRouteImport.update({
+  id: '/prototype',
+  path: '/prototype',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const IntroRoute = IntroRouteImport.update({
+  id: '/intro',
+  path: '/intro',
   getParentRoute: () => rootRouteImport,
 } as any)
 const AuthenticatedRouteRoute = AuthenticatedRouteRouteImport.update({
@@ -358,6 +386,12 @@ const AuthenticatedAppsQualityRoute =
     path: '/apps/quality',
     getParentRoute: () => AuthenticatedRouteRoute,
   } as any)
+const AuthenticatedAppsProductionBoardsRoute =
+  AuthenticatedAppsProductionBoardsRouteImport.update({
+    id: '/apps/production-boards',
+    path: '/apps/production-boards',
+    getParentRoute: () => AuthenticatedRouteRoute,
+  } as any)
 const AuthenticatedAppsOutboundRoute =
   AuthenticatedAppsOutboundRouteImport.update({
     id: '/apps/outbound',
@@ -417,6 +451,12 @@ const AuthenticatedAdminSystemSettingsRoute =
     path: '/system-settings',
     getParentRoute: () => AuthenticatedAdminRouteRoute,
   } as any)
+const AuthenticatedAdminSupplyChainMappingRoute =
+  AuthenticatedAdminSupplyChainMappingRouteImport.update({
+    id: '/supply-chain-mapping',
+    path: '/supply-chain-mapping',
+    getParentRoute: () => AuthenticatedAdminRouteRoute,
+  } as any)
 const AuthenticatedAdminSessionManagementRoute =
   AuthenticatedAdminSessionManagementRouteImport.update({
     id: '/session-management',
@@ -447,6 +487,12 @@ const AuthenticatedAdminWorkQueueIndexRoute =
     path: '/work-queue/',
     getParentRoute: () => AuthenticatedAdminRouteRoute,
   } as any)
+const AuthenticatedAdminWorkEngineIndexRoute =
+  AuthenticatedAdminWorkEngineIndexRouteImport.update({
+    id: '/work-engine/',
+    path: '/work-engine/',
+    getParentRoute: () => AuthenticatedAdminRouteRoute,
+  } as any)
 const AuthenticatedAdminUserManagementIndexRoute =
   AuthenticatedAdminUserManagementIndexRouteImport.update({
     id: '/user-management/',
@@ -471,9 +517,19 @@ const AuthenticatedAdminOnboardingIndexRoute =
     path: '/onboarding/',
     getParentRoute: () => AuthenticatedAdminRouteRoute,
   } as any)
+const AuthenticatedAdminOmnibeltIndexRoute =
+  AuthenticatedAdminOmnibeltIndexRouteImport.update({
+    id: '/omnibelt/',
+    path: '/omnibelt/',
+    getParentRoute: () => AuthenticatedAdminRouteRoute,
+  } as any)
 
 export interface FileRoutesByFullPath {
+  '/intro': typeof IntroRoute
+  '/prototype': typeof PrototypeRoute
   '/rf-interface': typeof RfInterfaceRouteWithChildren
+  '/scene3d-harness': typeof Scene3dHarnessRoute
+  '/supply-chain-harness': typeof SupplyChainHarnessRoute
   '/admin': typeof AuthenticatedAdminRouteRouteWithChildren
   '/settings': typeof AuthenticatedSettingsRouteRouteWithChildren
   '/forgot-password': typeof authForgotPasswordRoute
@@ -496,6 +552,7 @@ export interface FileRoutesByFullPath {
   '/admin/performance-monitor': typeof AuthenticatedAdminPerformanceMonitorRoute
   '/admin/sap-testing': typeof AuthenticatedAdminSapTestingRoute
   '/admin/session-management': typeof AuthenticatedAdminSessionManagementRoute
+  '/admin/supply-chain-mapping': typeof AuthenticatedAdminSupplyChainMappingRoute
   '/admin/system-settings': typeof AuthenticatedAdminSystemSettingsRoute
   '/admin/tab-permissions-debug': typeof AuthenticatedAdminTabPermissionsDebugRoute
   '/apps/customer-portal': typeof AuthenticatedAppsCustomerPortalRoute
@@ -506,6 +563,7 @@ export interface FileRoutesByFullPath {
   '/apps/kitting': typeof AuthenticatedAppsKittingRoute
   '/apps/my-productivity': typeof AuthenticatedAppsMyProductivityRoute
   '/apps/outbound': typeof AuthenticatedAppsOutboundRoute
+  '/apps/production-boards': typeof AuthenticatedAppsProductionBoardsRoute
   '/apps/quality': typeof AuthenticatedAppsQualityRoute
   '/apps/shift-productivity': typeof AuthenticatedAppsShiftProductivityRoute
   '/apps/smartsheet-integrations': typeof AuthenticatedAppsSmartsheetIntegrationsRoute
@@ -536,13 +594,19 @@ export interface FileRoutesByFullPath {
   '/help-center': typeof AuthenticatedHelpCenterIndexRoute
   '/settings/': typeof AuthenticatedSettingsIndexRoute
   '/tasks': typeof AuthenticatedTasksIndexRoute
+  '/admin/omnibelt': typeof AuthenticatedAdminOmnibeltIndexRoute
   '/admin/onboarding': typeof AuthenticatedAdminOnboardingIndexRoute
   '/admin/permissions': typeof AuthenticatedAdminPermissionsIndexRoute
   '/admin/roles': typeof AuthenticatedAdminRolesIndexRoute
   '/admin/user-management': typeof AuthenticatedAdminUserManagementIndexRoute
+  '/admin/work-engine': typeof AuthenticatedAdminWorkEngineIndexRoute
   '/admin/work-queue': typeof AuthenticatedAdminWorkQueueIndexRoute
 }
 export interface FileRoutesByTo {
+  '/intro': typeof IntroRoute
+  '/prototype': typeof PrototypeRoute
+  '/scene3d-harness': typeof Scene3dHarnessRoute
+  '/supply-chain-harness': typeof SupplyChainHarnessRoute
   '/admin': typeof AuthenticatedAdminRouteRouteWithChildren
   '/forgot-password': typeof authForgotPasswordRoute
   '/otp': typeof authOtpRoute
@@ -564,6 +628,7 @@ export interface FileRoutesByTo {
   '/admin/performance-monitor': typeof AuthenticatedAdminPerformanceMonitorRoute
   '/admin/sap-testing': typeof AuthenticatedAdminSapTestingRoute
   '/admin/session-management': typeof AuthenticatedAdminSessionManagementRoute
+  '/admin/supply-chain-mapping': typeof AuthenticatedAdminSupplyChainMappingRoute
   '/admin/system-settings': typeof AuthenticatedAdminSystemSettingsRoute
   '/admin/tab-permissions-debug': typeof AuthenticatedAdminTabPermissionsDebugRoute
   '/apps/customer-portal': typeof AuthenticatedAppsCustomerPortalRoute
@@ -574,6 +639,7 @@ export interface FileRoutesByTo {
   '/apps/kitting': typeof AuthenticatedAppsKittingRoute
   '/apps/my-productivity': typeof AuthenticatedAppsMyProductivityRoute
   '/apps/outbound': typeof AuthenticatedAppsOutboundRoute
+  '/apps/production-boards': typeof AuthenticatedAppsProductionBoardsRoute
   '/apps/quality': typeof AuthenticatedAppsQualityRoute
   '/apps/shift-productivity': typeof AuthenticatedAppsShiftProductivityRoute
   '/apps/smartsheet-integrations': typeof AuthenticatedAppsSmartsheetIntegrationsRoute
@@ -604,16 +670,22 @@ export interface FileRoutesByTo {
   '/help-center': typeof AuthenticatedHelpCenterIndexRoute
   '/settings': typeof AuthenticatedSettingsIndexRoute
   '/tasks': typeof AuthenticatedTasksIndexRoute
+  '/admin/omnibelt': typeof AuthenticatedAdminOmnibeltIndexRoute
   '/admin/onboarding': typeof AuthenticatedAdminOnboardingIndexRoute
   '/admin/permissions': typeof AuthenticatedAdminPermissionsIndexRoute
   '/admin/roles': typeof AuthenticatedAdminRolesIndexRoute
   '/admin/user-management': typeof AuthenticatedAdminUserManagementIndexRoute
+  '/admin/work-engine': typeof AuthenticatedAdminWorkEngineIndexRoute
   '/admin/work-queue': typeof AuthenticatedAdminWorkQueueIndexRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/_authenticated': typeof AuthenticatedRouteRouteWithChildren
+  '/intro': typeof IntroRoute
+  '/prototype': typeof PrototypeRoute
   '/rf-interface': typeof RfInterfaceRouteWithChildren
+  '/scene3d-harness': typeof Scene3dHarnessRoute
+  '/supply-chain-harness': typeof SupplyChainHarnessRoute
   '/_authenticated/admin': typeof AuthenticatedAdminRouteRouteWithChildren
   '/_authenticated/settings': typeof AuthenticatedSettingsRouteRouteWithChildren
   '/(auth)/forgot-password': typeof authForgotPasswordRoute
@@ -636,6 +708,7 @@ export interface FileRoutesById {
   '/_authenticated/admin/performance-monitor': typeof AuthenticatedAdminPerformanceMonitorRoute
   '/_authenticated/admin/sap-testing': typeof AuthenticatedAdminSapTestingRoute
   '/_authenticated/admin/session-management': typeof AuthenticatedAdminSessionManagementRoute
+  '/_authenticated/admin/supply-chain-mapping': typeof AuthenticatedAdminSupplyChainMappingRoute
   '/_authenticated/admin/system-settings': typeof AuthenticatedAdminSystemSettingsRoute
   '/_authenticated/admin/tab-permissions-debug': typeof AuthenticatedAdminTabPermissionsDebugRoute
   '/_authenticated/apps/customer-portal': typeof AuthenticatedAppsCustomerPortalRoute
@@ -646,6 +719,7 @@ export interface FileRoutesById {
   '/_authenticated/apps/kitting': typeof AuthenticatedAppsKittingRoute
   '/_authenticated/apps/my-productivity': typeof AuthenticatedAppsMyProductivityRoute
   '/_authenticated/apps/outbound': typeof AuthenticatedAppsOutboundRoute
+  '/_authenticated/apps/production-boards': typeof AuthenticatedAppsProductionBoardsRoute
   '/_authenticated/apps/quality': typeof AuthenticatedAppsQualityRoute
   '/_authenticated/apps/shift-productivity': typeof AuthenticatedAppsShiftProductivityRoute
   '/_authenticated/apps/smartsheet-integrations': typeof AuthenticatedAppsSmartsheetIntegrationsRoute
@@ -676,16 +750,22 @@ export interface FileRoutesById {
   '/_authenticated/help-center/': typeof AuthenticatedHelpCenterIndexRoute
   '/_authenticated/settings/': typeof AuthenticatedSettingsIndexRoute
   '/_authenticated/tasks/': typeof AuthenticatedTasksIndexRoute
+  '/_authenticated/admin/omnibelt/': typeof AuthenticatedAdminOmnibeltIndexRoute
   '/_authenticated/admin/onboarding/': typeof AuthenticatedAdminOnboardingIndexRoute
   '/_authenticated/admin/permissions/': typeof AuthenticatedAdminPermissionsIndexRoute
   '/_authenticated/admin/roles/': typeof AuthenticatedAdminRolesIndexRoute
   '/_authenticated/admin/user-management/': typeof AuthenticatedAdminUserManagementIndexRoute
+  '/_authenticated/admin/work-engine/': typeof AuthenticatedAdminWorkEngineIndexRoute
   '/_authenticated/admin/work-queue/': typeof AuthenticatedAdminWorkQueueIndexRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
   fullPaths:
+    | '/intro'
+    | '/prototype'
     | '/rf-interface'
+    | '/scene3d-harness'
+    | '/supply-chain-harness'
     | '/admin'
     | '/settings'
     | '/forgot-password'
@@ -708,6 +788,7 @@ export interface FileRouteTypes {
     | '/admin/performance-monitor'
     | '/admin/sap-testing'
     | '/admin/session-management'
+    | '/admin/supply-chain-mapping'
     | '/admin/system-settings'
     | '/admin/tab-permissions-debug'
     | '/apps/customer-portal'
@@ -718,6 +799,7 @@ export interface FileRouteTypes {
     | '/apps/kitting'
     | '/apps/my-productivity'
     | '/apps/outbound'
+    | '/apps/production-boards'
     | '/apps/quality'
     | '/apps/shift-productivity'
     | '/apps/smartsheet-integrations'
@@ -748,13 +830,19 @@ export interface FileRouteTypes {
     | '/help-center'
     | '/settings/'
     | '/tasks'
+    | '/admin/omnibelt'
     | '/admin/onboarding'
     | '/admin/permissions'
     | '/admin/roles'
     | '/admin/user-management'
+    | '/admin/work-engine'
     | '/admin/work-queue'
   fileRoutesByTo: FileRoutesByTo
   to:
+    | '/intro'
+    | '/prototype'
+    | '/scene3d-harness'
+    | '/supply-chain-harness'
     | '/admin'
     | '/forgot-password'
     | '/otp'
@@ -776,6 +864,7 @@ export interface FileRouteTypes {
     | '/admin/performance-monitor'
     | '/admin/sap-testing'
     | '/admin/session-management'
+    | '/admin/supply-chain-mapping'
     | '/admin/system-settings'
     | '/admin/tab-permissions-debug'
     | '/apps/customer-portal'
@@ -786,6 +875,7 @@ export interface FileRouteTypes {
     | '/apps/kitting'
     | '/apps/my-productivity'
     | '/apps/outbound'
+    | '/apps/production-boards'
     | '/apps/quality'
     | '/apps/shift-productivity'
     | '/apps/smartsheet-integrations'
@@ -816,15 +906,21 @@ export interface FileRouteTypes {
     | '/help-center'
     | '/settings'
     | '/tasks'
+    | '/admin/omnibelt'
     | '/admin/onboarding'
     | '/admin/permissions'
     | '/admin/roles'
     | '/admin/user-management'
+    | '/admin/work-engine'
     | '/admin/work-queue'
   id:
     | '__root__'
     | '/_authenticated'
+    | '/intro'
+    | '/prototype'
     | '/rf-interface'
+    | '/scene3d-harness'
+    | '/supply-chain-harness'
     | '/_authenticated/admin'
     | '/_authenticated/settings'
     | '/(auth)/forgot-password'
@@ -847,6 +943,7 @@ export interface FileRouteTypes {
     | '/_authenticated/admin/performance-monitor'
     | '/_authenticated/admin/sap-testing'
     | '/_authenticated/admin/session-management'
+    | '/_authenticated/admin/supply-chain-mapping'
     | '/_authenticated/admin/system-settings'
     | '/_authenticated/admin/tab-permissions-debug'
     | '/_authenticated/apps/customer-portal'
@@ -857,6 +954,7 @@ export interface FileRouteTypes {
     | '/_authenticated/apps/kitting'
     | '/_authenticated/apps/my-productivity'
     | '/_authenticated/apps/outbound'
+    | '/_authenticated/apps/production-boards'
     | '/_authenticated/apps/quality'
     | '/_authenticated/apps/shift-productivity'
     | '/_authenticated/apps/smartsheet-integrations'
@@ -887,16 +985,22 @@ export interface FileRouteTypes {
     | '/_authenticated/help-center/'
     | '/_authenticated/settings/'
     | '/_authenticated/tasks/'
+    | '/_authenticated/admin/omnibelt/'
     | '/_authenticated/admin/onboarding/'
     | '/_authenticated/admin/permissions/'
     | '/_authenticated/admin/roles/'
     | '/_authenticated/admin/user-management/'
+    | '/_authenticated/admin/work-engine/'
     | '/_authenticated/admin/work-queue/'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   AuthenticatedRouteRoute: typeof AuthenticatedRouteRouteWithChildren
+  IntroRoute: typeof IntroRoute
+  PrototypeRoute: typeof PrototypeRoute
   RfInterfaceRoute: typeof RfInterfaceRouteWithChildren
+  Scene3dHarnessRoute: typeof Scene3dHarnessRoute
+  SupplyChainHarnessRoute: typeof SupplyChainHarnessRoute
   authForgotPasswordRoute: typeof authForgotPasswordRoute
   authOtpRoute: typeof authOtpRoute
   authRfSigninRoute: typeof authRfSigninRoute
@@ -915,11 +1019,39 @@ export interface RootRouteChildren {
 
 declare module '@tanstack/react-router' {
   interface FileRoutesByPath {
+    '/supply-chain-harness': {
+      id: '/supply-chain-harness'
+      path: '/supply-chain-harness'
+      fullPath: '/supply-chain-harness'
+      preLoaderRoute: typeof SupplyChainHarnessRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/scene3d-harness': {
+      id: '/scene3d-harness'
+      path: '/scene3d-harness'
+      fullPath: '/scene3d-harness'
+      preLoaderRoute: typeof Scene3dHarnessRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/rf-interface': {
       id: '/rf-interface'
       path: '/rf-interface'
       fullPath: '/rf-interface'
       preLoaderRoute: typeof RfInterfaceRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/prototype': {
+      id: '/prototype'
+      path: '/prototype'
+      fullPath: '/prototype'
+      preLoaderRoute: typeof PrototypeRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/intro': {
+      id: '/intro'
+      path: '/intro'
+      fullPath: '/intro'
+      preLoaderRoute: typeof IntroRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/_authenticated': {
@@ -1265,6 +1397,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedAppsQualityRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
+    '/_authenticated/apps/production-boards': {
+      id: '/_authenticated/apps/production-boards'
+      path: '/apps/production-boards'
+      fullPath: '/apps/production-boards'
+      preLoaderRoute: typeof AuthenticatedAppsProductionBoardsRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
     '/_authenticated/apps/outbound': {
       id: '/_authenticated/apps/outbound'
       path: '/apps/outbound'
@@ -1335,6 +1474,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedAdminSystemSettingsRouteImport
       parentRoute: typeof AuthenticatedAdminRouteRoute
     }
+    '/_authenticated/admin/supply-chain-mapping': {
+      id: '/_authenticated/admin/supply-chain-mapping'
+      path: '/supply-chain-mapping'
+      fullPath: '/admin/supply-chain-mapping'
+      preLoaderRoute: typeof AuthenticatedAdminSupplyChainMappingRouteImport
+      parentRoute: typeof AuthenticatedAdminRouteRoute
+    }
     '/_authenticated/admin/session-management': {
       id: '/_authenticated/admin/session-management'
       path: '/session-management'
@@ -1370,6 +1516,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedAdminWorkQueueIndexRouteImport
       parentRoute: typeof AuthenticatedAdminRouteRoute
     }
+    '/_authenticated/admin/work-engine/': {
+      id: '/_authenticated/admin/work-engine/'
+      path: '/work-engine'
+      fullPath: '/admin/work-engine'
+      preLoaderRoute: typeof AuthenticatedAdminWorkEngineIndexRouteImport
+      parentRoute: typeof AuthenticatedAdminRouteRoute
+    }
     '/_authenticated/admin/user-management/': {
       id: '/_authenticated/admin/user-management/'
       path: '/user-management'
@@ -1398,6 +1551,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedAdminOnboardingIndexRouteImport
       parentRoute: typeof AuthenticatedAdminRouteRoute
     }
+    '/_authenticated/admin/omnibelt/': {
+      id: '/_authenticated/admin/omnibelt/'
+      path: '/omnibelt'
+      fullPath: '/admin/omnibelt'
+      preLoaderRoute: typeof AuthenticatedAdminOmnibeltIndexRouteImport
+      parentRoute: typeof AuthenticatedAdminRouteRoute
+    }
   }
 }
 
@@ -1406,12 +1566,15 @@ interface AuthenticatedAdminRouteRouteChildren {
   AuthenticatedAdminPerformanceMonitorRoute: typeof AuthenticatedAdminPerformanceMonitorRoute
   AuthenticatedAdminSapTestingRoute: typeof AuthenticatedAdminSapTestingRoute
   AuthenticatedAdminSessionManagementRoute: typeof AuthenticatedAdminSessionManagementRoute
+  AuthenticatedAdminSupplyChainMappingRoute: typeof AuthenticatedAdminSupplyChainMappingRoute
   AuthenticatedAdminSystemSettingsRoute: typeof AuthenticatedAdminSystemSettingsRoute
   AuthenticatedAdminTabPermissionsDebugRoute: typeof AuthenticatedAdminTabPermissionsDebugRoute
+  AuthenticatedAdminOmnibeltIndexRoute: typeof AuthenticatedAdminOmnibeltIndexRoute
   AuthenticatedAdminOnboardingIndexRoute: typeof AuthenticatedAdminOnboardingIndexRoute
   AuthenticatedAdminPermissionsIndexRoute: typeof AuthenticatedAdminPermissionsIndexRoute
   AuthenticatedAdminRolesIndexRoute: typeof AuthenticatedAdminRolesIndexRoute
   AuthenticatedAdminUserManagementIndexRoute: typeof AuthenticatedAdminUserManagementIndexRoute
+  AuthenticatedAdminWorkEngineIndexRoute: typeof AuthenticatedAdminWorkEngineIndexRoute
   AuthenticatedAdminWorkQueueIndexRoute: typeof AuthenticatedAdminWorkQueueIndexRoute
 }
 
@@ -1423,10 +1586,13 @@ const AuthenticatedAdminRouteRouteChildren: AuthenticatedAdminRouteRouteChildren
     AuthenticatedAdminSapTestingRoute: AuthenticatedAdminSapTestingRoute,
     AuthenticatedAdminSessionManagementRoute:
       AuthenticatedAdminSessionManagementRoute,
+    AuthenticatedAdminSupplyChainMappingRoute:
+      AuthenticatedAdminSupplyChainMappingRoute,
     AuthenticatedAdminSystemSettingsRoute:
       AuthenticatedAdminSystemSettingsRoute,
     AuthenticatedAdminTabPermissionsDebugRoute:
       AuthenticatedAdminTabPermissionsDebugRoute,
+    AuthenticatedAdminOmnibeltIndexRoute: AuthenticatedAdminOmnibeltIndexRoute,
     AuthenticatedAdminOnboardingIndexRoute:
       AuthenticatedAdminOnboardingIndexRoute,
     AuthenticatedAdminPermissionsIndexRoute:
@@ -1434,6 +1600,8 @@ const AuthenticatedAdminRouteRouteChildren: AuthenticatedAdminRouteRouteChildren
     AuthenticatedAdminRolesIndexRoute: AuthenticatedAdminRolesIndexRoute,
     AuthenticatedAdminUserManagementIndexRoute:
       AuthenticatedAdminUserManagementIndexRoute,
+    AuthenticatedAdminWorkEngineIndexRoute:
+      AuthenticatedAdminWorkEngineIndexRoute,
     AuthenticatedAdminWorkQueueIndexRoute:
       AuthenticatedAdminWorkQueueIndexRoute,
   }
@@ -1483,6 +1651,7 @@ interface AuthenticatedRouteRouteChildren {
   AuthenticatedAppsKittingRoute: typeof AuthenticatedAppsKittingRoute
   AuthenticatedAppsMyProductivityRoute: typeof AuthenticatedAppsMyProductivityRoute
   AuthenticatedAppsOutboundRoute: typeof AuthenticatedAppsOutboundRoute
+  AuthenticatedAppsProductionBoardsRoute: typeof AuthenticatedAppsProductionBoardsRoute
   AuthenticatedAppsQualityRoute: typeof AuthenticatedAppsQualityRoute
   AuthenticatedAppsShiftProductivityRoute: typeof AuthenticatedAppsShiftProductivityRoute
   AuthenticatedAppsSmartsheetIntegrationsRoute: typeof AuthenticatedAppsSmartsheetIntegrationsRoute
@@ -1520,6 +1689,8 @@ const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
   AuthenticatedAppsKittingRoute: AuthenticatedAppsKittingRoute,
   AuthenticatedAppsMyProductivityRoute: AuthenticatedAppsMyProductivityRoute,
   AuthenticatedAppsOutboundRoute: AuthenticatedAppsOutboundRoute,
+  AuthenticatedAppsProductionBoardsRoute:
+    AuthenticatedAppsProductionBoardsRoute,
   AuthenticatedAppsQualityRoute: AuthenticatedAppsQualityRoute,
   AuthenticatedAppsShiftProductivityRoute:
     AuthenticatedAppsShiftProductivityRoute,
@@ -1568,7 +1739,11 @@ const RfInterfaceRouteWithChildren = RfInterfaceRoute._addFileChildren(
 
 const rootRouteChildren: RootRouteChildren = {
   AuthenticatedRouteRoute: AuthenticatedRouteRouteWithChildren,
+  IntroRoute: IntroRoute,
+  PrototypeRoute: PrototypeRoute,
   RfInterfaceRoute: RfInterfaceRouteWithChildren,
+  Scene3dHarnessRoute: Scene3dHarnessRoute,
+  SupplyChainHarnessRoute: SupplyChainHarnessRoute,
   authForgotPasswordRoute: authForgotPasswordRoute,
   authOtpRoute: authOtpRoute,
   authRfSigninRoute: authRfSigninRoute,

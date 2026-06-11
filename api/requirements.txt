@@ -1,4 +1,4 @@
-# OmniFrame Python API Dependencies
+# OneBox AI Python API Dependencies
 
 # Web Framework
 fastapi>=0.109.0
@@ -27,7 +27,11 @@ redis>=5.0.0
 # pyrfc>=3.3
 
 # Smartsheet Integration 1.0
-smartsheet-python-sdk>=3.0.0
+# Pin below 4.0.0: smartsheet-python-sdk 4.x restructured the package so that
+# `from smartsheet import Smartsheet` no longer resolves (import yields a
+# namespace package -> "cannot import name 'Smartsheet' from 'smartsheet'
+# (unknown location)"), which aborts API startup. 3.7.2 is the known-good line.
+smartsheet-python-sdk>=3.0.0,<4.0.0
 
 # Data Processing
 pandas>=2.0.0

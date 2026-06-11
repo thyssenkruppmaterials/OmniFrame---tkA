@@ -1,3 +1,4 @@
+// Created and developed by Jai Singh
 import { useState, useEffect, useMemo } from 'react'
 import { format } from 'date-fns'
 import { Loader2, MessageSquare, Send, User } from 'lucide-react'
@@ -292,3 +293,5 @@ export function TicketComments({ ticketId }: TicketCommentsProps) {
     </div>
   )
 }
+
+// Created and developed by Jai Singh

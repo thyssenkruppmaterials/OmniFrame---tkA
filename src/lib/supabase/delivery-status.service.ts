@@ -1,3 +1,4 @@
+// Created and developed by Jai Singh
 import { toast } from 'sonner'
 import { rustDeliveryStatusService } from '@/lib/rust-core/delivery-status.service'
 import { logger } from '@/lib/utils/logger'
@@ -583,6 +584,75 @@ export class DeliveryStatusService {
     } catch (error) {
       logger.error('Error fetching delivery status data:', error)
       throw error
+    }
+  }
+
+  /**
+   * Fetch open LiftFan rows specifically (the openOnly main fetch excludes
+   * `customer_name='Ship in Place - LiftFan JPO Depot'`). Used by the
+   * delivery-status-manager component as a *secondary* query so the LiftFan
+   * TKA card's drill-down can show LiftFan rows in the table without
+   * forcing the main `data` fetch off its stable openOnly path.
+   *
+   * Mirrors the openOnly contract exactly except for the LiftFan exclusion:
+   *   is_deleted=false AND actual_goods_movement_date IS NULL
+   *   AND shipping_point IN OE+IRNA
+   *   AND customer_name = 'Ship in Place - LiftFan JPO Depot'
+   *
+   * Disposition is joined and `applyBusinessRules` is run so rows are
+   * shape-compatible with the main `data` array (status, days_open,
+   * disposition_name, etc.).
+   */
+  async fetchLiftFanRows(): Promise<DeliveryStatusData[]> {
+    try {
+      const { organizationId } = await this.getUserOrganization()
+      const oeIrnaShippingPoints = [
+        'PDCE',
+        'NMP1',
+        'NME1',
+        'KY01',
+        'DCSP',
+        'IRNA',
+      ]
+      const { data, error } = await supabase
+        .from('rr_all_deliveries')
+        .select(
+          `
+          *,
+          delivery_dispositions!dispositions (
+            id,
+            name,
+            color
+          )
+        `
+        )
+        .eq('organization_id', organizationId)
+        .eq('is_deleted', false)
+        .is('actual_goods_movement_date', null)
+        .in('shipping_point', oeIrnaShippingPoints)
+        .eq('customer_name', 'Ship in Place - LiftFan JPO Depot')
+        .order('delivery_creation_date', { ascending: false })
+        .limit(10000)
+
+      if (error) {
+        logger.error('Error fetching LiftFan rows:', error)
+        throw error
+      }
+
+      const enriched = (data || []).map((row: any) => {
+        const dispositionDetails = row.delivery_dispositions
+        return this.applyBusinessRules({
+          ...row,
+          disposition_name: dispositionDetails?.name,
+          disposition_color: dispositionDetails?.color,
+        })
+      })
+
+      logger.log(`✅ Fetched ${enriched.length} LiftFan rows`)
+      return enriched
+    } catch (error) {
+      logger.error('Error in fetchLiftFanRows:', error)
+      return []
     }
   }
 
@@ -1672,7 +1742,14 @@ export class DeliveryStatusService {
       }
 
       // Calculate TKA Non-Controllable counts (November 9, 2025)
-      // Fetch open deliveries and filter client-side
+      // Fetch open deliveries and filter client-side.
+      //
+      // Intentionally NOT scoped to OE+IRNA: this stat is shared with the
+      // GRS Apps Delivery Status page, which operates on a different set
+      // of shipping points (8109/8209/8309/8409/INCR/IADS/KYCR). Scoping
+      // here would silently break that page's cards. Any small mismatch
+      // (typically 1 row) between this card count and the OE+IRNA-scoped
+      // table on Outbound is acknowledged as out of scope for this page.
       const { data: openDeliveriesDataRaw } = await supabase
         .from('rr_all_deliveries')
         .select(
@@ -2426,4 +2503,5 @@ export class DeliveryStatusService {
 
 // Export singleton instance
 export const deliveryStatusService = DeliveryStatusService.getInstance()
-// Developer and Creator: Jai Singh
+
+// Created and developed by Jai Singh

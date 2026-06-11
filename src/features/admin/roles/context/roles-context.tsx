@@ -1,3 +1,4 @@
+// Created and developed by Jai Singh
 import {
   createContext,
   useContext,
@@ -462,3 +463,5 @@ export default function RolesProvider({ children }: RolesProviderProps) {
 
   return <RolesContext.Provider value={value}>{children}</RolesContext.Provider>
 }
+
+// Created and developed by Jai Singh

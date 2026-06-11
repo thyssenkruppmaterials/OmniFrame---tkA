@@ -1,3 +1,4 @@
+// Created and developed by Jai Singh
 import { cn } from '@/lib/utils'
 import {
   AlertDialog,
@@ -65,3 +66,5 @@ export function ConfirmDialog(props: ConfirmDialogProps) {
     </AlertDialog>
   )
 }
+
+// Created and developed by Jai Singh

@@ -1,3 +1,4 @@
+// Created and developed by Jai Singh
 import { format } from 'date-fns'
 import {
   IconAlertTriangle,
@@ -144,3 +145,5 @@ export function ActiveThreats({
     </div>
   )
 }
+
+// Created and developed by Jai Singh

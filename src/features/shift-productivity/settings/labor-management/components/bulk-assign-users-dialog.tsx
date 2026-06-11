@@ -1,3 +1,4 @@
+// Created and developed by Jai Singh
 /**
  * Bulk Assign Users Dialog Component
  * Form modal for assigning multiple users to positions and working areas at once
@@ -97,7 +98,7 @@ export function BulkAssignUsersDialog({
   const [selectedUserIds, setSelectedUserIds] = useState<string[]>([])
 
   const form = useForm<BulkAssignmentFormData>({
-    resolver: zodResolver(bulkAssignmentSchema),
+    resolver: zodResolver(bulkAssignmentSchema) as never,
     defaultValues: {
       position_id: '',
       working_area_id: '__none__',
@@ -881,3 +882,5 @@ export function BulkAssignUsersDialog({
     </Dialog>
   )
 }
+
+// Created and developed by Jai Singh

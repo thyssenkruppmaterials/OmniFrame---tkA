@@ -1,3 +1,4 @@
+// Created and developed by Jai Singh
 //! Authentication endpoints
 //!
 //! Provides JWT validation with session caching and profile enrichment.
@@ -143,7 +144,7 @@ pub async fn validate_with_profile(
     // === FAST PATH: Check session cache first ===
     if let Some(ref session_service) = state.session_service {
         match session_service.get_session(&token_hash).await {
-            Ok(Some(cached)) => {
+            Ok(Some(cached)) if cached.organization_id.is_some() => {
                 tracing::debug!(user_id = %cached.user_id, "Session cache hit");
                 metrics::counter!("auth.cache_hit").increment(1);
                 
@@ -172,6 +173,13 @@ pub async fn validate_with_profile(
                     expires_at: None, // Session TTL managed by cache
                     error: None,
                 });
+            }
+            Ok(Some(cached)) => {
+                tracing::warn!(
+                    user_id = %cached.user_id,
+                    "Session cache hit but organization_id is missing, treating as cache miss"
+                );
+                metrics::counter!("auth.cache_stale").increment(1);
             }
             Ok(None) => {
                 tracing::debug!("Session cache miss");
@@ -262,8 +270,8 @@ pub async fn validate_with_profile(
         }
     };
     
-    // Fetch user profile from database
-    let auth_queries = AuthQueries::new(state.db_pool.clone());
+    // Fetch user profile from database. Pure SELECT — route to replica.
+    let auth_queries = AuthQueries::new(state.read_pool.clone());
     let profile = match auth_queries.get_user_profile(user_uuid).await {
         Ok(Some(p)) => {
             tracing::debug!(user_id = %user_id, "Profile fetched from database");
@@ -484,3 +492,5 @@ pub async fn invalidate_session(
         sessions_invalidated,
     }))
 }
+
+// Created and developed by Jai Singh

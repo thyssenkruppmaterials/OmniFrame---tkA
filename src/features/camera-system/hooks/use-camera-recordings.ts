@@ -1,3 +1,4 @@
+// Created and developed by Jai Singh
 /**
  * Hook for managing camera recordings
  *
@@ -190,3 +191,5 @@ export function useCameraRecordings({
     getPlaybackUrl,
   }
 }
+
+// Created and developed by Jai Singh

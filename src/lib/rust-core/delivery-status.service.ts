@@ -1,3 +1,4 @@
+// Created and developed by Jai Singh
 /**
  * Rust-enabled Delivery Status Service
  *
@@ -85,7 +86,7 @@ function ensureRustClientInitialized(): boolean {
   try {
     const baseUrl =
       import.meta.env.VITE_RUST_CORE_URL ||
-      'https://your-rust-core-service.up.railway.app'
+      'https://rust-core-service-production.up.railway.app'
     initRustCoreClient({ baseUrl })
     return true
   } catch {
@@ -471,7 +472,11 @@ export class RustDeliveryStatusService {
           .select('status')
           .eq('organization_id', organizationId)
           .limit(100000),
-        // TKA Non-Controllable
+        // TKA Non-Controllable.
+        // Intentionally NOT scoped to OE+IRNA: this stat is shared with the
+        // GRS Apps Delivery Status page (different shipping points). Small
+        // mismatches (typically 1 row) between this count and the OE+IRNA-
+        // scoped Outbound table are acknowledged as out of scope.
         supabase
           .from('rr_all_deliveries')
           .select(
@@ -731,4 +736,5 @@ export class RustDeliveryStatusService {
 
 // Export singleton instance
 export const rustDeliveryStatusService = RustDeliveryStatusService.getInstance()
-// Developer and Creator: Jai Singh
+
+// Created and developed by Jai Singh

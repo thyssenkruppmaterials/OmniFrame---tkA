@@ -1,3 +1,4 @@
+// Created and developed by Jai Singh
 /**
  * Team Performance React Hook
  * Provides data fetching and state management for team performance dashboard
@@ -23,6 +24,7 @@ import {
   type TimelineEventWithCategory,
 } from '@/lib/supabase/timeline-events.service'
 import { logger } from '@/lib/utils/logger'
+import { useShiftProductivitySettings } from '@/hooks/use-shift-productivity-settings'
 import type { TeamPerformanceFilters } from '../types/team-performance.types'
 
 export interface DateRange {
@@ -38,6 +40,7 @@ export interface UseTeamPerformanceOptions {
   enableWeeklyTrend?: boolean // Whether to load weekly trend (for lazy loading)
   enableTimelineEvents?: boolean // Whether to load timeline events (for lazy loading)
   enableOvertimeRequests?: boolean // Whether to load overtime requests (for lazy loading)
+  timezone?: string // Optional override; defaults to organization settings
 }
 
 /**
@@ -68,12 +71,16 @@ export function useTeamPerformance(options: UseTeamPerformanceOptions = {}) {
     enableWeeklyTrend = true,
     enableTimelineEvents = true,
     enableOvertimeRequests = true,
+    timezone: timezoneOverride,
   } = options
 
   const { authState } = useUnifiedAuth()
+  const { effectiveSettings } = useShiftProductivitySettings()
   const { profile } = authState
   const organizationId = profile?.organization_id || ''
   const queryClient = useQueryClient()
+  const timezone = timezoneOverride ?? effectiveSettings.timezone
+  const calculationMethod = effectiveSettings.calculation_method
 
   // Filter state
   const [filters, setFilters] = useState<TeamPerformanceFilters>(initialFilters)
@@ -100,12 +107,21 @@ export function useTeamPerformance(options: UseTeamPerformanceOptions = {}) {
       const prevDateKey = startOfDay(previousDay).toISOString()
 
       queryClient.prefetchQuery({
-        queryKey: ['team-performance', organizationId, prevDateKey, filters],
+        queryKey: [
+          'team-performance',
+          organizationId,
+          null,
+          prevDateKey,
+          filters,
+          timezone,
+          calculationMethod,
+        ],
         queryFn: () =>
           TeamPerformanceService.getTeamProductivity(
             organizationId,
             previousDay,
-            filters
+            filters,
+            timezone
           ),
         staleTime: Infinity, // Historical data never changes
         gcTime: 1000 * 60 * 30, // Keep 30 minutes
@@ -117,19 +133,28 @@ export function useTeamPerformance(options: UseTeamPerformanceOptions = {}) {
       if (nextDay <= new Date()) {
         const nextDateKey = startOfDay(nextDay).toISOString()
         queryClient.prefetchQuery({
-          queryKey: ['team-performance', organizationId, nextDateKey, filters],
+          queryKey: [
+            'team-performance',
+            organizationId,
+            null,
+            nextDateKey,
+            filters,
+            timezone,
+            calculationMethod,
+          ],
           queryFn: () =>
             TeamPerformanceService.getTeamProductivity(
               organizationId,
               nextDay,
-              filters
+              filters,
+              timezone
             ),
           staleTime: checkIsToday(nextDay) ? 15000 : Infinity,
           gcTime: checkIsToday(nextDay) ? 1000 * 60 * 5 : 1000 * 60 * 30,
         })
       }
     },
-    [organizationId, filters, queryClient]
+    [organizationId, filters, queryClient, timezone, calculationMethod]
   )
 
   // Prefetch adjacent dates when current date changes
@@ -151,6 +176,8 @@ export function useTeamPerformance(options: UseTeamPerformanceOptions = {}) {
       dateRange,
       startOfDay(selectedDate).toISOString(),
       filters,
+      timezone,
+      calculationMethod,
     ],
     queryFn: async () => {
       const startTime = performance.now()
@@ -162,13 +189,15 @@ export function useTeamPerformance(options: UseTeamPerformanceOptions = {}) {
           organizationId,
           dateRange.from,
           dateRange.to,
-          filters
+          filters,
+          timezone
         )
       } else {
         data = await TeamPerformanceService.getTeamProductivity(
           organizationId,
           selectedDate,
-          filters
+          filters,
+          timezone
         )
       }
 
@@ -197,11 +226,14 @@ export function useTeamPerformance(options: UseTeamPerformanceOptions = {}) {
       'team-performance-weekly',
       organizationId,
       format(selectedDate, 'yyyy-MM-dd'),
+      timezone,
+      calculationMethod,
     ],
     queryFn: async () => {
       const data = await TeamPerformanceService.getWeeklyTrend(
         organizationId,
-        selectedDate
+        selectedDate,
+        timezone
       )
       return data
     },
@@ -248,6 +280,7 @@ export function useTeamPerformance(options: UseTeamPerformanceOptions = {}) {
       'timeline-events',
       organizationId,
       format(selectedDate, 'yyyy-MM-dd'),
+      timezone,
     ],
     queryFn: async (): Promise<TimelineEventWithCategory[]> => {
       const dateStr = format(selectedDate, 'yyyy-MM-dd')
@@ -365,10 +398,8 @@ export function useTeamPerformance(options: UseTeamPerformanceOptions = {}) {
   // ===== REFRESH =====
   const refresh = useCallback(() => {
     // Only invalidate current date's data, not cached historical data
-    const currentDateKey = startOfDay(selectedDate).toISOString()
-
     queryClient.invalidateQueries({
-      queryKey: ['team-performance', organizationId, currentDateKey],
+      queryKey: ['team-performance', organizationId],
     })
     queryClient.invalidateQueries({
       queryKey: [
@@ -397,11 +428,29 @@ export function useTeamPerformance(options: UseTeamPerformanceOptions = {}) {
   const exportToCSV = () => {
     if (!performanceData) return
 
+    const exportFormat = effectiveSettings.export_format
     const csvContent = TeamPerformanceService.exportToCsv(performanceData)
-    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' })
+    const content =
+      exportFormat === 'json'
+        ? JSON.stringify(performanceData, null, 2)
+        : csvContent
+    const mimeType =
+      exportFormat === 'json'
+        ? 'application/json;charset=utf-8;'
+        : exportFormat === 'excel'
+          ? 'application/vnd.ms-excel;charset=utf-8;'
+          : 'text/csv;charset=utf-8;'
+    const extension =
+      exportFormat === 'json'
+        ? 'json'
+        : exportFormat === 'excel'
+          ? 'xls'
+          : 'csv'
+
+    const blob = new Blob([content], { type: mimeType })
     const link = document.createElement('a')
     link.href = URL.createObjectURL(blob)
-    link.download = `team-performance-${selectedDate.toISOString().split('T')[0]}.csv`
+    link.download = `team-performance-${selectedDate.toISOString().split('T')[0]}.${extension}`
     link.click()
   }
 
@@ -428,6 +477,8 @@ export function useTeamPerformance(options: UseTeamPerformanceOptions = {}) {
     timelineEvents,
     overtimeRequests,
     approvedOvertime,
+    settings: effectiveSettings,
+    timezone,
 
     // Loading states
     isLoading,
@@ -479,3 +530,5 @@ export function useTeamPerformance(options: UseTeamPerformanceOptions = {}) {
     organizationId,
   }
 }
+
+// Created and developed by Jai Singh

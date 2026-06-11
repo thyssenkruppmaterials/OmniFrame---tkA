@@ -1,3 +1,4 @@
+// Created and developed by Jai Singh
 import { redirect } from '@tanstack/react-router'
 import { rbacService } from '@/lib/auth/rbac-service'
 import type { PermissionCheckContext } from '@/lib/auth/types'
@@ -403,3 +404,5 @@ export function useRBACMiddleware() {
     clearCache: rbacMiddleware.clearCache.bind(rbacMiddleware),
   }
 }
+
+// Created and developed by Jai Singh

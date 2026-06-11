@@ -1,0 +1,609 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>OmniFrame — Intro</title>
+    <link rel="icon" type="image/png" href="/images/favicon.png" />
+    <style>
+      :root {
+        --cyan: 6, 182, 212;
+        --blue: 59, 130, 246;
+        --ice: 186, 230, 253;
+      }
+      * {
+        box-sizing: border-box;
+        margin: 0;
+        padding: 0;
+      }
+      html,
+      body {
+        height: 100%;
+        width: 100%;
+        background: #020617;
+        color: #e5e7eb;
+        font-family:
+          ui-sans-serif,
+          system-ui,
+          -apple-system,
+          "Segoe UI",
+          Roboto,
+          sans-serif;
+        overflow: hidden;
+      }
+      body {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        position: relative;
+      }
+
+      /* Backdrop: subtle grid with radial mask + radial glow */
+      .grid-bg {
+        position: absolute;
+        inset: 0;
+        pointer-events: none;
+        background-image:
+          linear-gradient(rgba(6, 182, 212, 0.05) 1px, transparent 1px),
+          linear-gradient(90deg, rgba(6, 182, 212, 0.05) 1px, transparent 1px);
+        background-size: 48px 48px;
+        -webkit-mask-image: radial-gradient(
+          ellipse at center,
+          black 40%,
+          transparent 85%
+        );
+        mask-image: radial-gradient(
+          ellipse at center,
+          black 40%,
+          transparent 85%
+        );
+      }
+      .radial-bg {
+        position: absolute;
+        inset: 0;
+        pointer-events: none;
+        background: radial-gradient(
+          ellipse at center,
+          rgba(6, 182, 212, 0.12) 0%,
+          transparent 60%
+        );
+      }
+
+      .stage {
+        position: relative;
+        z-index: 10;
+        display: flex;
+        align-items: center;
+        gap: 56px;
+      }
+      @media (max-width: 768px) {
+        .stage {
+          flex-direction: column;
+          gap: 32px;
+        }
+      }
+
+      /* Cinematic logo (matches CinematicLogo component) */
+      .logo-wrap {
+        position: relative;
+        width: 208px;
+        height: 208px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        animation: cinematic-entrance 1.8s cubic-bezier(0.16, 1, 0.3, 1)
+          forwards;
+      }
+
+      .flash {
+        position: absolute;
+        width: 160px;
+        height: 160px;
+        border-radius: 50%;
+        background: radial-gradient(
+          circle,
+          rgba(6, 182, 212, 0.6) 0%,
+          transparent 60%
+        );
+        filter: blur(30px);
+        animation: cinematic-flash 2s ease-out forwards;
+        pointer-events: none;
+      }
+
+      .ambient {
+        position: absolute;
+        width: 120px;
+        height: 120px;
+        border-radius: 50%;
+        background: radial-gradient(
+          circle,
+          rgba(6, 182, 212, 0.25) 0%,
+          rgba(59, 130, 246, 0.08) 50%,
+          transparent 70%
+        );
+        filter: blur(25px);
+        opacity: 0;
+        animation: cinematic-glow 4s ease-in-out 1.8s infinite;
+        pointer-events: none;
+      }
+
+      .ring {
+        position: absolute;
+        border-radius: 50%;
+        opacity: 0;
+        pointer-events: none;
+      }
+      .ring-outer {
+        width: 180px;
+        height: 180px;
+        border: 1px solid rgba(6, 182, 212, 0.12);
+        animation:
+          cinematic-ring-expand 1.6s cubic-bezier(0.16, 1, 0.3, 1) 0.4s forwards,
+          spin 30s linear 2s infinite;
+        transform: scale(0.3);
+      }
+      .ring-outer::before {
+        content: "";
+        position: absolute;
+        width: 6px;
+        height: 6px;
+        top: -3px;
+        left: 50%;
+        margin-left: -3px;
+        border-radius: 50%;
+        background: rgba(6, 182, 212, 0.8);
+        box-shadow:
+          0 0 12px 3px rgba(6, 182, 212, 0.5),
+          0 0 4px 1px rgba(6, 182, 212, 0.8);
+      }
+      .ring-mid {
+        width: 200px;
+        height: 200px;
+        border: 1px solid rgba(59, 130, 246, 0.08);
+        animation:
+          cinematic-ring-expand 1.8s cubic-bezier(0.16, 1, 0.3, 1) 0.6s forwards,
+          spin 45s linear 2.4s infinite reverse;
+        transform: scale(0.2);
+      }
+      .ring-mid::before {
+        content: "";
+        position: absolute;
+        width: 4px;
+        height: 4px;
+        bottom: -2px;
+        left: 33%;
+        border-radius: 50%;
+        background: rgba(147, 197, 253, 0.6);
+        box-shadow: 0 0 8px 2px rgba(147, 197, 253, 0.4);
+      }
+      .ring-inner {
+        width: 110px;
+        height: 110px;
+        border: 1px solid rgba(6, 182, 212, 0.15);
+        animation:
+          cinematic-ring-expand 1.2s cubic-bezier(0.16, 1, 0.3, 1) 0.2s forwards,
+          cinematic-ring-pulse 3s ease-in-out 1.4s infinite;
+        transform: scale(0.4);
+      }
+
+      .pulsar {
+        position: absolute;
+        width: 96px;
+        height: 96px;
+        border-radius: 50%;
+        border: 1.5px solid rgba(6, 182, 212, 0.35);
+        box-shadow:
+          0 0 8px rgba(6, 182, 212, 0.15),
+          inset 0 0 8px rgba(6, 182, 212, 0.08);
+        opacity: 0;
+        pointer-events: none;
+        animation: cinematic-pulsar 3.6s ease-out infinite;
+      }
+      .pulsar-0 {
+        animation-delay: 2s;
+      }
+      .pulsar-1 {
+        animation-delay: 3.2s;
+      }
+      .pulsar-2 {
+        animation-delay: 4.4s;
+      }
+
+      .cube {
+        position: relative;
+        z-index: 10;
+        width: 96px;
+        height: 96px;
+        animation:
+          cinematic-logo-reveal 1.4s cubic-bezier(0.16, 1, 0.3, 1) forwards,
+          spin 8s linear 1.4s infinite;
+        filter: drop-shadow(0 0 12px rgba(6, 182, 212, 0.4))
+          drop-shadow(0 0 24px rgba(6, 182, 212, 0.15));
+      }
+
+      /* Floating particles */
+      .particles {
+        position: absolute;
+        inset: 0;
+        overflow: hidden;
+        pointer-events: none;
+      }
+      .particle {
+        position: absolute;
+        border-radius: 50%;
+        background: rgba(6, 182, 212, 0.7);
+        box-shadow: 0 0 4px rgba(6, 182, 212, 0.4);
+        opacity: 0;
+      }
+
+      /* Wordmark */
+      .wordmark {
+        display: flex;
+        flex-direction: column;
+        align-items: flex-start;
+      }
+      @media (max-width: 768px) {
+        .wordmark {
+          align-items: center;
+        }
+      }
+      .wordmark-row {
+        display: flex;
+        align-items: baseline;
+        opacity: 0;
+        transition: opacity 0.3s ease;
+      }
+      .wordmark-row.visible {
+        opacity: 1;
+      }
+      .title {
+        font-family:
+          ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas,
+          "Liberation Mono", "Courier New", monospace;
+        font-size: clamp(48px, 7vw, 96px);
+        font-weight: 600;
+        letter-spacing: 0.1em;
+        background: linear-gradient(
+          180deg,
+          rgba(186, 230, 253, 1) 0%,
+          rgba(6, 182, 212, 0.95) 55%,
+          rgba(59, 130, 246, 0.9) 100%
+        );
+        -webkit-background-clip: text;
+        background-clip: text;
+        -webkit-text-fill-color: transparent;
+        filter: drop-shadow(0 0 18px rgba(6, 182, 212, 0.35));
+        white-space: pre;
+      }
+      .caret {
+        display: inline-block;
+        margin-left: 4px;
+        font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, monospace;
+        font-size: clamp(48px, 7vw, 96px);
+        font-weight: 300;
+        color: rgba(6, 182, 212, 0.9);
+        text-shadow: 0 0 12px rgba(6, 182, 212, 0.6);
+        animation: blink 1.06s step-end infinite;
+      }
+      .caret.done {
+        animation: cinematic-cursor-fade 2s ease-out 1.5s forwards;
+      }
+      .tagline {
+        margin-top: 18px;
+        font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, monospace;
+        font-size: clamp(11px, 1vw, 14px);
+        letter-spacing: 0.45em;
+        text-transform: uppercase;
+        color: rgba(148, 197, 253, 0.65);
+        opacity: 0;
+        transform: translateY(6px);
+        transition:
+          opacity 0.8s ease,
+          transform 0.8s ease;
+      }
+      .tagline.visible {
+        opacity: 1;
+        transform: translateY(0);
+      }
+
+      /* Animations — mirror of src/index.css cinematic keyframes */
+      @keyframes cinematic-entrance {
+        0% {
+          opacity: 0;
+          transform: scale(0.4);
+          filter: blur(12px);
+        }
+        60% {
+          opacity: 1;
+          filter: blur(0);
+        }
+        80% {
+          transform: scale(1.04);
+        }
+        100% {
+          opacity: 1;
+          transform: scale(1);
+          filter: blur(0);
+        }
+      }
+      @keyframes cinematic-flash {
+        0% {
+          opacity: 0;
+          transform: scale(0.3);
+        }
+        30% {
+          opacity: 1;
+          transform: scale(1.3);
+        }
+        100% {
+          opacity: 0;
+          transform: scale(2);
+        }
+      }
+      @keyframes cinematic-ring-expand {
+        0% {
+          opacity: 0;
+          transform: scale(0.3);
+        }
+        100% {
+          opacity: 1;
+          transform: scale(1);
+        }
+      }
+      @keyframes cinematic-logo-reveal {
+        0% {
+          opacity: 0;
+          transform: scale(0.3) rotate(-90deg);
+          filter: blur(8px);
+        }
+        50% {
+          opacity: 1;
+          filter: blur(0) drop-shadow(0 0 20px rgba(6, 182, 212, 0.6));
+        }
+        100% {
+          opacity: 1;
+          transform: scale(1) rotate(0);
+          filter: drop-shadow(0 0 12px rgba(6, 182, 212, 0.4))
+            drop-shadow(0 0 24px rgba(6, 182, 212, 0.15));
+        }
+      }
+      @keyframes cinematic-cursor-fade {
+        0% {
+          opacity: 1;
+        }
+        100% {
+          opacity: 0;
+        }
+      }
+      @keyframes cinematic-glow {
+        0%,
+        100% {
+          opacity: 0.6;
+          transform: scale(1);
+        }
+        50% {
+          opacity: 1;
+          transform: scale(1.2);
+        }
+      }
+      @keyframes cinematic-pulsar {
+        0% {
+          transform: scale(1);
+          opacity: 0.5;
+          border-color: rgba(6, 182, 212, 0.4);
+          box-shadow:
+            0 0 12px rgba(6, 182, 212, 0.25),
+            inset 0 0 8px rgba(6, 182, 212, 0.1);
+        }
+        40% {
+          opacity: 0.3;
+        }
+        100% {
+          transform: scale(2.4);
+          opacity: 0;
+          border-color: rgba(6, 182, 212, 0);
+          box-shadow:
+            0 0 4px rgba(6, 182, 212, 0),
+            inset 0 0 2px rgba(6, 182, 212, 0);
+        }
+      }
+      @keyframes cinematic-ring-pulse {
+        0%,
+        100% {
+          box-shadow: 0 0 0 rgba(6, 182, 212, 0);
+        }
+        50% {
+          box-shadow:
+            0 0 24px rgba(6, 182, 212, 0.2),
+            inset 0 0 12px rgba(6, 182, 212, 0.1);
+        }
+      }
+      @keyframes cinematic-float {
+        0%,
+        100% {
+          opacity: 0;
+          transform: translate(0, 0);
+        }
+        50% {
+          opacity: 1;
+          transform: translate(4px, -6px);
+        }
+      }
+      @keyframes spin {
+        0% {
+          transform: rotate(0);
+        }
+        100% {
+          transform: rotate(360deg);
+        }
+      }
+      @keyframes blink {
+        0%,
+        50% {
+          opacity: 1;
+        }
+        51%,
+        100% {
+          opacity: 0;
+        }
+      }
+
+      /* Replay button — tiny, unobtrusive */
+      .replay {
+        position: absolute;
+        bottom: 24px;
+        right: 24px;
+        z-index: 20;
+        background: rgba(6, 182, 212, 0.08);
+        border: 1px solid rgba(6, 182, 212, 0.3);
+        color: rgba(186, 230, 253, 0.85);
+        padding: 8px 14px;
+        border-radius: 999px;
+        font-family: ui-monospace, monospace;
+        font-size: 11px;
+        letter-spacing: 0.2em;
+        text-transform: uppercase;
+        cursor: pointer;
+        opacity: 0;
+        transition: opacity 0.4s ease;
+      }
+      .replay:hover {
+        background: rgba(6, 182, 212, 0.16);
+      }
+      .replay.visible {
+        opacity: 0.7;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="grid-bg"></div>
+    <div class="radial-bg"></div>
+
+    <div class="stage">
+      <div class="logo-wrap" id="logoWrap">
+        <div class="flash"></div>
+        <div class="ambient"></div>
+        <div class="ring ring-outer"></div>
+        <div class="ring ring-mid"></div>
+        <div class="ring ring-inner"></div>
+        <div class="pulsar pulsar-0"></div>
+        <div class="pulsar pulsar-1"></div>
+        <div class="pulsar pulsar-2"></div>
+        <img
+          class="cube"
+          src="/images/OneBoxLogoX.png"
+          alt="OmniFrame Logo"
+        />
+        <div class="particles" id="particles"></div>
+      </div>
+
+      <div class="wordmark">
+        <div class="wordmark-row" id="wordmarkRow">
+          <h1 class="title" id="title"></h1><span class="caret" id="caret">|</span>
+        </div>
+        <p class="tagline" id="tagline">Unified Logistics Intelligence</p>
+      </div>
+    </div>
+
+    <button class="replay" id="replay" type="button">Replay</button>
+
+    <script>
+      (function () {
+        const TITLE = "OmniFrame";
+        const TYPE_DELAY = 90;
+        const START_DELAY = 1400;
+
+        const particleDefs = [
+          { left: "22%", top: "18%", delay: 0, dur: 6 },
+          { left: "72%", top: "28%", delay: 1.2, dur: 5 },
+          { left: "38%", top: "78%", delay: 2.4, dur: 7 },
+          { left: "82%", top: "62%", delay: 0.6, dur: 5.5 },
+          { left: "12%", top: "52%", delay: 1.8, dur: 6.5 },
+          { left: "58%", top: "88%", delay: 3.2, dur: 4.5 },
+          { left: "48%", top: "12%", delay: 0.3, dur: 5.8 },
+          { left: "88%", top: "42%", delay: 2.1, dur: 6.2 },
+        ];
+
+        const particlesEl = document.getElementById("particles");
+        particleDefs.forEach((p, i) => {
+          const el = document.createElement("div");
+          el.className = "particle";
+          const size = i % 3 === 0 ? 2 : 1.5;
+          el.style.width = size + "px";
+          el.style.height = size + "px";
+          el.style.left = p.left;
+          el.style.top = p.top;
+          el.style.animation = `cinematic-float ${p.dur}s ease-in-out ${2 + p.delay}s infinite`;
+          particlesEl.appendChild(el);
+        });
+
+        const titleEl = document.getElementById("title");
+        const caretEl = document.getElementById("caret");
+        const rowEl = document.getElementById("wordmarkRow");
+        const taglineEl = document.getElementById("tagline");
+        const replayEl = document.getElementById("replay");
+
+        let typingTimer = null;
+        let startTimer = null;
+        let taglineTimer = null;
+        let replayTimer = null;
+
+        function runIntro() {
+          clearTimeout(startTimer);
+          clearTimeout(taglineTimer);
+          clearTimeout(replayTimer);
+          clearInterval(typingTimer);
+
+          titleEl.textContent = "";
+          rowEl.classList.remove("visible");
+          caretEl.classList.remove("done");
+          taglineEl.classList.remove("visible");
+          replayEl.classList.remove("visible");
+
+          startTimer = setTimeout(() => {
+            rowEl.classList.add("visible");
+            let i = 0;
+            typingTimer = setInterval(() => {
+              i++;
+              titleEl.textContent = TITLE.slice(0, i);
+              if (i >= TITLE.length) {
+                clearInterval(typingTimer);
+                caretEl.classList.add("done");
+                taglineTimer = setTimeout(
+                  () => taglineEl.classList.add("visible"),
+                  350
+                );
+                replayTimer = setTimeout(
+                  () => replayEl.classList.add("visible"),
+                  4200
+                );
+              }
+            }, TYPE_DELAY);
+          }, START_DELAY);
+        }
+
+        replayEl.addEventListener("click", () => {
+          document
+            .querySelectorAll(
+              ".logo-wrap, .flash, .ambient, .ring, .pulsar, .cube"
+            )
+            .forEach((n) => {
+              const anim = n.style.animation;
+              n.style.animation = "none";
+              n.offsetHeight; /* reflow */
+              n.style.animation = anim;
+            });
+          document
+            .querySelectorAll(".logo-wrap")
+            .forEach((n) => n.classList.remove("replayed"));
+          document.getElementById("logoWrap").style.animation = "none";
+          document.getElementById("logoWrap").offsetHeight;
+          document.getElementById("logoWrap").style.animation = "";
+          runIntro();
+        });
+
+        runIntro();
+      })();
+    </script>
+  </body>
+</html>

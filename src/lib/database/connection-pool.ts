@@ -1,3 +1,4 @@
+// Created and developed by Jai Singh
 /**
  * Database Connection Pool Service
  * Enterprise-grade database connection management with read replica load balancing
@@ -579,3 +580,5 @@ export const databaseConnectionPool = DatabaseConnectionPool.getInstance()
 
 // Export types
 export type { ConnectionConfig, PoolMetrics, ReadReplicaConfig }
+
+// Created and developed by Jai Singh

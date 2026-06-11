@@ -1,3 +1,4 @@
+# Created and developed by Jai Singh
 """
 FastAPI router for Camera operations.
 Provides endpoints for camera devices, recordings, events, and streaming proxy.
@@ -837,4 +838,4 @@ async def get_camera_statistics(
         logger.error(f"Error getting statistics: {str(e)}")
         raise handle_service_error(e)
 
-# Developer and Creator: Jai Singh
+# Created and developed by Jai Singh

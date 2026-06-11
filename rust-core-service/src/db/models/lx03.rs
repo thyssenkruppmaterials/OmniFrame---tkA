@@ -1,3 +1,4 @@
+// Created and developed by Jai Singh
 //! LX03 (Warehouse Inventory) database models
 //!
 //! Models for the rr_lx03_data table containing SAP LX03 warehouse inventory data.
@@ -107,3 +108,5 @@ impl LX03Query {
         }
     }
 }
+
+// Created and developed by Jai Singh

@@ -1,3 +1,4 @@
+// Created and developed by Jai Singh
 import { Link } from '@tanstack/react-router'
 import { toast } from 'sonner'
 import { useUnifiedAuth } from '@/lib/auth/unified-auth-provider'
@@ -44,7 +45,7 @@ export function ProfileDropdown() {
   }
 
   const displayName = getUserDisplayName()
-  const displayEmail = user?.email || profile?.email || 'guest@omniframe.ai'
+  const displayEmail = user?.email || profile?.email || 'guest@onebox.ai'
   const avatarUrl = profile?.avatar_url || '/avatars/default.jpg'
   const initials = getAvatarInitials()
   return (
@@ -76,17 +77,10 @@ export function ProfileDropdown() {
           </DropdownMenuItem>
           <DropdownMenuItem asChild>
             <Link to='/settings'>
-              Billing
-              <DropdownMenuShortcut>⌘B</DropdownMenuShortcut>
-            </Link>
-          </DropdownMenuItem>
-          <DropdownMenuItem asChild>
-            <Link to='/settings'>
               Settings
               <DropdownMenuShortcut>⌘S</DropdownMenuShortcut>
             </Link>
           </DropdownMenuItem>
-          <DropdownMenuItem>New Team</DropdownMenuItem>
         </DropdownMenuGroup>
         <DropdownMenuSeparator />
         <DropdownMenuItem
@@ -107,3 +101,5 @@ export function ProfileDropdown() {
     </DropdownMenu>
   )
 }
+
+// Created and developed by Jai Singh

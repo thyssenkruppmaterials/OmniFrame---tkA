@@ -1,3 +1,4 @@
+// Created and developed by Jai Singh
 'use client'
 
 import React, { useCallback, useEffect, useRef, useState } from 'react'
@@ -7,16 +8,16 @@ import { logger } from '@/lib/utils/logger'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
+import {
+  ResponsiveDialog,
+  ResponsiveDialogBody,
+  ResponsiveDialogDescription,
+  ResponsiveDialogFooter,
+  ResponsiveDialogHeader,
+  ResponsiveDialogTitle,
+} from '@/components/ui/responsive-dialog'
 
 interface WaveDeliveryDialogProps {
   isOpen: boolean
@@ -252,204 +253,204 @@ export function WaveDeliveryDialog({
   const errorCount = scannedDeliveries.filter((d) => !d.success).length
 
   return (
-    <Dialog open={isOpen} onOpenChange={handleClose}>
-      <DialogContent className='max-h-[80vh] max-w-2xl overflow-hidden'>
-        <DialogHeader>
-          <DialogTitle className='flex items-center gap-2'>
-            <Zap className='h-5 w-5 text-blue-600' />
-            Wave Delivery Scanner
-          </DialogTitle>
-          <DialogDescription>
-            Scan delivery barcodes to rapidly update status from Pending to
-            Printed. Auto-processing will begin immediately when a delivery
-            number is scanned - no button clicks required.
-          </DialogDescription>
-        </DialogHeader>
+    <ResponsiveDialog open={isOpen} onOpenChange={handleClose} size='md'>
+      <ResponsiveDialogHeader>
+        <ResponsiveDialogTitle className='flex items-center gap-2'>
+          <Zap className='h-5 w-5 text-blue-600' />
+          Wave Delivery Scanner
+        </ResponsiveDialogTitle>
+        <ResponsiveDialogDescription>
+          Scan delivery barcodes to rapidly update status from Pending to
+          Printed. Auto-processing will begin immediately when a delivery number
+          is scanned - no button clicks required.
+        </ResponsiveDialogDescription>
+      </ResponsiveDialogHeader>
 
-        <div className='space-y-4'>
-          {/* Flash Message */}
-          {flashMessage && (
-            <div
-              className={cn(
-                'animate-in fade-in-0 rounded-lg border p-3 text-sm font-medium duration-300',
-                flashMessage.type === 'success'
-                  ? 'border-green-200 bg-green-50 text-green-700'
-                  : 'border-red-200 bg-red-50 text-red-700'
+      <ResponsiveDialogBody className='space-y-4'>
+        {/* Flash Message */}
+        {flashMessage && (
+          <div
+            className={cn(
+              'animate-in fade-in-0 rounded-lg border p-3 text-sm font-medium duration-300',
+              flashMessage.type === 'success'
+                ? 'border-green-200 bg-green-50 text-green-700'
+                : 'border-red-200 bg-red-50 text-red-700'
+            )}
+          >
+            <div className='flex items-center gap-2'>
+              {flashMessage.type === 'success' ? (
+                <CheckCircle className='h-4 w-4' />
+              ) : (
+                <X className='h-4 w-4' />
               )}
-            >
-              <div className='flex items-center gap-2'>
-                {flashMessage.type === 'success' ? (
-                  <CheckCircle className='h-4 w-4' />
+              {flashMessage.message}
+            </div>
+          </div>
+        )}
+
+        {/* Scanning Interface */}
+        <Card>
+          <CardContent className='p-6'>
+            <div className='space-y-4'>
+              <div className='space-y-4 text-center'>
+                {isAutoProcessing || isScanning ? (
+                  <Loader2 className='mx-auto h-16 w-16 animate-spin text-blue-600' />
                 ) : (
-                  <X className='h-4 w-4' />
+                  <Scan
+                    className={cn(
+                      'mx-auto h-16 w-16 transition-colors duration-200',
+                      deliveryNumber.length >= DELIVERY_NUMBER_LENGTH
+                        ? 'text-blue-600'
+                        : 'text-muted-foreground'
+                    )}
+                  />
                 )}
-                {flashMessage.message}
+
+                <h3 className='text-lg font-semibold'>
+                  {isAutoProcessing
+                    ? 'Auto-Processing...'
+                    : isScanning
+                      ? 'Processing...'
+                      : 'Scan Delivery Barcode'}
+                </h3>
+
+                <p className='text-muted-foreground text-sm'>
+                  {isAutoProcessing || isScanning
+                    ? 'Please wait while the delivery is being processed...'
+                    : 'Position barcode scanner or enter delivery number manually'}
+                </p>
               </div>
-            </div>
-          )}
 
-          {/* Scanning Interface */}
-          <Card>
-            <CardContent className='p-6'>
-              <div className='space-y-4'>
-                <div className='space-y-4 text-center'>
-                  {isAutoProcessing || isScanning ? (
-                    <Loader2 className='mx-auto h-16 w-16 animate-spin text-blue-600' />
-                  ) : (
-                    <Scan
-                      className={cn(
-                        'mx-auto h-16 w-16 transition-colors duration-200',
-                        deliveryNumber.length >= DELIVERY_NUMBER_LENGTH
-                          ? 'text-blue-600'
-                          : 'text-muted-foreground'
-                      )}
-                    />
-                  )}
-
-                  <h3 className='text-lg font-semibold'>
-                    {isAutoProcessing
-                      ? 'Auto-Processing...'
-                      : isScanning
-                        ? 'Processing...'
-                        : 'Scan Delivery Barcode'}
-                  </h3>
-
-                  <p className='text-muted-foreground text-sm'>
-                    {isAutoProcessing || isScanning
-                      ? 'Please wait while the delivery is being processed...'
-                      : 'Position barcode scanner or enter delivery number manually'}
-                  </p>
+              <div className='mx-auto max-w-md space-y-4'>
+                <div className='space-y-2'>
+                  <Label htmlFor='deliveryNumber'>Delivery Number</Label>
+                  <Input
+                    ref={inputRef}
+                    id='deliveryNumber'
+                    placeholder='Scan or enter delivery number'
+                    value={deliveryNumber}
+                    onChange={(e) => setDeliveryNumber(e.target.value)}
+                    onKeyPress={handleKeyPress}
+                    disabled={isScanning || isAutoProcessing}
+                    className={cn(
+                      'text-center font-mono text-lg transition-colors',
+                      deliveryNumber.length >= DELIVERY_NUMBER_LENGTH
+                        ? 'border-blue-500 bg-blue-50'
+                        : ''
+                    )}
+                    autoComplete='off'
+                  />
                 </div>
 
-                <div className='mx-auto max-w-md space-y-4'>
-                  <div className='space-y-2'>
-                    <Label htmlFor='deliveryNumber'>Delivery Number</Label>
-                    <Input
-                      ref={inputRef}
-                      id='deliveryNumber'
-                      placeholder='Scan or enter delivery number'
-                      value={deliveryNumber}
-                      onChange={(e) => setDeliveryNumber(e.target.value)}
-                      onKeyPress={handleKeyPress}
-                      disabled={isScanning || isAutoProcessing}
-                      className={cn(
-                        'text-center font-mono text-lg transition-colors',
-                        deliveryNumber.length >= DELIVERY_NUMBER_LENGTH
-                          ? 'border-blue-500 bg-blue-50'
-                          : ''
-                      )}
-                      autoComplete='off'
-                    />
-                  </div>
-
-                  {/* Auto-processing indicator - more prominent */}
-                  {deliveryNumber.length >= DELIVERY_NUMBER_LENGTH &&
-                    !isScanning &&
-                    !isAutoProcessing && (
-                      <div className='rounded-lg border-2 border-blue-300 bg-blue-100 p-3'>
-                        <div className='flex animate-pulse items-center justify-center gap-2 text-base font-semibold text-blue-700'>
-                          <Loader2 className='h-5 w-5 animate-spin' />
-                          AUTO-PROCESSING DELIVERY...
-                        </div>
-                      </div>
-                    )}
-
-                  {/* Auto-processing active indicator */}
-                  {isAutoProcessing && (
-                    <div className='rounded-lg border-2 border-green-300 bg-green-100 p-3'>
-                      <div className='flex items-center justify-center gap-2 text-base font-semibold text-green-700'>
+                {/* Auto-processing indicator - more prominent */}
+                {deliveryNumber.length >= DELIVERY_NUMBER_LENGTH &&
+                  !isScanning &&
+                  !isAutoProcessing && (
+                    <div className='rounded-lg border-2 border-blue-300 bg-blue-100 p-3'>
+                      <div className='flex animate-pulse items-center justify-center gap-2 text-base font-semibold text-blue-700'>
                         <Loader2 className='h-5 w-5 animate-spin' />
-                        PROCESSING DELIVERY {deliveryNumber}...
+                        AUTO-PROCESSING DELIVERY...
                       </div>
                     </div>
                   )}
 
-                  {/* Progress indicator */}
-                  {deliveryNumber.length > 0 &&
-                    deliveryNumber.length < DELIVERY_NUMBER_LENGTH && (
-                      <div className='text-muted-foreground text-center text-sm'>
-                        {deliveryNumber.length} / {DELIVERY_NUMBER_LENGTH}{' '}
-                        digits entered
-                      </div>
-                    )}
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-
-          {/* Statistics */}
-          {scannedDeliveries.length > 0 && (
-            <div className='grid grid-cols-3 gap-4'>
-              <Card>
-                <CardContent className='p-4 text-center'>
-                  <div className='text-foreground text-2xl font-bold'>
-                    {totalScanCount}
-                  </div>
-                  <div className='text-muted-foreground text-sm'>
-                    Total Scanned
-                  </div>
-                </CardContent>
-              </Card>
-              <Card>
-                <CardContent className='p-4 text-center'>
-                  <div className='text-2xl font-bold text-green-600'>
-                    {successCount}
-                  </div>
-                  <div className='text-muted-foreground text-sm'>
-                    Successfully Waved
-                  </div>
-                </CardContent>
-              </Card>
-              <Card>
-                <CardContent className='p-4 text-center'>
-                  <div className='text-2xl font-bold text-red-600'>
-                    {errorCount}
-                  </div>
-                  <div className='text-muted-foreground text-sm'>Failed</div>
-                </CardContent>
-              </Card>
-            </div>
-          )}
-
-          {/* Recent Scans */}
-          {scannedDeliveries.length > 0 && (
-            <Card>
-              <CardContent className='p-4'>
-                <h4 className='mb-3 font-medium'>Recent Scans</h4>
-                <div className='max-h-40 space-y-2 overflow-y-auto'>
-                  {scannedDeliveries.slice(0, 8).map((scan) => (
-                    <div
-                      key={`${scan.deliveryNumber}-${scan.timestamp.getTime()}`}
-                      className='flex items-center justify-between rounded-lg border p-2'
-                    >
-                      <div className='flex items-center gap-3'>
-                        <Badge
-                          variant={scan.success ? 'default' : 'destructive'}
-                          className='w-16 justify-center'
-                        >
-                          {scan.success ? 'Waved' : 'Failed'}
-                        </Badge>
-                        <span className='font-mono text-sm'>
-                          {scan.deliveryNumber}
-                        </span>
-                      </div>
-                      <span className='text-muted-foreground text-xs'>
-                        {scan.timestamp.toLocaleTimeString()}
-                      </span>
+                {/* Auto-processing active indicator */}
+                {isAutoProcessing && (
+                  <div className='rounded-lg border-2 border-green-300 bg-green-100 p-3'>
+                    <div className='flex items-center justify-center gap-2 text-base font-semibold text-green-700'>
+                      <Loader2 className='h-5 w-5 animate-spin' />
+                      PROCESSING DELIVERY {deliveryNumber}...
                     </div>
-                  ))}
+                  </div>
+                )}
+
+                {/* Progress indicator */}
+                {deliveryNumber.length > 0 &&
+                  deliveryNumber.length < DELIVERY_NUMBER_LENGTH && (
+                    <div className='text-muted-foreground text-center text-sm'>
+                      {deliveryNumber.length} / {DELIVERY_NUMBER_LENGTH} digits
+                      entered
+                    </div>
+                  )}
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* Statistics */}
+        {scannedDeliveries.length > 0 && (
+          <div className='grid grid-cols-3 gap-4'>
+            <Card>
+              <CardContent className='p-4 text-center'>
+                <div className='text-foreground text-2xl font-bold'>
+                  {totalScanCount}
+                </div>
+                <div className='text-muted-foreground text-sm'>
+                  Total Scanned
                 </div>
               </CardContent>
             </Card>
-          )}
-        </div>
+            <Card>
+              <CardContent className='p-4 text-center'>
+                <div className='text-2xl font-bold text-green-600'>
+                  {successCount}
+                </div>
+                <div className='text-muted-foreground text-sm'>
+                  Successfully Waved
+                </div>
+              </CardContent>
+            </Card>
+            <Card>
+              <CardContent className='p-4 text-center'>
+                <div className='text-2xl font-bold text-red-600'>
+                  {errorCount}
+                </div>
+                <div className='text-muted-foreground text-sm'>Failed</div>
+              </CardContent>
+            </Card>
+          </div>
+        )}
 
-        <DialogFooter>
-          <Button variant='outline' onClick={handleClose}>
-            Close Scanner
-          </Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
+        {/* Recent Scans */}
+        {scannedDeliveries.length > 0 && (
+          <Card>
+            <CardContent className='p-4'>
+              <h4 className='mb-3 font-medium'>Recent Scans</h4>
+              <div className='max-h-40 space-y-2 overflow-y-auto'>
+                {scannedDeliveries.slice(0, 8).map((scan) => (
+                  <div
+                    key={`${scan.deliveryNumber}-${scan.timestamp.getTime()}`}
+                    className='flex items-center justify-between rounded-lg border p-2'
+                  >
+                    <div className='flex items-center gap-3'>
+                      <Badge
+                        variant={scan.success ? 'default' : 'destructive'}
+                        className='w-16 justify-center'
+                      >
+                        {scan.success ? 'Waved' : 'Failed'}
+                      </Badge>
+                      <span className='font-mono text-sm'>
+                        {scan.deliveryNumber}
+                      </span>
+                    </div>
+                    <span className='text-muted-foreground text-xs'>
+                      {scan.timestamp.toLocaleTimeString()}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            </CardContent>
+          </Card>
+        )}
+      </ResponsiveDialogBody>
+
+      <ResponsiveDialogFooter>
+        <Button variant='outline' onClick={handleClose}>
+          Close Scanner
+        </Button>
+      </ResponsiveDialogFooter>
+    </ResponsiveDialog>
   )
 }
+
+// Created and developed by Jai Singh

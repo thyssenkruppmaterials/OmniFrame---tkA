@@ -1,3 +1,4 @@
+// Created and developed by Jai Singh
 export interface MdmDevice {
   id: string
   organization_id: string
@@ -378,3 +379,5 @@ export interface DeviceHealthScore {
   connectivity: number
   os_currency: number
 }
+
+// Created and developed by Jai Singh

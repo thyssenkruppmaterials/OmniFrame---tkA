@@ -1,36 +1,43 @@
+// Created and developed by Jai Singh
 /**
- * Standard Work Dashboard Component
- * Enterprise-grade dashboard with KPI cards, task management, and progress tracking
- * Updated: February 8, 2026 - Complete redesign for modern enterprise experience
+ * Standard Work Dashboard
+ *
+ * Hosts the Checklist Dashboard. Layout (top to bottom):
+ *   1. Hero strip      -- greeting, summary, "Next up" pinned card, filter, refresh
+ *   2. KPI tile row    -- four refined tiles with mini-visualizations
+ *                          (progress ring, attention chip, weekly streak grid,
+ *                          on-time sparkline)
+ *   3. Main grid       -- 2/3 left column (Today's tasks + Upcoming schedule),
+ *                          1/3 right rail (My Progress + Recent Activity)
+ *
+ * All "today" metrics flow through `useStandardWorkOverview` so KPIs, list,
+ * and rail share a single source of truth and render an explicit error
+ * state instead of falling through to the success-empty path.
  */
-import { useState } from 'react'
-import {
-  ClipboardCheck,
-  Clock,
-  Filter,
-  Flame,
-  MapPin,
-  RefreshCw,
-  Target,
-  TrendingUp,
-} from 'lucide-react'
+import { useMemo, useState } from 'react'
+import { motion, useReducedMotion } from 'framer-motion'
+import { AlertCircle, RefreshCw } from 'lucide-react'
+import { useUnifiedAuth } from '@/lib/auth/unified-auth-provider'
 import { useLaborManagement } from '@/hooks/use-labor-management'
 import { useStandardWork } from '@/hooks/use-standard-work'
-import { Badge } from '@/components/ui/badge'
+import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select'
 import { Skeleton } from '@/components/ui/skeleton'
+import { useStandardWorkOverview } from '@/features/standard-work/hooks/use-standard-work-overview'
+import { DashboardHero } from './dashboard-hero'
+import {
+  AttentionTile,
+  OnTimeRateTile,
+  StreakTile,
+  TodayProgressTile,
+} from './kpi-tiles'
 import { ProgressStatsCard } from './progress-stats'
 import { SubmissionHistory } from './submission-history'
 import { TodayTasksSection } from './today-tasks'
 import { UpcomingTasksSection } from './upcoming-tasks'
+
+const UPCOMING_DAYS = 7
 
 interface StandardWorkDashboardProps {
   onStartChecklist: (templateId: string) => void
@@ -41,219 +48,151 @@ export function StandardWorkDashboard({
   onStartChecklist,
   onContinueChecklist,
 }: StandardWorkDashboardProps) {
+  const reduce = useReducedMotion()
+  const { authState } = useUnifiedAuth()
+  const profile = authState.profile
   const { workingAreas, areasLoading } = useLaborManagement()
-  const {
-    useDashboardTasks,
-    useUserProgress,
-    useUpcomingTasks,
-    todaySubmissions,
-  } = useStandardWork()
+  const { todaySubmissions, userDailyCompletion } = useStandardWork()
 
   const [selectedAreaId, setSelectedAreaId] = useState<string>('')
 
-  const {
-    data: dashboardTasks,
-    isLoading: tasksLoading,
-    refetch: refetchTasks,
-  } = useDashboardTasks(selectedAreaId || undefined)
+  const overview = useStandardWorkOverview({
+    workingAreaId: selectedAreaId || undefined,
+    upcomingDays: UPCOMING_DAYS,
+  })
 
-  const { data: userProgress, isLoading: progressLoading } = useUserProgress()
-  const { data: upcomingTasks, isLoading: upcomingLoading } = useUpcomingTasks(
-    7,
-    selectedAreaId || undefined
-  )
+  // Filter the org-wide daily completion table down to the current user's
+  // last 14 days for the streak grid and on-time sparkline. Non-blocking:
+  // if the query is still loading, the tiles render in a sensible fallback.
+  const userTrend = useMemo(() => {
+    const userId = profile?.id
+    if (!userId) return undefined
+    const row = userDailyCompletion.find((r) => r.user_id === userId)
+    return row?.daily_data
+      ?.slice()
+      .sort((a, b) => a.date.localeCompare(b.date))
+      .map((d) => ({ date: d.date, completed: d.completed }))
+  }, [profile?.id, userDailyCompletion])
 
-  const activeAreas = workingAreas.filter((a) => a.is_active)
-  const isLoading = areasLoading || tasksLoading
+  const isInitialLoading = areasLoading || overview.isLoading
+  const isError = !overview.isLoading && overview.isError
+  const { today, progress, buckets, upcoming } = overview
 
-  // Quick KPI calculations
-  const totalToday = dashboardTasks
-    ? dashboardTasks.overdue.length +
-      dashboardTasks.dueSoon.length +
-      dashboardTasks.upcoming.length +
-      dashboardTasks.completed.length
-    : 0
-  const completedToday = dashboardTasks?.completed.length || 0
-  const overdueToday = dashboardTasks?.overdue.length || 0
-
-  if (isLoading) {
+  if (isInitialLoading) {
     return (
       <div className='space-y-6'>
-        {/* KPI Skeletons */}
-        <div className='grid grid-cols-2 gap-4 md:grid-cols-4'>
+        <Skeleton className='h-[160px] rounded-2xl' />
+        <div className='grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4'>
           {[...Array(4)].map((_, i) => (
             <Card key={i}>
               <CardContent className='p-5'>
                 <Skeleton className='mb-2 h-4 w-20' />
-                <Skeleton className='h-8 w-12' />
+                <Skeleton className='h-8 w-16' />
+                <Skeleton className='mt-3 h-2 w-full' />
               </CardContent>
             </Card>
           ))}
         </div>
-        {/* Content Skeletons */}
         <div className='grid gap-6 lg:grid-cols-3'>
           <div className='space-y-6 lg:col-span-2'>
-            <Skeleton className='h-[350px] rounded-lg' />
-            <Skeleton className='h-[200px] rounded-lg' />
+            <Skeleton className='h-[350px] rounded-xl' />
+            <Skeleton className='h-[200px] rounded-xl' />
           </div>
           <div className='space-y-6'>
-            <Skeleton className='h-[280px] rounded-lg' />
-            <Skeleton className='h-[220px] rounded-lg' />
+            <Skeleton className='h-[280px] rounded-xl' />
+            <Skeleton className='h-[220px] rounded-xl' />
           </div>
         </div>
       </div>
     )
   }
 
+  // Canonical "today" metrics. Prefer server-side counts when available so
+  // the KPI tile and the rail "Today" row agree; fall back to live buckets.
+  const dueToday = progress?.due_today ?? today.total
+  const completedToday = progress?.completed_today ?? today.completed
+  const overdueCount = today.overdue
+  const dueSoonCount = today.dueSoon
+  const onTimeRate = progress?.on_time_rate ?? 100
+  const currentStreak = progress?.current_streak ?? 0
+  const longestStreak = progress?.longest_streak ?? 0
+
+  const nextOverdueLabel = buckets.overdue[0]?.template_name
+
   return (
-    <div className='space-y-6'>
-      {/* Quick KPI Strip */}
-      <div className='grid grid-cols-2 gap-4 md:grid-cols-4'>
-        <Card className='overflow-hidden'>
-          <CardContent className='p-5'>
-            <div className='flex items-center justify-between'>
-              <div>
-                <p className='text-muted-foreground text-xs font-medium tracking-wider uppercase'>
-                  Today's Tasks
-                </p>
-                <p className='mt-1 text-2xl font-bold'>{totalToday}</p>
-                <p className='text-muted-foreground mt-0.5 text-xs'>
-                  {completedToday} completed
-                </p>
-              </div>
-              <div className='bg-primary/10 flex h-10 w-10 items-center justify-center rounded-xl'>
-                <ClipboardCheck className='text-primary h-5 w-5' />
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-
-        <Card className='overflow-hidden'>
-          <CardContent className='p-5'>
-            <div className='flex items-center justify-between'>
-              <div>
-                <p className='text-muted-foreground text-xs font-medium tracking-wider uppercase'>
-                  Completion
-                </p>
-                <p className='mt-1 text-2xl font-bold'>
-                  {totalToday > 0
-                    ? Math.round((completedToday / totalToday) * 100)
-                    : 0}
-                  %
-                </p>
-                <p className='text-muted-foreground mt-0.5 text-xs'>
-                  {completedToday}/{totalToday} tasks
-                </p>
-              </div>
-              <div className='flex h-10 w-10 items-center justify-center rounded-xl bg-green-500/10'>
-                <Target className='h-5 w-5 text-green-500' />
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-
-        <Card className='overflow-hidden'>
-          <CardContent className='p-5'>
-            <div className='flex items-center justify-between'>
-              <div>
-                <p className='text-muted-foreground text-xs font-medium tracking-wider uppercase'>
-                  Streak
-                </p>
-                <p className='mt-1 text-2xl font-bold'>
-                  {userProgress?.current_streak || 0}
-                </p>
-                <p className='text-muted-foreground mt-0.5 text-xs'>
-                  consecutive days
-                </p>
-              </div>
-              <div className='flex h-10 w-10 items-center justify-center rounded-xl bg-orange-500/10'>
-                <Flame className='h-5 w-5 text-orange-500' />
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-
-        <Card className='overflow-hidden'>
-          <CardContent className='p-5'>
-            <div className='flex items-center justify-between'>
-              <div>
-                <p className='text-muted-foreground text-xs font-medium tracking-wider uppercase'>
-                  {overdueToday > 0 ? 'Overdue' : 'On-Time Rate'}
-                </p>
-                <p
-                  className={`mt-1 text-2xl font-bold ${overdueToday > 0 ? 'text-destructive' : ''}`}
-                >
-                  {overdueToday > 0
-                    ? overdueToday
-                    : `${userProgress?.on_time_rate || 100}%`}
-                </p>
-                <p className='text-muted-foreground mt-0.5 text-xs'>
-                  {overdueToday > 0 ? 'tasks need attention' : 'last 30 days'}
-                </p>
-              </div>
-              <div
-                className={`flex h-10 w-10 items-center justify-center rounded-xl ${
-                  overdueToday > 0 ? 'bg-destructive/10' : 'bg-blue-500/10'
-                }`}
-              >
-                {overdueToday > 0 ? (
-                  <Clock className='text-destructive h-5 w-5' />
-                ) : (
-                  <TrendingUp className='h-5 w-5 text-blue-500' />
-                )}
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-      </div>
-
-      {/* Filter Bar */}
-      <div className='flex flex-wrap items-center justify-between gap-3'>
-        <div className='flex items-center gap-3'>
-          <div className='text-muted-foreground flex items-center gap-2 text-sm'>
-            <Filter className='h-4 w-4' />
-            <span className='font-medium'>Filter</span>
-          </div>
-          <Select
-            value={selectedAreaId || '_all'}
-            onValueChange={(value) =>
-              setSelectedAreaId(value === '_all' ? '' : value)
-            }
-          >
-            <SelectTrigger className='h-9 w-[220px]'>
-              <MapPin className='text-muted-foreground mr-2 h-3.5 w-3.5' />
-              <SelectValue placeholder='All Working Areas' />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value='_all'>All Working Areas</SelectItem>
-              {activeAreas.map((area) => (
-                <SelectItem key={area.id} value={area.id}>
-                  {area.area_name}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-          {selectedAreaId && (
-            <Badge
-              variant='secondary'
-              className='cursor-pointer gap-1 text-xs'
-              onClick={() => setSelectedAreaId('')}
-            >
-              Filtered
-              <span className='text-muted-foreground'>×</span>
-            </Badge>
-          )}
-        </div>
-
-        <Button
-          variant='outline'
-          size='sm'
-          onClick={() => refetchTasks()}
-          className='h-9 gap-2'
+    <div className='space-y-6' aria-busy={overview.isRefetching}>
+      {/* Error banner -- renders alongside any partial success */}
+      {isError && (
+        <motion.div
+          initial={reduce ? false : { opacity: 0, y: -8 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.25 }}
         >
-          <RefreshCw className='h-3.5 w-3.5' />
-          Refresh
-        </Button>
+          <Alert variant='destructive'>
+            <AlertCircle className='h-4 w-4' />
+            <AlertDescription className='flex items-center justify-between gap-3'>
+              <span>
+                Some sections couldn't load.{' '}
+                {overview.errors.tasks?.message ||
+                  overview.errors.progress?.message ||
+                  overview.errors.upcoming?.message ||
+                  'Please retry.'}
+              </span>
+              <Button
+                size='sm'
+                variant='outline'
+                className='h-7'
+                onClick={() => overview.refetchAll()}
+              >
+                <RefreshCw className='mr-1.5 h-3 w-3' />
+                Retry
+              </Button>
+            </AlertDescription>
+          </Alert>
+        </motion.div>
+      )}
+
+      {/* Hero -- greeting + Next up + filter + refresh */}
+      <DashboardHero
+        userName={profile?.full_name ?? undefined}
+        buckets={{
+          overdue: buckets.overdue,
+          dueSoon: buckets.dueSoon,
+          laterToday: buckets.laterToday,
+          completed: buckets.completed,
+        }}
+        todaySubmissions={todaySubmissions}
+        totalToday={today.total}
+        completedToday={today.completed}
+        workingAreas={workingAreas}
+        selectedAreaId={selectedAreaId}
+        onAreaChange={setSelectedAreaId}
+        isRefetching={overview.isRefetching}
+        onRefresh={() => overview.refetchAll()}
+        onStartChecklist={onStartChecklist}
+        onContinueChecklist={onContinueChecklist}
+      />
+
+      {/* KPI tiles -- 4-up on xl, 2-up on tablets, stacked on mobile */}
+      <div className='grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4'>
+        <TodayProgressTile
+          index={0}
+          completed={completedToday}
+          due={dueToday}
+        />
+        <AttentionTile
+          index={1}
+          overdue={overdueCount}
+          dueSoon={dueSoonCount}
+          nextOverdueLabel={nextOverdueLabel}
+        />
+        <StreakTile
+          index={2}
+          current={currentStreak}
+          longest={longestStreak}
+          weeklyCompletion={userTrend}
+        />
+        <OnTimeRateTile index={3} rate={onTimeRate} trend={userTrend} />
       </div>
 
       {/* Main Dashboard Grid */}
@@ -261,28 +200,35 @@ export function StandardWorkDashboard({
         {/* Left Column - Primary Content */}
         <div className='space-y-6 lg:col-span-2'>
           <TodayTasksSection
-            tasks={
-              dashboardTasks || {
-                overdue: [],
-                dueSoon: [],
-                upcoming: [],
-                completed: [],
-              }
-            }
+            tasks={{
+              overdue: buckets.overdue,
+              dueSoon: buckets.dueSoon,
+              upcoming: buckets.laterToday,
+              completed: buckets.completed,
+            }}
             todaySubmissions={todaySubmissions}
             onStartChecklist={onStartChecklist}
             onContinueChecklist={onContinueChecklist}
+            isError={!!overview.errors.tasks}
           />
 
           <UpcomingTasksSection
-            upcomingTasks={upcomingTasks || []}
-            isLoading={upcomingLoading}
+            upcomingTasks={upcoming}
+            isLoading={false}
+            windowDays={UPCOMING_DAYS}
+            isError={!!overview.errors.upcoming}
+            onRetry={() => overview.refetchAll()}
           />
         </div>
 
         {/* Right Column - Stats & Activity */}
         <div className='space-y-6'>
-          <ProgressStatsCard stats={userProgress} isLoading={progressLoading} />
+          <ProgressStatsCard
+            stats={progress}
+            isLoading={false}
+            isError={!!overview.errors.progress}
+            onRetry={() => overview.refetchAll()}
+          />
           <SubmissionHistory submissions={todaySubmissions} limit={5} />
         </div>
       </div>
@@ -291,3 +237,5 @@ export function StandardWorkDashboard({
 }
 
 export default StandardWorkDashboard
+
+// Created and developed by Jai Singh

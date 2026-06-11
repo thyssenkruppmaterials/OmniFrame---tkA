@@ -1,3 +1,4 @@
+// Created and developed by Jai Singh
 import { useState, useEffect, useMemo } from 'react'
 import {
   Search,
@@ -455,3 +456,5 @@ function TemplateCard({
     </Card>
   )
 }
+
+// Created and developed by Jai Singh

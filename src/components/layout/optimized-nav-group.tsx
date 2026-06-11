@@ -1,8 +1,10 @@
+// Created and developed by Jai Singh
 import { ReactNode, useMemo } from 'react'
 import { Link, useLocation } from '@tanstack/react-router'
 import { motion } from 'framer-motion'
-import { ChevronRight } from 'lucide-react'
+import { ChevronRight, Pin, PinOff } from 'lucide-react'
 import { useNavigationStore } from '@/stores/navigationStore'
+import { cn } from '@/lib/utils'
 import { logger } from '@/lib/utils/logger'
 import { useOptimizedNavigationPermissions } from '@/hooks/use-optimized-navigation-permissions'
 import { useOptimizedRBAC } from '@/hooks/use-optimized-rbac'
@@ -31,6 +33,12 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '../ui/dropdown-menu'
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from '../ui/tooltip'
 import { NavCollapsible, NavItem, NavLink, type NavGroup } from './types'
 
 export function OptimizedNavGroup({ title, items }: NavGroup) {
@@ -201,6 +209,74 @@ const NavBadge = ({ children }: { children: ReactNode }) => (
   <Badge className='rounded-full px-1 py-0 text-xs'>{children}</Badge>
 )
 
+// Pin/lock toggle that appears just left of the chevron on collapsible
+// nav groups. Rendered as an ABSOLUTELY-positioned sibling of
+// `SidebarMenuButton` (not nested inside it) so it doesn't consume any
+// inline width — that was the bug that wrapped titles like "Warehouse
+// Cluster" / "Labor Management" onto two lines. Sitting outside the
+// trigger also means the pin click never bubbles into the collapsible's
+// open/close handler, and we can use a real `<button>` instead of a
+// `<span role="button">` (which would be required if it were nested
+// inside the trigger's `<button>`).
+//
+// Vertical anchor: `top-1.5` (a FIXED 6px offset from the top of the
+// `SidebarMenuItem`), NOT a percentage center. The `<li>` also wraps the
+// expanded `CollapsibleContent`, so `top-1/2 -translate-y-1/2` drifted the
+// pin into the middle of the open sub-menu (it floated next to the wrong
+// row). The header button is `h-8` (32px) and the pin is `size-5` (20px),
+// so a 6px top inset centers it within the header row whether the section
+// is open or closed.
+//
+// Horizontal: `right-7` (28px from the SidebarMenuItem's right edge). The
+// chevron sits inside the menu button with `p-2` right padding, so it
+// occupies ~8–24px from the right; the pin slots in at ~28–48px from
+// the right, just to the chevron's left. Hidden in icon-collapsed mode
+// where the dropdown variant is used instead. `after:-inset-1.5` widens
+// the touch target on coarse pointers (common on RF/operator devices)
+// without enlarging the visual footprint.
+function NavPinButton({
+  isPinned,
+  onToggle,
+  label,
+}: {
+  isPinned: boolean
+  onToggle: () => void
+  label: string
+}) {
+  const Icon = isPinned ? Pin : PinOff
+  return (
+    <TooltipProvider delayDuration={300}>
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <button
+            type='button'
+            aria-pressed={isPinned}
+            aria-label={
+              isPinned ? `Unpin ${label} section` : `Pin ${label} section open`
+            }
+            onClick={(e) => {
+              e.preventDefault()
+              e.stopPropagation()
+              onToggle()
+            }}
+            className={cn(
+              'hover:bg-sidebar-accent/60 absolute top-1.5 right-7 inline-flex size-5 items-center justify-center rounded-sm transition-opacity group-data-[collapsible=icon]:hidden after:absolute after:-inset-1.5',
+              isPinned
+                ? 'text-primary opacity-100'
+                : 'text-muted-foreground opacity-0 group-hover/navitem:opacity-70 hover:opacity-100 focus-visible:opacity-100'
+            )}
+          >
+            <Icon className='size-3.5' />
+          </button>
+        </TooltipTrigger>
+        <TooltipContent side='right' className='text-xs'>
+          {isPinned ? 'Unpin (auto-collapse)' : 'Pin section'}
+        </TooltipContent>
+      </Tooltip>
+    </TooltipProvider>
+  )
+}
+
 const SidebarMenuLink = ({ item, href }: { item: NavLink; href: string }) => {
   const { setOpenMobile } = useSidebar()
   return (
@@ -211,7 +287,7 @@ const SidebarMenuLink = ({ item, href }: { item: NavLink; href: string }) => {
         tooltip={item.title}
       >
         <Link to={item.url} onClick={() => setOpenMobile(false)}>
-          {item.icon && <item.icon />}
+          {item.icon && <item.icon {...({} as any)} />}
           <span>{item.title}</span>
           {item.badge && <NavBadge>{item.badge}</NavBadge>}
         </Link>
@@ -238,17 +314,32 @@ const SidebarMenuCollapsible = ({
     isLoading: isNavLoading,
     navigationPermissions: _collapsibleNavPerms,
   } = useOptimizedNavigationPermissions()
-  const { expandedGroups, setGroupExpanded } = useNavigationStore()
+  const { expandedGroups, pinnedGroups, setGroupExpanded, setGroupPinned } =
+    useNavigationStore()
 
   // Step 16: Determine open state from persisted store, falling back to active-child check
+  // Pin precedence: when a section is pinned, the saved expandedGroups value
+  // is authoritative and the route-driven auto-open is suppressed. This is
+  // what "lock open / lock closed" actually does for the user.
   const groupId = item.title
-  const isOpen =
-    expandedGroups[groupId] !== undefined
+  const isPinned = pinnedGroups[groupId] === true
+  const isOpen = isPinned
+    ? (expandedGroups[groupId] ?? checkIsActive(href, item, true))
+    : expandedGroups[groupId] !== undefined
       ? expandedGroups[groupId]
       : checkIsActive(href, item, true)
 
   const handleOpenChange = (open: boolean) => {
     setGroupExpanded(groupId, open)
+  }
+
+  // Pin button is a sibling of SidebarMenuButton (not nested inside the
+  // trigger), so its click never bubbles into the collapsible — no
+  // stopPropagation needed at the call site. We still capture the
+  // current `isOpen` when pinning so the section locks at whatever
+  // state the user is currently looking at, without flicker.
+  const handleTogglePin = () => {
+    setGroupPinned(groupId, !isPinned, isOpen)
   }
 
   // Memoize filtered sub-items to prevent recalculation
@@ -332,13 +423,13 @@ const SidebarMenuCollapsible = ({
       asChild
       open={isOpen}
       onOpenChange={handleOpenChange}
-      className='group/collapsible'
+      className='group/collapsible group/navitem'
     >
       <SidebarMenuItem>
         <CollapsibleTrigger asChild>
           <SidebarMenuButton tooltip={item.title}>
-            {item.icon && <item.icon />}
-            <span>{item.title}</span>
+            {item.icon && <item.icon {...({} as any)} />}
+            <span className='truncate'>{item.title}</span>
             {item.badge && <NavBadge>{item.badge}</NavBadge>}
             <motion.span
               className='ml-auto inline-flex'
@@ -349,6 +440,14 @@ const SidebarMenuCollapsible = ({
             </motion.span>
           </SidebarMenuButton>
         </CollapsibleTrigger>
+        {/* Pin button: absolute-positioned sibling so it doesn't squeeze
+            the title onto two lines. `SidebarMenuItem` is `relative`,
+            and the pin sits at `right-7`, just left of the chevron. */}
+        <NavPinButton
+          isPinned={isPinned}
+          onToggle={handleTogglePin}
+          label={item.title}
+        />
         <CollapsibleContent className='CollapsibleContent'>
           <SidebarMenuSub>
             {visibleSubItems.map((subItem, index) => (
@@ -369,7 +468,7 @@ const SidebarMenuCollapsible = ({
                     isActive={checkIsActive(href, subItem)}
                   >
                     <Link to={subItem.url} onClick={() => setOpenMobile(false)}>
-                      {subItem.icon && <subItem.icon />}
+                      {subItem.icon && <subItem.icon {...({} as any)} />}
                       <span>{subItem.title}</span>
                       {subItem.badge && <NavBadge>{subItem.badge}</NavBadge>}
                     </Link>
@@ -441,7 +540,7 @@ const SidebarMenuCollapsedDropdown = ({
             tooltip={item.title}
             isActive={checkIsActive(href, item)}
           >
-            {item.icon && <item.icon />}
+            {item.icon && <item.icon {...({} as any)} />}
             <span>{item.title}</span>
             {item.badge && <NavBadge>{item.badge}</NavBadge>}
             <ChevronRight className='ml-auto transition-transform duration-200 group-data-[state=open]/collapsible:rotate-90' />
@@ -458,7 +557,7 @@ const SidebarMenuCollapsedDropdown = ({
                 to={sub.url}
                 className={`${checkIsActive(href, sub) ? 'bg-secondary' : ''}`}
               >
-                {sub.icon && <sub.icon />}
+                {sub.icon && <sub.icon {...({} as any)} />}
                 <span className='max-w-52 text-wrap'>{sub.title}</span>
                 {sub.badge && (
                   <span className='ml-auto text-xs'>{sub.badge}</span>
@@ -482,3 +581,5 @@ function checkIsActive(href: string, item: NavItem, mainNav = false) {
       href.split('/')[1] === item?.url?.split('/')[1])
   )
 }
+
+// Created and developed by Jai Singh

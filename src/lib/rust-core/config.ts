@@ -1,3 +1,4 @@
+// Created and developed by Jai Singh
 /**
  * Rust Core Configuration Constants
  *
@@ -13,7 +14,7 @@ export const RUST_CORE_ENABLED =
 // Default to Railway production URL for development convenience
 export const RUST_CORE_URL =
   import.meta.env.VITE_RUST_CORE_URL ||
-  'https://your-rust-core-service.up.railway.app'
+  'https://rust-core-service-production.up.railway.app'
 
 /**
  * Query types currently supported by the Rust core service.
@@ -29,3 +30,5 @@ export const SUPPORTED_RUST_QUERIES = new Set([
   'lx03_statistics',
   'user_permissions',
 ])
+
+// Created and developed by Jai Singh

@@ -1,3 +1,4 @@
+// Created and developed by Jai Singh
 /**
  * Camera Alert Toast Component
  *
@@ -170,3 +171,5 @@ export function useShowCameraAlert() {
 
   return { showAlert }
 }
+
+// Created and developed by Jai Singh

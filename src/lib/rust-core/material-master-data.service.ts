@@ -1,3 +1,4 @@
+// Created and developed by Jai Singh
 /**
  * Rust-enabled Material Master Data Service
  *
@@ -349,4 +350,5 @@ export class RustMaterialMasterDataService {
 // Export singleton instance
 export const rustMaterialMasterDataService =
   RustMaterialMasterDataService.getInstance()
-// Developer and Creator: Jai Singh
+
+// Created and developed by Jai Singh

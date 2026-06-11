@@ -1,9 +1,9 @@
 [package]
 name = "rust-work-service"
-version = "0.1.0"
+version = "0.1.45"
 edition = "2021"
-description = "Work Management Service for OmniFrame - handles work queues, task assignment, worker sessions"
-authors = ["Jai Singh"]
+description = "Work Management Service for OneBox AI - handles work queues, task assignment, worker sessions"
+authors = ["OneBox AI Team"]
 
 [dependencies]
 # Web framework
@@ -13,11 +13,40 @@ tower = "0.4"
 tower-http = { version = "0.5", features = ["cors", "trace"] }
 
 # Database
-sqlx = { version = "0.7", features = ["postgres", "runtime-tokio", "tls-rustls", "uuid", "chrono", "json"] }
+# Pinned to =0.8.6 (2026-05-20) to:
+#   - close RUSTSEC-2024-0363 (Postgres protocol PoC against 0.7.x),
+#   - pick up the `fetch_optional` connection-leak fix (sqlx #3194),
+#   - pick up `PgListener::recv` cancellation safety (sqlx #3467),
+#   - pick up TLS unclean-shutdown handling (sqlx #3191) for our
+#     long-lived Supabase TLS listener connections,
+#   - and unlock PR #3863 (unnamed prepared statement when
+#     `persistent(false)`) — the foundation for future Supavisor
+#     transaction-mode pooling on `db_pool`.
+# `runtime-tokio` + `tls-rustls` are the soft-deprecated aliases in
+# 0.8.x but still compile; kept to minimise diff churn.
+sqlx = { version = "=0.8.6", features = ["postgres", "runtime-tokio", "tls-rustls", "uuid", "chrono", "json"] }
 
 # Redis connection pooling
 bb8 = "0.8"
 bb8-redis = "0.16"
+
+# In-process async cache (2026-05-31) — L1 cache in front of the
+# rust-core-service JWT-validation HTTP round-trip. `AuthClient` caches
+# successful `validate-with-profile` results for a short TTL
+# (`AUTH_CACHE_TTL_SECS`, default 30s) so the hottest inter-service hop
+# is skipped on cache hits. Only SUCCESSES are cached; failures and
+# revocations are re-checked on the next request (bounded staleness =
+# the TTL). Pure-Rust, no system libs (clean on the glibc/bookworm
+# Docker build).
+moka = { version = "0.12", features = ["future"] }
+
+# Global allocator (2026-05-31) — mimalloc replaces the system glibc
+# allocator process-wide. This is the most allocation-heavy service in
+# the fleet (per-subscriber WsEvent clone+serialize broadcast fan-out,
+# per-NOTIFY-frame deserialize, per-request JSON), so the allocator swap
+# is the cleanest single throughput/RSS win. Vendored C, compiles with
+# the existing builder toolchain — no Dockerfile change, no musl concern.
+mimalloc = "0.1"
 
 # HTTP client
 reqwest = { version = "0.11", features = ["json"] }
@@ -51,6 +80,29 @@ uuid = { version = "1", features = ["v4", "serde"] }
 
 # DateTime
 chrono = { version = "0.4", features = ["serde"] }
+
+# Work Engine Foundation (Phase 2) — strategy traits, WS subscribe-token,
+# idempotency middleware request hashing.
+async-trait = "0.1"
+hmac = "0.12"
+sha2 = "0.10"
+base64 = "0.22"
+
+# Phase 12 — Prometheus exporter (Item 14). The crate carries the
+# `process` feature so default process collectors (CPU, RSS, fds) ride
+# alongside our custom metrics.
+prometheus = { version = "0.13", features = ["process"] }
+lazy_static = "1.4"
+
+# Phase 10 (rust-work-service integration plan, 2026-05-07) — agent
+# identity v2. Argon2id hashes the agent service keys before they
+# touch the DB; jsonwebtoken issues + verifies the short-lived
+# `kind: "agent"` JWTs locally (HS256 against
+# `WORK_SERVICE_AGENT_JWT_SECRET`); `rand` mints the 32-byte
+# `omni_sk_*` plaintext keys at registration time.
+argon2 = "0.5"
+jsonwebtoken = "9"
+rand = "0.8"
 
 [profile.release]
 opt-level = 3

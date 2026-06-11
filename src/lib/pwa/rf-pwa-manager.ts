@@ -1,3 +1,4 @@
+// Created and developed by Jai Singh
 import { logger } from '@/lib/utils/logger'
 
 /**
@@ -93,7 +94,7 @@ export class RFPWAManager {
     if (!head.querySelector('link[rel="apple-touch-icon"]')) {
       const appleTouchIcon = document.createElement('link')
       appleTouchIcon.rel = 'apple-touch-icon'
-      appleTouchIcon.href = '/images/favicon.svg'
+      appleTouchIcon.href = '/images/OneBoxLogoX.png'
       head.appendChild(appleTouchIcon)
     }
 
@@ -225,4 +226,5 @@ export class RFPWAManager {
 
 // Export singleton instance
 export const rfPWAManager = RFPWAManager.getInstance()
-// Developer and Creator: Jai Singh
+
+// Created and developed by Jai Singh

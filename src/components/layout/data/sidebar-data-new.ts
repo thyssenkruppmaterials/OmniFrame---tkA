@@ -1,3 +1,4 @@
+// Created and developed by Jai Singh
 import {
   IconBarrierBlock,
   IconBrowserCheck,
@@ -20,7 +21,7 @@ import {
 } from '@tabler/icons-react'
 import { AudioWaveform, GalleryVerticalEnd } from 'lucide-react'
 import { useSupabaseAuth } from '@/stores/supabaseAuthStore'
-import OmniFrameLogo from '@/components/ui/omniframe-logo'
+import OmniFrameLogo from '@/components/ui/onebox-logo'
 import { type SidebarData } from '../types'
 
 // Function to get sidebar data based on user authentication
@@ -70,7 +71,7 @@ export const getSidebarData = (): SidebarData => {
         plan: 'Enterprise',
       },
       {
-        name: 'OmniFrame',
+        name: 'j.AI',
         logo: AudioWaveform,
         plan: 'Startup',
       },
@@ -275,3 +276,5 @@ export const getSidebarData = (): SidebarData => {
 
 // For backward compatibility - dynamically generated
 export const sidebarData: SidebarData = getSidebarData()
+
+// Created and developed by Jai Singh

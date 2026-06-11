@@ -1,3 +1,4 @@
+// Created and developed by Jai Singh
 //! JWT claims structures for Supabase tokens
 
 use serde::{Deserialize, Serialize};
@@ -138,3 +139,5 @@ mod tests {
         assert!(claims.expires_within(std::time::Duration::from_secs(7200)));
     }
 }
+
+// Created and developed by Jai Singh

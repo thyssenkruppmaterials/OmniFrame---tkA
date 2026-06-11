@@ -1,3 +1,4 @@
+// Created and developed by Jai Singh
 import { useState, useEffect } from 'react'
 import { formatDistanceToNow } from 'date-fns'
 import {
@@ -621,3 +622,5 @@ export function RBACAuditLog({
     </PermissionGuard>
   )
 }
+
+// Created and developed by Jai Singh

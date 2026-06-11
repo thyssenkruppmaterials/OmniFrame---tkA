@@ -1,3 +1,4 @@
+// Created and developed by Jai Singh
 import { useEffect, useState } from 'react'
 import { Loader2, Shield, AlertTriangle } from 'lucide-react'
 import { rbacService } from '@/lib/auth/rbac-service'
@@ -228,3 +229,5 @@ export function RBACAccessControl({
     </div>
   )
 }
+
+// Created and developed by Jai Singh

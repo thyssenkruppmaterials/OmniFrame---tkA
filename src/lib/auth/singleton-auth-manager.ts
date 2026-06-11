@@ -1,3 +1,4 @@
+// Created and developed by Jai Singh
 /**
  * Singleton Authentication Manager
  *
@@ -12,7 +13,7 @@
  * ✅ All existing functionality preserved (87 permissions + 34 navigation + 52 tabs)
  * ✅ Battle-test resilient (multiple hard refresh stability)
  *
- * @author Jai Singh
+ * @author OmniFrame Team
  * @date 2025-01-21
  * @version 2.0.0 - Comprehensive Authentication Redesign
  */
@@ -28,7 +29,7 @@ import { logger } from '@/lib/utils/logger'
 // HMR-resistant global state using window object - survives hot reloads completely
 declare global {
   interface Window {
-    __OMNIFRAME_AUTH_SINGLETON__?: {
+    __ONEBOX_AUTH_SINGLETON__?: {
       instance: SingletonAuthManager | null
       isInitializing: boolean
       hasInitialized: boolean
@@ -39,8 +40,8 @@ declare global {
 }
 
 // Initialize global state if not exists (HMR-resistant)
-if (typeof window !== 'undefined' && !window.__OMNIFRAME_AUTH_SINGLETON__) {
-  window.__OMNIFRAME_AUTH_SINGLETON__ = {
+if (typeof window !== 'undefined' && !window.__ONEBOX_AUTH_SINGLETON__) {
+  window.__ONEBOX_AUTH_SINGLETON__ = {
     instance: null,
     isInitializing: false,
     hasInitialized: false,
@@ -181,7 +182,7 @@ export class SingletonAuthManager {
       )
     }
 
-    const globalState = window.__OMNIFRAME_AUTH_SINGLETON__!
+    const globalState = window.__ONEBOX_AUTH_SINGLETON__!
 
     // TRUE HMR protection - check window-level state
     if (globalState.isInitializing) {
@@ -1266,7 +1267,7 @@ export class SingletonAuthManager {
 
       // Reset global window state (HMR-resistant)
       if (isBrowser) {
-        const globalState = window.__OMNIFRAME_AUTH_SINGLETON__
+        const globalState = window.__ONEBOX_AUTH_SINGLETON__
         if (globalState) {
           globalState.hasInitialized = false
           globalState.clientInstance = null
@@ -1288,4 +1289,5 @@ export const singletonAuthManager = isBrowser
 
 // Export types for external use
 export type { AuthManagerConfig, AuthState }
-// Developer and Creator: Jai Singh
+
+// Created and developed by Jai Singh

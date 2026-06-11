@@ -1,3 +1,4 @@
+// Created and developed by Jai Singh
 import { createFileRoute } from '@tanstack/react-router'
 import CacheManagement from '@/components/settings/cache-management'
 import ContentSection from '@/features/settings/components/content-section'
@@ -16,4 +17,5 @@ function SettingsCache() {
     </ContentSection>
   )
 }
-// Developer and Creator: Jai Singh
+
+// Created and developed by Jai Singh

@@ -1,3 +1,4 @@
+// Created and developed by Jai Singh
 //! SmartSheet API Client
 //!
 //! High-performance async HTTP client for SmartSheet API.
@@ -1051,3 +1052,5 @@ mod tests {
         assert_eq!(values[1], "42");
     }
 }
+
+// Created and developed by Jai Singh

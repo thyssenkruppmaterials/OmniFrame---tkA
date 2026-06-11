@@ -1,3 +1,4 @@
+// Created and developed by Jai Singh
 import React, { Suspense } from 'react'
 import { Loader2 } from 'lucide-react'
 import { useTabSearchParam } from '@/hooks/use-tab-search-param'
@@ -108,3 +109,5 @@ export default function InboundManagement() {
     </>
   )
 }
+
+// Created and developed by Jai Singh

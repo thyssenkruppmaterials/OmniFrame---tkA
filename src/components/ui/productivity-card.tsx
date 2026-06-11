@@ -1,3 +1,4 @@
+// Created and developed by Jai Singh
 /**
  * RF Productivity Card Component
  * Reusable stat card component for displaying productivity metrics in RF interface
@@ -15,7 +16,7 @@ function cn(...inputs: any[]) {
 
 export interface ProductivityCardProps {
   title: string
-  icon: React.ElementType
+  icon: React.ComponentType<{ className?: string }>
   count: number | null
   isLoading?: boolean
   error?: string | null
@@ -128,8 +129,8 @@ export const ProductivityCard: React.FC<ProductivityCardProps> = ({
           )}
         </div>
 
-        <div className='flex items-center justify-between'>
-          <div className='flex-1'>
+        <div className='flex items-center justify-between gap-2'>
+          <div className='min-w-0 flex-1'>
             {isLoading ? (
               <div className='flex items-center space-x-2'>
                 <Loader2 className={cn('h-5 w-5 animate-spin', styles.icon)} />
@@ -152,22 +153,24 @@ export const ProductivityCard: React.FC<ProductivityCardProps> = ({
                 </span>
               </div>
             ) : (
-              <div className='space-y-1'>
+              <div className='min-w-0 space-y-1'>
                 <div
                   className={cn(
-                    'text-2xl leading-none font-bold',
+                    'min-w-0 truncate text-2xl leading-none font-bold tabular-nums',
                     styles.count
                   )}
+                  title={count !== null ? String(count) : '-'}
                 >
                   {count !== null ? count.toLocaleString() : '-'}
                 </div>
                 {description && (
                   <div
                     className={cn(
-                      'text-xs leading-tight',
+                      'min-w-0 truncate text-xs leading-tight',
                       styles.header,
                       'opacity-75'
                     )}
+                    title={description}
                   >
                     {description}
                   </div>
@@ -182,3 +185,5 @@ export const ProductivityCard: React.FC<ProductivityCardProps> = ({
 }
 
 export default ProductivityCard
+
+// Created and developed by Jai Singh

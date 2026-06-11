@@ -1,4 +1,5 @@
-import { createFileRoute, redirect } from '@tanstack/react-router'
+// Created and developed by Jai Singh
+import { createFileRoute, isRedirect, redirect } from '@tanstack/react-router'
 import { authService } from '@/lib/auth/auth-service'
 import { logger } from '@/lib/utils/logger'
 import { AuthenticatedLayout } from '@/components/layout/authenticated-layout'
@@ -77,7 +78,7 @@ export const Route = createFileRoute('/_authenticated')({
       }
     } catch (error) {
       // If it's already a redirect, re-throw it
-      if (error && typeof error === 'object' && 'href' in error) {
+      if (isRedirect(error)) {
         throw error
       }
 
@@ -96,4 +97,5 @@ export const Route = createFileRoute('/_authenticated')({
   },
   component: AuthenticatedLayout,
 })
-// Developer and Creator: Jai Singh
+
+// Created and developed by Jai Singh

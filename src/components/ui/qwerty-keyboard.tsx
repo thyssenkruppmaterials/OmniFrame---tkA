@@ -1,3 +1,4 @@
+// Created and developed by Jai Singh
 /**
  * QWERTY Keyboard Component
  *
@@ -181,3 +182,5 @@ export const QWERTYKeyboard: React.FC<QWERTYKeyboardProps> = ({
     </div>
   )
 }
+
+// Created and developed by Jai Singh

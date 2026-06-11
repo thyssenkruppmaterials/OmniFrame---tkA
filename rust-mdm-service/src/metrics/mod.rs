@@ -1,3 +1,4 @@
+// Created and developed by Jai Singh
 use metrics_exporter_prometheus::{Matcher, PrometheusBuilder, PrometheusHandle};
 use std::time::Duration;
 
@@ -72,3 +73,5 @@ pub fn set_command_queue_depth(depth: f64) {
 pub fn set_connected_devices(count: f64) {
     metrics::gauge!("mdm.devices.connected").set(count);
 }
+
+// Created and developed by Jai Singh

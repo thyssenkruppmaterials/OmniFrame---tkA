@@ -1,3 +1,4 @@
+// Created and developed by Jai Singh
 //! Authentication-related database models
 
 use chrono::{DateTime, Utc};
@@ -89,3 +90,5 @@ pub struct Organization {
     pub settings: Option<serde_json::Value>,
     pub status: Option<String>,
 }
+
+// Created and developed by Jai Singh

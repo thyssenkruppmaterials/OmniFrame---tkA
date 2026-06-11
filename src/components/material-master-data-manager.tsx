@@ -1,3 +1,4 @@
+// Created and developed by Jai Singh
 import React, { useState, useMemo, useCallback, useRef, useEffect } from 'react'
 import {
   Upload,
@@ -905,3 +906,5 @@ const MaterialMasterDataManager: React.FC<MaterialMasterDataManagerProps> =
 MaterialMasterDataManager.displayName = 'MaterialMasterDataManager'
 
 export default MaterialMasterDataManager
+
+// Created and developed by Jai Singh

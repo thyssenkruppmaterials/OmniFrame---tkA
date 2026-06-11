@@ -1,4 +1,4 @@
-# OmniFrame Logistics FastAPI - Installation Guide
+# OneBox AI Logistics FastAPI - Installation Guide
 
 ## 🚀 Complete Installation & Setup
 
@@ -25,7 +25,7 @@ cp env_config.txt .env
 **Your `.env` should contain:**
 ```bash
 # FastAPI Configuration
-API_APP_NAME=OmniFrame Logistics API
+API_APP_NAME=OneBox AI Logistics API
 API_APP_VERSION=1.0.0
 API_DEBUG=true
 API_HOST=0.0.0.0
@@ -56,7 +56,7 @@ python scripts/test_connection.py
 
 **Expected Output:**
 ```
-🧪 OmniFrame Logistics FastAPI - Connection Test
+🧪 OneBox AI Logistics FastAPI - Connection Test
 🔗 Testing Supabase Connection...
 ✅ Basic connection established
 ✅ Organizations table accessible: 1 record(s)

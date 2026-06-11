@@ -1,3 +1,4 @@
+// Created and developed by Jai Singh
 /**
  * Route Guard Component
  * Permission-based route protection with automatic redirects
@@ -254,3 +255,5 @@ export function useRouteGuard() {
 
 // Export all components
 export default RouteGuard
+
+// Created and developed by Jai Singh

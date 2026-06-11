@@ -1,3 +1,4 @@
+// Created and developed by Jai Singh
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 
 export function RecentSales() {
@@ -81,3 +82,5 @@ export function RecentSales() {
     </div>
   )
 }
+
+// Created and developed by Jai Singh

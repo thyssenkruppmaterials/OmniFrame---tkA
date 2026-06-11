@@ -1,3 +1,4 @@
+// Created and developed by Jai Singh
 import { logger } from '@/lib/utils/logger'
 
 /**
@@ -124,4 +125,5 @@ export async function getMigrationStatus(): Promise<{
     }
   }
 }
-// Developer and Creator: Jai Singh
+
+// Created and developed by Jai Singh

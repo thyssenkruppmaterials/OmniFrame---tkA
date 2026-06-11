@@ -1,3 +1,4 @@
+// Created and developed by Jai Singh
 import {
   Users,
   UserCheck,
@@ -459,3 +460,5 @@ export default function UserManagement() {
     </UserManagementProvider>
   )
 }
+
+// Created and developed by Jai Singh

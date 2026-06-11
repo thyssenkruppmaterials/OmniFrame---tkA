@@ -1,3 +1,4 @@
+# Created and developed by Jai Singh
 """
 FastAPI router for proxying external file downloads.
 Bypasses CORS restrictions when fetching attachments from Smartsheet/S3.
@@ -342,4 +343,4 @@ async def proxy_attachment_head(
         logger.error(f"HEAD request failed: {str(e)}")
         raise sanitized_error(502, public_message="HEAD request failed.", exc=e, context="proxy attachment HEAD")
 
-# Developer and Creator: Jai Singh
+# Created and developed by Jai Singh

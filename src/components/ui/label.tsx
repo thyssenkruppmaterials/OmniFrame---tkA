@@ -1,3 +1,4 @@
+// Created and developed by Jai Singh
 'use client'
 
 import * as React from 'react'
@@ -21,3 +22,5 @@ function Label({
 }
 
 export { Label }
+
+// Created and developed by Jai Singh

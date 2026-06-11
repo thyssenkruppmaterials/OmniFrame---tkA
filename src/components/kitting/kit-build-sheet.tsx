@@ -1,3 +1,4 @@
+// Created and developed by Jai Singh
 /**
  * Kit Build Sheet Component
  * Printable document for kit assembly matching the production layout
@@ -6,12 +7,13 @@
  * @component
  * Created: December 19, 2025
  */
-import { useState, useCallback, useEffect, useRef } from 'react'
+import { useState, useCallback, useEffect, useMemo, useRef } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { AlertCircle, Loader2, Printer, X } from 'lucide-react'
 import QRCode from 'qrcode'
 import { RRKittingDataService } from '@/lib/supabase/rr-kitting-data.service'
 import { logger } from '@/lib/utils/logger'
+import { useKittingOptions } from '@/hooks/use-kitting-options'
 import { Button } from '@/components/ui/button'
 import {
   Dialog,
@@ -53,6 +55,9 @@ interface AuthorizedShipShortItem {
   lineNumber: number
   partNumber: string
   description: string
+  // Display name of the operator who authorized the ship-short (migration 101
+  // format). May be null for legacy items authorized before this was stamped.
+  authorizedBy?: string | null
 }
 
 interface KitBuildSheetData {
@@ -67,6 +72,9 @@ interface KitBuildSheetData {
   priority: number
   addedBy: string | null
   addedAt: string | null
+  kitCartColor: string | null
+  kitContainerType: string | null
+  chargeCode: string | null
   toLines: TOLine[]
   incoraItems: IncoraItem[]
   authorizedShipShortItems: AuthorizedShipShortItem[]
@@ -76,6 +84,11 @@ interface KitBuildSheetProps {
   open: boolean
   onOpenChange: (open: boolean) => void
   kitPoNumber: string | null
+  // Optional kit serial. When provided the sheet loads the specific kit
+  // by serial so a PO covering multiple kits reprints the exact kit the
+  // caller opened (multi-kit-per-PO correctness — see [[Kit-Serial-Scoping]]).
+  // Falls back to PO resolution when omitted (e.g. the kanban Start-Kit flow).
+  kitSerialNumber?: string | null
 }
 
 // Generate a random Visiprise number for tracking
@@ -87,27 +100,62 @@ export function KitBuildSheet({
   open,
   onOpenChange,
   kitPoNumber,
+  kitSerialNumber = null,
 }: KitBuildSheetProps) {
+  const { activeOptionsByGroup } = useKittingOptions()
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [kitData, setKitData] = useState<KitBuildSheetData | null>(null)
   const [visipriseNumber] = useState(() => generateVisiprise())
   const [qrCodeDataUrl, setQrCodeDataUrl] = useState<string | null>(null)
+  // Code128 barcode data URLs keyed by TO number so each TO line on the
+  // printed build sheet is individually scannable. Generated lazily (jsbarcode
+  // is dynamically imported) and rendered as <img> so they survive the
+  // innerHTML copy into the print window.
+  const [toBarcodes, setToBarcodes] = useState<Record<string, string>>({})
   const printRef = useRef<HTMLDivElement>(null)
+  const containerTypeLabelMap = useMemo(
+    () =>
+      Object.fromEntries(
+        (activeOptionsByGroup.kit_container_type ?? []).map((option) => [
+          option.option_value,
+          option.option_label,
+        ])
+      ) as Record<string, string>,
+    [activeOptionsByGroup.kit_container_type]
+  )
+  const chargeCodeLabelMap = useMemo(
+    () =>
+      Object.fromEntries(
+        (activeOptionsByGroup.charge_code ?? []).map((option) => [
+          option.option_value,
+          option.option_label,
+        ])
+      ) as Record<string, string>,
+    [activeOptionsByGroup.charge_code]
+  )
 
   // Track which kit we've already loaded to prevent re-fetching
   const loadedKitPoRef = useRef<string | null>(null)
 
   // Load kit data when dialog opens
   const loadKitData = useCallback(async () => {
-    if (!kitPoNumber) return
+    // Prefer the globally-unique kit serial so a PO covering multiple
+    // kits reprints the exact kit the caller opened (see
+    // [[Kit-Serial-Scoping]]). Fall back to the PO for legacy callers
+    // (e.g. the kanban Start-Kit flow) that only pass a PO.
+    const loadKey = kitSerialNumber ?? kitPoNumber
+    if (!loadKey) return
 
     setLoading(true)
     setError(null)
 
     try {
-      const details =
-        await RRKittingDataService.getKitBuildPlanDetails(kitPoNumber)
+      const details = kitSerialNumber
+        ? await RRKittingDataService.getKitBuildPlanDetailsBySerialNumber(
+            kitSerialNumber
+          )
+        : await RRKittingDataService.getKitBuildPlanDetails(loadKey)
 
       if (details) {
         setKitData({
@@ -122,6 +170,9 @@ export function KitBuildSheet({
           priority: details.priority,
           addedBy: details.addedBy,
           addedAt: details.addedAt,
+          kitCartColor: details.kitCartColor || null,
+          kitContainerType: details.kitContainerType || null,
+          chargeCode: details.chargeCode || null,
           toLines: details.toLines.map((line) => ({
             id: line.id,
             transferOrderNumber: line.transferOrderNumber,
@@ -136,11 +187,21 @@ export function KitBuildSheet({
           incoraItems: details.incoraItems || [],
           authorizedShipShortItems: details.authorizedShipShortItems || [],
         })
-        loadedKitPoRef.current = kitPoNumber
+        loadedKitPoRef.current = loadKey
 
-        // Generate QR code for the kit PO number
+        // Encode the `kit_serial_number` (globally unique PK on
+        // RR_Kitting_DATA, format `KIT-YYYYMMDD-NNN`) in the QR — the
+        // RF Kit Picking entry point now smart-detects on the serial
+        // prefix and drops the operator straight into picking when
+        // they scan the QR, bypassing the legacy Select-a-Kit
+        // disambiguation step that fired for any PO covering more
+        // than one kit. The kit PO number stays human-readable on the
+        // sheet (it's still used by downstream SAP processes).
+        // Fall back to the PO if a legacy kit has no serial yet so
+        // existing printed sheets continue to scan.
+        const qrPayload = details.kitSerialNumber || details.kitPoNumber
         try {
-          const qrDataUrl = await QRCode.toDataURL(details.kitPoNumber, {
+          const qrDataUrl = await QRCode.toDataURL(qrPayload, {
             width: 80,
             margin: 1,
             color: {
@@ -153,6 +214,54 @@ export function KitBuildSheet({
           logger.error('Error generating QR code:', qrErr)
           // Don't fail the whole load if QR generation fails
         }
+
+        // Generate a scannable Code128 barcode for each unique TO number so
+        // the printed sheet can be scanned line-by-line. jsbarcode is
+        // dynamically imported to keep it out of the eager kitting bundle.
+        try {
+          const uniqueTOs = [
+            ...new Set(
+              details.toLines
+                .map((line) => line.transferOrderNumber)
+                .filter((to): to is string => Boolean(to))
+            ),
+          ]
+          if (uniqueTOs.length > 0) {
+            const { default: JsBarcode } = await import('jsbarcode')
+            const barcodeMap: Record<string, string> = {}
+            for (const to of uniqueTOs) {
+              try {
+                const canvas = document.createElement('canvas')
+                JsBarcode(canvas, to, {
+                  format: 'CODE128',
+                  // Integer module width only: fractional widths (e.g. 1.4)
+                  // get anti-aliased on the canvas, distorting the bar-width
+                  // ratios Code128 relies on — the result looks fine but does
+                  // not decode. Generated at 2x the 28px display height so the
+                  // <img> downscales cleanly and stays crisp when printed.
+                  width: 2,
+                  height: 56,
+                  displayValue: false,
+                  margin: 0,
+                  // Code128 requires a >=10-module quiet zone on each side;
+                  // bake it into the PNG so scanning never depends on the
+                  // surrounding table-cell whitespace.
+                  marginLeft: 20,
+                  marginRight: 20,
+                  background: '#ffffff',
+                  lineColor: '#000000',
+                })
+                barcodeMap[to] = canvas.toDataURL('image/png')
+              } catch (barErr) {
+                logger.error(`Error generating barcode for TO ${to}:`, barErr)
+              }
+            }
+            setToBarcodes(barcodeMap)
+          }
+        } catch (barImportErr) {
+          logger.error('Error loading barcode generator:', barImportErr)
+          // Non-fatal: the sheet still prints with TO numbers, just no barcodes
+        }
       } else {
         setError('Failed to load kit data')
       }
@@ -162,12 +271,13 @@ export function KitBuildSheet({
     } finally {
       setLoading(false)
     }
-  }, [kitPoNumber])
+  }, [kitPoNumber, kitSerialNumber])
 
   useEffect(() => {
-    if (open && kitPoNumber) {
+    const loadKey = kitSerialNumber ?? kitPoNumber
+    if (open && loadKey) {
       // Only load if we haven't loaded this kit yet
-      if (loadedKitPoRef.current !== kitPoNumber) {
+      if (loadedKitPoRef.current !== loadKey) {
         loadKitData()
       }
     } else if (!open) {
@@ -175,10 +285,11 @@ export function KitBuildSheet({
       setKitData(null)
       setError(null)
       setQrCodeDataUrl(null)
+      setToBarcodes({})
       loadedKitPoRef.current = null
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [open, kitPoNumber])
+  }, [open, kitPoNumber, kitSerialNumber])
 
   // Handle print - open a new window with just the build sheet content
   const handlePrint = useCallback((e: React.MouseEvent) => {
@@ -217,9 +328,12 @@ export function KitBuildSheet({
               print-color-adjust: exact !important;
             }
             @page {
-              size: A4 landscape;
-              margin: 0.5cm;
+              /* Normal 8.5 x 11 sheet, landscape. */
+              size: 11in 8.5in;
+              margin: 0.4cm;
             }
+            #print-scale-wrapper { overflow: hidden; }
+            #print-root { transform-origin: top left; }
             /* Tailwind-like utility classes */
             .flex { display: flex; }
             .flex-1 { flex: 1; }
@@ -300,29 +414,96 @@ export function KitBuildSheet({
           </style>
         </head>
         <body>
-          ${printContent}
+          <div id="print-scale-wrapper">
+            <div id="print-root">
+              ${printContent}
+            </div>
+          </div>
         </body>
       </html>
     `)
 
     printWindow.document.close()
 
-    // Wait for content to load then print
-    printWindow.onload = () => {
+    // Scale the rendered sheet down to fit a single Letter-landscape page.
+    // The cover sheet grows with the number of TO / ship-short rows, so rather
+    // than hand-tuning sizes we measure the content at the printable width and
+    // shrink it uniformly to fit the printable box (never scaling up).
+    const fitToPage = () => {
+      try {
+        const doc = printWindow.document
+        const root = doc.getElementById('print-root')
+        const wrapper = doc.getElementById('print-scale-wrapper')
+        if (!root || !wrapper) return
+
+        const DPI = 96
+        const marginPx = (0.4 / 2.54) * DPI // @page margin (0.4cm) in px
+        const safetyPx = 2 // guard against rounding so nothing clips
+        const availW = 11 * DPI - 2 * marginPx - safetyPx // 8.5x11 landscape
+        const availH = 8.5 * DPI - 2 * marginPx - safetyPx
+
+        // Lay the content out at the printable width so the measurement
+        // matches the printed layout regardless of the popup window's size.
+        root.style.width = `${availW}px`
+        root.style.transformOrigin = 'top left'
+
+        const contentW = root.scrollWidth
+        const contentH = root.scrollHeight
+        const scale = Math.min(availW / contentW, availH / contentH, 1)
+
+        root.style.transform = `scale(${scale})`
+        // Collapse the wrapper to the scaled footprint — a CSS transform does
+        // not shrink the layout box, so without this the original full-size
+        // box would still spill onto a second page.
+        wrapper.style.width = `${contentW * scale}px`
+        wrapper.style.height = `${contentH * scale}px`
+      } catch (fitErr) {
+        logger.error('Error fitting cover sheet to page:', fitErr)
+      }
+    }
+
+    let hasPrinted = false
+    const printOnce = () => {
+      if (hasPrinted) return
+      hasPrinted = true
+      fitToPage()
       printWindow.focus()
       printWindow.print()
       // Close the window after printing (or if cancelled)
       printWindow.onafterprint = () => printWindow.close()
     }
 
-    // Fallback for browsers that don't support onload properly
-    setTimeout(() => {
-      printWindow.focus()
-      printWindow.print()
-    }, 250)
+    // Print after content loads; fall back to a timer for browsers that don't
+    // fire onload reliably for document.write content.
+    printWindow.onload = printOnce
+    setTimeout(printOnce, 300)
   }, [])
 
-  // Get program color based on engine program
+  // Map hex color to a human-readable label
+  const HEX_TO_LABEL: Record<string, string> = {
+    '#22c55e': 'Green',
+    '#3b82f6': 'Blue',
+    '#f97316': 'Orange',
+    '#a855f7': 'Purple',
+    '#ef4444': 'Red',
+    '#eab308': 'Yellow',
+    '#6b7280': 'Gray',
+    '#ec4899': 'Pink',
+    '#14b8a6': 'Teal',
+  }
+
+  // Resolve sidebar color: stored kitCartColor takes priority, else derive from engine program
+  const getSidebarColor = (): { bg: string; text: string } => {
+    if (kitData?.kitCartColor) {
+      const label = HEX_TO_LABEL[kitData.kitCartColor.toLowerCase()] ?? 'Custom'
+      return { bg: kitData.kitCartColor, text: label }
+    }
+    return getProgramColor(
+      kitData?.kitBuildNumber || kitData?.engineProgram || ''
+    )
+  }
+
+  // Get program color based on engine program (fallback)
   const getProgramColor = (program: string) => {
     const programUpper = program?.toUpperCase() || ''
     if (programUpper.includes('RR300') || programUpper.includes('300'))
@@ -359,21 +540,6 @@ export function KitBuildSheet({
     if (words.length > 1) return words[words.length - 1].toUpperCase()
 
     return 'KIT'
-  }
-
-  // Extract kit type from kit number for "KIT : X" label
-  const getKitTypeLabel = (kitNumber: string, engineProgramType: string) => {
-    const kitUpper = kitNumber?.toUpperCase() || ''
-
-    if (kitUpper.includes('STACK') || engineProgramType === 'STACK')
-      return 'Stack'
-    if (kitUpper.includes('SEAL') || engineProgramType === 'SEAL') return 'Seal'
-    if (kitUpper.includes('BEARING') || engineProgramType === 'BEARING')
-      return 'Bearing'
-    if (kitUpper.includes('GASKET') || engineProgramType === 'GASKET')
-      return 'Gasket'
-
-    return kitNumber || 'Kit'
   }
 
   // Generate tackle box items based on kit type
@@ -508,30 +674,41 @@ export function KitBuildSheet({
                       )}
                     </h2>
                     <h3 className='text-2xl font-bold underline print:text-3xl'>
-                      KIT :{' '}
-                      {getKitTypeLabel(
-                        kitData.kitNumber,
-                        getEngineProgramType(
-                          kitData.kitBuildNumber,
-                          kitData.engineProgram
-                        )
-                      )}
+                      KIT : {kitData.kitNumber || 'Kit'}
                     </h3>
+                    {kitData.kitContainerType && (
+                      <p className='mt-1 text-sm font-semibold tracking-widest'>
+                        {containerTypeLabelMap[kitData.kitContainerType] ??
+                          kitData.kitContainerType}
+                      </p>
+                    )}
                   </div>
 
                   {/* Two Column Layout */}
                   <div className='flex gap-6'>
                     {/* Left Column */}
                     <div className='flex-1'>
-                      {/* Kit PO Number with QR Code */}
+                      {/* Kit PO Number (human-readable, used by SAP) +
+                          QR Code (encodes the kit_serial_number for RF
+                          scanning so the operator skips the
+                          Select-a-Kit disambiguation step). */}
                       <div className='mb-4 flex items-center gap-3'>
-                        <div className='text-3xl font-black print:text-4xl'>
-                          {kitData.kitPoNumber}
+                        <div>
+                          <div className='text-3xl font-black print:text-4xl'>
+                            {kitData.kitPoNumber}
+                          </div>
+                          {kitData.kitSerialNumber && (
+                            <div className='font-mono text-xs text-gray-600 print:text-sm'>
+                              {kitData.kitSerialNumber}
+                            </div>
+                          )}
                         </div>
                         {qrCodeDataUrl && (
                           <img
                             src={qrCodeDataUrl}
-                            alt={`QR Code for ${kitData.kitPoNumber}`}
+                            alt={`QR Code for kit ${
+                              kitData.kitSerialNumber || kitData.kitPoNumber
+                            }`}
                             className='h-16 w-16 print:h-20 print:w-20'
                             style={{ imageRendering: 'pixelated' }}
                           />
@@ -610,6 +787,81 @@ export function KitBuildSheet({
                           <span className='flex-1 border-b border-black'></span>
                         </div>
                       </div>
+
+                      {/* Authorized Ship Short — part numbers + who authorized.
+                          Borders/background use inline styles so they survive
+                          the print window's limited utility-class subset. */}
+                      {(() => {
+                        const shipShorts =
+                          kitData.authorizedShipShortItems.filter((item) =>
+                            item.partNumber?.trim()
+                          )
+                        if (shipShorts.length === 0) return null
+                        return (
+                          <div
+                            className='mt-4'
+                            style={{ border: '2px solid black' }}
+                          >
+                            <div
+                              className='py-1 text-center text-sm font-bold'
+                              style={{
+                                backgroundColor: '#000000',
+                                color: '#ffffff',
+                              }}
+                            >
+                              Authorized Ship Short
+                            </div>
+                            <table
+                              className='w-full text-xs'
+                              style={{ borderCollapse: 'collapse' }}
+                            >
+                              <thead>
+                                <tr style={{ borderBottom: '1px solid black' }}>
+                                  <th
+                                    className='px-2 py-0.5 text-left font-bold'
+                                    style={{ borderRight: '1px solid black' }}
+                                  >
+                                    Part Number
+                                  </th>
+                                  <th className='px-2 py-0.5 text-left font-bold'>
+                                    Authorized By
+                                  </th>
+                                </tr>
+                              </thead>
+                              <tbody>
+                                {shipShorts.map((item) => (
+                                  <tr
+                                    key={item.lineNumber}
+                                    style={{
+                                      borderBottom: '1px solid #9ca3af',
+                                    }}
+                                  >
+                                    <td
+                                      className='px-2 py-0.5'
+                                      style={{
+                                        borderRight: '1px solid black',
+                                      }}
+                                    >
+                                      <span className='font-bold'>
+                                        {item.partNumber}
+                                      </span>
+                                      {item.description && (
+                                        <span className='text-gray-600'>
+                                          {' '}
+                                          — {item.description}
+                                        </span>
+                                      )}
+                                    </td>
+                                    <td className='px-2 py-0.5'>
+                                      {item.authorizedBy || '—'}
+                                    </td>
+                                  </tr>
+                                ))}
+                              </tbody>
+                            </table>
+                          </div>
+                        )
+                      })()}
                     </div>
 
                     {/* Right Column */}
@@ -618,7 +870,18 @@ export function KitBuildSheet({
                       <div className='mb-4'>
                         <span className='text-lg font-bold'>Charge Code: </span>
                         <span className='text-lg font-bold'>
-                          {kitData.deliverToPlant || 'STSTA3'}
+                          {kitData.chargeCode
+                            ? (chargeCodeLabelMap[kitData.chargeCode] ??
+                              kitData.chargeCode)
+                            : '—'}
+                        </span>
+                      </div>
+                      <div className='mb-4'>
+                        <span className='text-base font-bold'>
+                          Deliver To:{' '}
+                        </span>
+                        <span className='text-base font-medium'>
+                          {kitData.deliverToPlant || '—'}
                         </span>
                       </div>
 
@@ -638,23 +901,57 @@ export function KitBuildSheet({
                             </tr>
                           </thead>
                           <tbody>
-                            {[...Array(7)].map((_, idx) => {
-                              const toLine = kitData.toLines[idx]
-                              return (
-                                <tr key={idx} className='border-b border-black'>
-                                  <td className='border-r border-black px-1 py-0.5 text-center'>
-                                    {idx + 1}
-                                  </td>
-                                  <td className='border-r border-black px-1 py-0.5 text-center font-mono'>
-                                    {toLine?.transferOrderNumber || ''}
-                                  </td>
-                                  <td className='border-r border-black px-1 py-0.5 text-center'>
-                                    {idx + 1}
-                                  </td>
-                                  <td className='px-1 py-0.5'></td>
-                                </tr>
-                              )
-                            })}
+                            {(() => {
+                              const uniqueTOs = [
+                                ...new Set(
+                                  kitData.toLines
+                                    .map((line) => line.transferOrderNumber)
+                                    .filter(Boolean)
+                                ),
+                              ]
+                              return [...Array(7)].map((_, idx) => {
+                                const toNumber = uniqueTOs[idx]
+                                const toBarcode = toNumber
+                                  ? toBarcodes[toNumber]
+                                  : undefined
+                                return (
+                                  <tr
+                                    key={idx}
+                                    className='border-b border-black'
+                                  >
+                                    <td className='border-r border-black px-1 py-0.5 text-center'>
+                                      {idx + 1}
+                                    </td>
+                                    <td className='border-r border-black px-1 py-0.5 text-center font-mono'>
+                                      {toNumber ? (
+                                        <>
+                                          <div>{toNumber}</div>
+                                          {toBarcode && (
+                                            <img
+                                              src={toBarcode}
+                                              alt={`Barcode for TO ${toNumber}`}
+                                              style={{
+                                                display: 'block',
+                                                height: '28px',
+                                                width: 'auto',
+                                                maxWidth: '100%',
+                                                margin: '2px auto 0',
+                                              }}
+                                            />
+                                          )}
+                                        </>
+                                      ) : (
+                                        ''
+                                      )}
+                                    </td>
+                                    <td className='border-r border-black px-1 py-0.5 text-center'>
+                                      {idx + 1}
+                                    </td>
+                                    <td className='px-1 py-0.5'></td>
+                                  </tr>
+                                )
+                              })
+                            })()}
                           </tbody>
                         </table>
                       </div>
@@ -743,14 +1040,10 @@ export function KitBuildSheet({
                   </div>
                 </div>
 
-                {/* Green Sidebar */}
+                {/* Color Sidebar */}
                 <div
                   className='relative w-24 flex-shrink-0 print:w-28'
-                  style={{
-                    backgroundColor: getProgramColor(
-                      kitData.kitBuildNumber || kitData.engineProgram
-                    ).bg,
-                  }}
+                  style={{ backgroundColor: getSidebarColor().bg }}
                 >
                   <div
                     className='absolute inset-0 flex items-center justify-center'
@@ -764,13 +1057,7 @@ export function KitBuildSheet({
                         kitData.kitBuildNumber,
                         kitData.engineProgram
                       )}{' '}
-                      (
-                      {
-                        getProgramColor(
-                          kitData.kitBuildNumber || kitData.engineProgram
-                        ).text
-                      }
-                      )
+                      ({getSidebarColor().text})
                     </span>
                   </div>
                 </div>
@@ -802,3 +1089,5 @@ export function KitBuildSheet({
     </Dialog>
   )
 }
+
+// Created and developed by Jai Singh

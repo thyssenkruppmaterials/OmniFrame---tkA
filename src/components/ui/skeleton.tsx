@@ -1,3 +1,4 @@
+// Created and developed by Jai Singh
 import { cn } from '@/lib/utils'
 
 function Skeleton({ className, ...props }: React.ComponentProps<'div'>) {
@@ -11,3 +12,5 @@ function Skeleton({ className, ...props }: React.ComponentProps<'div'>) {
 }
 
 export { Skeleton }
+
+// Created and developed by Jai Singh

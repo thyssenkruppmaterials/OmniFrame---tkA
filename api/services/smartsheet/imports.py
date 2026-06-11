@@ -1,3 +1,4 @@
+# Created and developed by Jai Singh
 """Ticket / data-import mixin for SmartsheetService."""
 
 import logging
@@ -209,4 +210,4 @@ class _ImportsMixin:
                                     status="error", error_message=str(e), details={"row_id": row_id})
             return await self._handle_api_error(e)
 
-# Developer and Creator: Jai Singh
+# Created and developed by Jai Singh

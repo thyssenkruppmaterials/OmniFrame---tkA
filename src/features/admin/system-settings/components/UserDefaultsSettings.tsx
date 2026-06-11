@@ -1,3 +1,4 @@
+// Created and developed by Jai Singh
 import { useState } from 'react'
 import {
   IconBell,
@@ -51,7 +52,7 @@ export function UserDefaultsSettings() {
   })
 
   const [welcomeEmailTemplate, setWelcomeEmailTemplate] = useState({
-    subject: 'Welcome to OmniFrame..',
+    subject: 'Welcome to OmniFrame',
     content: `Hi {{firstName}},
 
 Welcome to OmniFrame! We're excited to have you on board.
@@ -522,3 +523,5 @@ The OmniFrame Team`,
     </div>
   )
 }
+
+// Created and developed by Jai Singh

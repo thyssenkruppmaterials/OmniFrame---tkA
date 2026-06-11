@@ -1,3 +1,4 @@
+// Created and developed by Jai Singh
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Header } from '@/components/layout/header'
 import { Main } from '@/components/layout/main'
@@ -5,6 +6,7 @@ import { ProfileDropdown } from '@/components/profile-dropdown'
 import { Search } from '@/components/search'
 import { ThemeSwitch } from '@/components/theme-switch'
 import { AnalyticsDashboard } from './components/AnalyticsDashboard'
+import { BroadcastDialog } from './components/BroadcastDialog'
 import { ConfigurationPanel } from './components/ConfigurationPanel'
 import { QueueOverview } from './components/QueueOverview'
 import { TaskManager } from './components/TaskManager'
@@ -37,11 +39,20 @@ export default function WorkQueueAdministration() {
               real-time metrics, manage workers, and configure queue behavior.
             </p>
           </div>
+          {/*
+           * Tier 2 #3 (2026-05-06) — supervisor "Broadcast to..."
+           * surface. MVP UX intentionally simple; product iteration
+           * is expected. See `BroadcastDialog.tsx` for the open
+           * questions documented for review.
+           */}
+          <div className='flex items-center gap-2'>
+            <BroadcastDialog />
+          </div>
         </div>
 
         <div className='-mx-4 flex-1 overflow-auto px-4 py-1'>
           <Tabs defaultValue='overview' className='space-y-4'>
-            <TabsList className='grid w-full grid-cols-5'>
+            <TabsList className='grid w-full grid-cols-2 sm:grid-cols-3 md:grid-cols-5'>
               <TabsTrigger value='overview'>Overview</TabsTrigger>
               <TabsTrigger value='workers'>Workers</TabsTrigger>
               <TabsTrigger value='tasks'>Tasks</TabsTrigger>
@@ -74,3 +85,5 @@ export default function WorkQueueAdministration() {
     </WorkQueueProvider>
   )
 }
+
+// Created and developed by Jai Singh

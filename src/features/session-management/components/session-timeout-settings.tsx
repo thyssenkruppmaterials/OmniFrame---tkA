@@ -1,3 +1,4 @@
+// Created and developed by Jai Singh
 import { useState, useEffect } from 'react'
 import {
   IconPlus,
@@ -495,3 +496,5 @@ export function SessionTimeoutSettings() {
     </div>
   )
 }
+
+// Created and developed by Jai Singh

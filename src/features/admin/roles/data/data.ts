@@ -1,3 +1,4 @@
+// Created and developed by Jai Singh
 import {
   IconShield,
   IconUsers,
@@ -253,3 +254,5 @@ export const samplePermissions = [
     createdAt: new Date('2024-01-01'),
   },
 ]
+
+// Created and developed by Jai Singh

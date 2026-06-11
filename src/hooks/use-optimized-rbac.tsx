@@ -1,3 +1,4 @@
+// Created and developed by Jai Singh
 import { usePermissionStore, useRBAC } from '@/stores/permissionStore'
 import type { UserPermission } from '@/lib/auth/types'
 
@@ -50,3 +51,5 @@ export {
   useCheckPermission,
   usePermissionActions,
 } from '@/stores/permissionStore'
+
+// Created and developed by Jai Singh

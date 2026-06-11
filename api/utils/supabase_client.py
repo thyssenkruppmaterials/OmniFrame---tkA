@@ -1,3 +1,4 @@
+# Created and developed by Jai Singh
 """
 Supabase utility functions and helpers.
 Provides common database operations and query builders.
@@ -322,3 +323,4 @@ async def get_table_stats(client: Client, table_name: str, organization_id: str)
             "error": str(e)
         }
 
+# Created and developed by Jai Singh

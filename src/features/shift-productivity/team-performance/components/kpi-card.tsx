@@ -1,3 +1,4 @@
+// Created and developed by Jai Singh
 /**
  * KPI Card Component
  * Animated metric card for team performance dashboard
@@ -256,3 +257,5 @@ export function PulseIndicator({
     />
   )
 }
+
+// Created and developed by Jai Singh

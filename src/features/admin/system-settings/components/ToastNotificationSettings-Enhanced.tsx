@@ -1,3 +1,4 @@
+// Created and developed by Jai Singh
 import { useEffect, useState } from 'react'
 import {
   IconAdjustments,
@@ -24,6 +25,7 @@ import {
   type ToastNotificationSettings,
   type ToastPrioritySettings,
 } from '@/lib/services/settings-service'
+import { cssColorToHex } from '@/lib/utils/css-color'
 import { logger } from '@/lib/utils/logger'
 import { useToastSettings } from '@/context/toast-settings-context'
 import { Badge } from '@/components/ui/badge'
@@ -512,7 +514,7 @@ export function ToastNotificationSettingsEnhanced() {
                               <div className='flex gap-2'>
                                 <Input
                                   type='color'
-                                  value={config.backgroundColor}
+                                  value={cssColorToHex(config.backgroundColor)}
                                   onChange={(e) =>
                                     handlePriorityChange(
                                       priority as keyof typeof settings.priorities,
@@ -545,7 +547,7 @@ export function ToastNotificationSettingsEnhanced() {
                               <div className='flex gap-2'>
                                 <Input
                                   type='color'
-                                  value={config.textColor}
+                                  value={cssColorToHex(config.textColor)}
                                   onChange={(e) =>
                                     handlePriorityChange(
                                       priority as keyof typeof settings.priorities,
@@ -578,7 +580,7 @@ export function ToastNotificationSettingsEnhanced() {
                               <div className='flex gap-2'>
                                 <Input
                                   type='color'
-                                  value={config.borderColor}
+                                  value={cssColorToHex(config.borderColor)}
                                   onChange={(e) =>
                                     handlePriorityChange(
                                       priority as keyof typeof settings.priorities,
@@ -806,7 +808,7 @@ export function ToastNotificationSettingsEnhanced() {
                                 <div className='flex gap-2'>
                                   <Input
                                     type='color'
-                                    value={config.iconColor}
+                                    value={cssColorToHex(config.iconColor)}
                                     onChange={(e) =>
                                       handlePriorityChange(
                                         priority as keyof typeof settings.priorities,
@@ -1064,3 +1066,5 @@ export function ToastNotificationSettingsEnhanced() {
     </div>
   )
 }
+
+// Created and developed by Jai Singh

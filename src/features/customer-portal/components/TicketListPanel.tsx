@@ -1,30 +1,18 @@
-/**
- * Ticket List Panel Component
- *
- * Left panel showing filterable list of tickets with preview cards.
- * Uses Rust Core Smartsheet service for data.
- *
- * Performance optimizations:
- * - Virtual scrolling for rendering only visible tickets
- * - Infinite scroll to load more tickets as user scrolls
- */
+// Created and developed by Jai Singh
 import { useRef, useEffect, useCallback, useMemo } from 'react'
 import { useState } from 'react'
 import { formatDistanceToNow } from 'date-fns'
 import {
   IconSearch,
   IconRefresh,
-  IconMessageCircle,
-  IconTicket,
-  IconClock,
-  IconCircleCheck,
-  IconTrendingUp,
   IconBellRinging,
+  IconInbox,
 } from '@tabler/icons-react'
 import { useVirtualizer } from '@tanstack/react-virtual'
 import { cn } from '@/lib/utils'
+import { useEntityFocus } from '@/hooks/use-entity-focus'
 import { Button } from '@/components/ui/button'
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { Card, CardContent, CardHeader } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import {
   Select,
@@ -35,6 +23,7 @@ import {
 } from '@/components/ui/select'
 import { Skeleton } from '@/components/ui/skeleton'
 import { TicketStatusBadge } from '@/components/customer-portal/TicketStatusBadge'
+import { EntityFocusPill } from '@/components/presence/entity-focus-pill'
 import type { Ticket } from '../hooks/useTickets'
 import type { TicketFilterStatus, TicketStats } from '../types'
 import { CreateTicketDialog } from './CreateTicketDialog'
@@ -51,22 +40,17 @@ interface TicketListPanelProps {
   onSearchChange: (query: string) => void
   stats?: TicketStats
   onRefresh: () => void
-  // Pagination props
   hasMore?: boolean
   onLoadMore?: () => void
   totalCount?: number
   displayedCount?: number
-  // Department filter props
   departmentFilter: string | null
   onDepartmentFilterChange: (dept: string | null) => void
   departments: string[]
-  // Ticket update notification props
   recentlyUpdatedRowIds?: Set<number>
   onClearUpdatedRow?: (rowId: number) => void
 }
 
-// Estimated height for each ticket card - used as initial estimate before measurement
-// Actual heights vary based on content, so we use dynamic measurement
 const TICKET_CARD_HEIGHT = 116
 
 export function TicketListPanel({
@@ -92,45 +76,47 @@ export function TicketListPanel({
   const [createDialogOpen, setCreateDialogOpen] = useState(false)
   const parentRef = useRef<HTMLDivElement>(null)
 
-  // Create a unique key that changes when filters change
-  // This forces the virtualizer container to completely remount with fresh state
+  // Tier 2 #1 — soft-locking pill on the currently-selected ticket.
+  // Establishes a short-lived focus lease in `rust-work-service` so
+  // colleagues editing the same ticket see "Sarah is editing"
+  // immediately. Lease auto-expires 30s after the row deselects.
+  // Pattern documented in Patterns/Entity-Focus-Soft-Locking.md.
+  const { focusedUsers: focusedOnSelection } = useEntityFocus({
+    entityKind: 'ticket',
+    entityId: selectedTicketId,
+  })
+
   const virtualizerKey = useMemo(() => {
     return `${statusFilter}-${departmentFilter ?? 'all'}-${searchQuery}`
   }, [statusFilter, departmentFilter, searchQuery])
 
-  // Virtual list setup with dynamic height measurement
   const virtualizer = useVirtualizer({
     count: tickets.length,
     getScrollElement: () => parentRef.current,
     estimateSize: () => TICKET_CARD_HEIGHT,
-    overscan: 5, // Render 5 extra items above/below visible area
-    // Use getItemKey to ensure proper tracking when list changes
+    overscan: 5,
     getItemKey: (index) => tickets[index]?.row_id ?? index,
   })
 
   const virtualItems = virtualizer.getVirtualItems()
 
-  // Scroll to top when filters change
   useEffect(() => {
     if (parentRef.current) {
       parentRef.current.scrollTop = 0
     }
   }, [virtualizerKey])
 
-  // Infinite scroll: load more when near bottom
   const handleScroll = useCallback(() => {
     if (!parentRef.current || !hasMore || !onLoadMore) return
 
     const { scrollTop, scrollHeight, clientHeight } = parentRef.current
     const scrollPercentage = (scrollTop + clientHeight) / scrollHeight
 
-    // Load more when scrolled 80% down
     if (scrollPercentage > 0.8) {
       onLoadMore()
     }
   }, [hasMore, onLoadMore])
 
-  // Attach scroll listener
   useEffect(() => {
     const scrollElement = parentRef.current
     if (!scrollElement) return
@@ -140,110 +126,70 @@ export function TicketListPanel({
   }, [handleScroll])
 
   return (
-    <Card className='flex h-full flex-col'>
-      <CardHeader className='space-y-4 pb-4'>
+    <Card className='flex h-full flex-col overflow-hidden'>
+      <CardHeader className='space-y-3 border-b px-4 pt-4 pb-3'>
+        {/* Title Row */}
         <div className='flex items-center justify-between'>
-          <div>
-            <CardTitle className='text-lg'>Support Tickets</CardTitle>
+          <div className='flex items-center gap-2.5'>
+            <h2 className='text-base font-semibold tracking-tight'>
+              Support Tickets
+            </h2>
             {totalCount > 0 && (
-              <p className='text-muted-foreground mt-1 text-xs'>
-                Showing {tickets.length.toLocaleString()} of{' '}
-                {totalCount.toLocaleString()} tickets
-              </p>
+              <span className='bg-muted text-muted-foreground rounded-full px-2 py-0.5 text-[10px] font-medium tabular-nums'>
+                {tickets.length.toLocaleString()} /{' '}
+                {totalCount.toLocaleString()}
+              </span>
             )}
           </div>
-          <div className='flex items-center gap-2'>
+          <div className='flex items-center gap-1.5'>
             <Button
-              variant={loading ? 'default' : 'outline'}
-              size={loading ? 'sm' : 'icon'}
+              variant='ghost'
+              size='icon'
+              className='h-7 w-7'
               onClick={onRefresh}
               disabled={loading}
-              className={cn(
-                'overflow-hidden transition-all duration-300 ease-in-out',
-                loading &&
-                  'bg-primary/90 hover:bg-primary/90 text-primary-foreground min-w-[100px]'
-              )}
+              title='Refresh tickets'
             >
               <IconRefresh
-                className={cn(
-                  'h-4 w-4 transition-transform',
-                  loading && 'animate-spin'
-                )}
+                className={cn('h-3.5 w-3.5', loading && 'animate-spin')}
               />
-              {loading && (
-                <span className='ml-2 animate-pulse text-sm font-medium'>
-                  Syncing...
-                </span>
-              )}
             </Button>
-            <Select
-              value={departmentFilter ?? 'all'}
-              onValueChange={(value) =>
-                onDepartmentFilterChange(value === 'all' ? null : value)
-              }
+          </div>
+        </div>
+
+        {/* Search + Department Filter */}
+        <div className='flex flex-wrap gap-2'>
+          <div className='relative min-w-0 flex-1'>
+            <IconSearch className='text-muted-foreground/60 absolute top-1/2 left-2.5 h-3.5 w-3.5 -translate-y-1/2' />
+            <Input
+              placeholder='Search tickets...'
+              value={searchQuery}
+              onChange={(e) => onSearchChange(e.target.value)}
+              className='h-8 pl-8 text-xs'
+            />
+          </div>
+          <Select
+            value={departmentFilter ?? 'all'}
+            onValueChange={(value) =>
+              onDepartmentFilterChange(value === 'all' ? null : value)
+            }
+          >
+            <SelectTrigger
+              size='sm'
+              className='h-8 w-[140px] max-w-full min-w-0 text-xs'
             >
-              <SelectTrigger size='sm' className='w-[160px]'>
-                <SelectValue placeholder='All Departments' />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value='all'>All Departments</SelectItem>
-                {departments.map((dept) => (
-                  <SelectItem key={dept} value={dept}>
-                    {dept}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
+              <SelectValue placeholder='All Depts' />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value='all'>All Departments</SelectItem>
+              {departments.map((dept) => (
+                <SelectItem key={dept} value={dept}>
+                  {dept}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
         </div>
-
-        {/* Search Input */}
-        <div className='relative'>
-          <IconSearch className='text-muted-foreground absolute top-1/2 left-3 h-4 w-4 -translate-y-1/2' />
-          <Input
-            placeholder='Search by email, ID, or subject...'
-            value={searchQuery}
-            onChange={(e) => onSearchChange(e.target.value)}
-            className='pl-9'
-          />
-        </div>
-
-        {/* Mini Stats Row */}
-        {stats && (
-          <div className='text-muted-foreground flex items-center gap-4 py-1 text-xs'>
-            <div className='flex items-center gap-1.5'>
-              <IconTicket className='h-3.5 w-3.5 text-blue-500' />
-              <span className='text-foreground font-semibold'>
-                {stats.open}
-              </span>
-              <span>Open</span>
-            </div>
-            <div className='bg-border h-3 w-px' />
-            <div className='flex items-center gap-1.5'>
-              <IconClock className='h-3.5 w-3.5 text-purple-500' />
-              <span className='text-foreground font-semibold'>
-                {stats.inProgress}
-              </span>
-              <span>Active</span>
-            </div>
-            <div className='bg-border h-3 w-px' />
-            <div className='flex items-center gap-1.5'>
-              <IconCircleCheck className='h-3.5 w-3.5 text-green-500' />
-              <span className='text-foreground font-semibold'>
-                {stats.resolvedToday}
-              </span>
-              <span>Resolved</span>
-            </div>
-            <div className='bg-border h-3 w-px' />
-            <div className='flex items-center gap-1.5'>
-              <IconTrendingUp className='h-3.5 w-3.5 text-orange-500' />
-              <span className='text-foreground font-semibold'>
-                {stats.avgResponseTime}
-              </span>
-              <span>Response</span>
-            </div>
-          </div>
-        )}
 
         {/* Status Filter Tabs */}
         <TicketStatusFilter
@@ -254,33 +200,31 @@ export function TicketListPanel({
       </CardHeader>
 
       <CardContent className='flex-1 overflow-hidden p-0'>
-        {/* Virtual Scroll Container */}
-        <div
-          ref={parentRef}
-          className='h-[calc(100vh-380px)] overflow-auto px-4'
-        >
+        <div ref={parentRef} className='h-[calc(100vh-340px)] overflow-auto'>
           {loading && tickets.length === 0 ? (
-            // Initial loading skeletons
-            <div className='space-y-2 pb-4'>
-              {Array.from({ length: 5 }).map((_, i) => (
+            <div className='space-y-px p-1'>
+              {Array.from({ length: 6 }).map((_, i) => (
                 <TicketCardSkeleton key={i} />
               ))}
             </div>
           ) : tickets.length === 0 ? (
-            // Empty state
-            <div className='text-muted-foreground py-12 text-center'>
-              <IconMessageCircle className='mx-auto mb-3 h-12 w-12 opacity-40' />
-              <p className='font-medium'>No tickets found</p>
-              <p className='text-sm'>
+            <div className='flex flex-col items-center justify-center py-16'>
+              <div className='bg-muted/50 mb-4 flex h-12 w-12 items-center justify-center rounded-full'>
+                <IconInbox className='text-muted-foreground/50 h-6 w-6' />
+              </div>
+              <p className='text-foreground mb-1 text-sm font-medium'>
+                No tickets found
+              </p>
+              <p className='text-muted-foreground text-xs'>
                 {searchQuery
-                  ? 'Try adjusting your search'
-                  : 'Create a new ticket to get started'}
+                  ? 'Try adjusting your search or filters'
+                  : 'All clear — no tickets match this filter'}
               </p>
             </div>
           ) : (
-            // Virtual list - key forces complete re-render when filters change
             <div
               key={virtualizerKey}
+              className='p-1'
               style={{
                 height: virtualizer.getTotalSize(),
                 width: '100%',
@@ -309,6 +253,11 @@ export function TicketListPanel({
                         recentlyUpdatedRowIds?.has(ticket.row_id) ?? false
                       }
                       onClick={() => onSelectTicket(ticket.row_id)}
+                      focusedUsers={
+                        selectedTicketId === ticket.row_id
+                          ? focusedOnSelection
+                          : undefined
+                      }
                     />
                   </div>
                 )
@@ -316,18 +265,18 @@ export function TicketListPanel({
             </div>
           )}
 
-          {/* Load more indicator */}
           {hasMore && tickets.length > 0 && (
-            <div className='py-4 text-center'>
+            <div className='border-t px-4 py-3 text-center'>
               <Button
-                variant='outline'
+                variant='ghost'
                 size='sm'
                 onClick={onLoadMore}
                 disabled={loading}
+                className='text-xs'
               >
                 {loading
                   ? 'Loading...'
-                  : `Load More (${(totalCount - displayedCount).toLocaleString()} remaining)`}
+                  : `Load ${(totalCount - displayedCount).toLocaleString()} more`}
               </Button>
             </div>
           )}
@@ -346,12 +295,18 @@ export function TicketListPanel({
   )
 }
 
-// Individual Ticket Card
 interface TicketCardProps {
   ticket: Ticket
   isSelected: boolean
   isRecentlyUpdated?: boolean
   onClick: () => void
+  /**
+   * Tier 2 #1 — when present, render the EntityFocusPill on the
+   * card. Only the selected card receives this; other cards omit
+   * the pill so we don't fan out a focus heartbeat for every
+   * visible row. See `Patterns/Entity-Focus-Soft-Locking.md`.
+   */
+  focusedUsers?: import('@/lib/presence/types').PresenceUser[]
 }
 
 function TicketCard({
@@ -359,6 +314,7 @@ function TicketCard({
   isSelected,
   isRecentlyUpdated,
   onClick,
+  focusedUsers,
 }: TicketCardProps) {
   const timeAgo = ticket.created_at
     ? formatDistanceToNow(new Date(ticket.created_at), { addSuffix: true })
@@ -368,116 +324,117 @@ function TicketCard({
     <div
       onClick={onClick}
       className={cn(
-        'mb-2 flex cursor-pointer overflow-hidden rounded-lg border transition-all',
-        'hover:border-primary/50 hover:bg-accent/50',
-        isSelected
-          ? 'border-primary bg-primary/5 ring-primary/20 ring-1'
-          : 'border-border bg-card',
-        isRecentlyUpdated && 'animate-pulse ring-2 ring-blue-500 ring-offset-1'
+        'group relative mx-1 mb-0.5 flex cursor-pointer gap-3 rounded-lg px-3 py-2.5 transition-all duration-150',
+        isSelected ? 'bg-primary/8 dark:bg-primary/15' : 'hover:bg-accent/60',
+        isRecentlyUpdated && !isSelected && 'bg-blue-500/6 dark:bg-blue-500/10'
       )}
     >
-      {/* Priority indicator - left edge */}
+      {/* Left accent bar */}
       <div
         className={cn(
-          'w-1 shrink-0',
-          ticket.priority === 'High' && 'bg-red-500',
-          ticket.priority === 'Medium' && 'bg-amber-500',
-          ticket.priority === 'Low' && 'bg-green-500',
-          !['High', 'Medium', 'Low'].includes(ticket.priority || '') &&
-            'bg-muted-foreground'
+          'mt-0.5 w-0.5 shrink-0 rounded-full transition-colors',
+          isSelected
+            ? 'bg-primary'
+            : ticket.priority === 'High'
+              ? 'bg-red-500'
+              : ticket.priority === 'Medium'
+                ? 'bg-amber-400'
+                : ticket.priority === 'Low'
+                  ? 'bg-emerald-500'
+                  : 'bg-border'
         )}
-        title={ticket.priority ? `Priority: ${ticket.priority}` : 'No priority'}
       />
 
-      {/* Card content */}
-      <div className='flex-1 p-3'>
-        {/* Header: Ticket ID + ILC Department on left, Status on right */}
-        <div className='mb-2 flex items-center justify-between'>
-          <div className='flex items-center gap-2'>
-            <span
-              className='border-border text-muted-foreground rounded border px-1.5 py-0.5 font-mono'
-              style={{ fontSize: '0.96rem' }}
-            >
-              {ticket.ticket_id}
+      {/* Content */}
+      <div className='min-w-0 flex-1'>
+        {/* Row 1: ID + Department + Status */}
+        <div className='mb-1 flex items-center gap-2'>
+          <span className='text-foreground shrink-0 text-xs font-semibold tracking-tight'>
+            {ticket.ticket_id}
+          </span>
+          {ticket.ilc_department && (
+            <span className='text-muted-foreground truncate text-[11px]'>
+              {ticket.ilc_department}
             </span>
-            {ticket.ilc_department && (
-              <span
-                className='border-border text-muted-foreground rounded border px-1.5 py-0.5 font-mono'
-                style={{ fontSize: '0.96rem' }}
-              >
-                {ticket.ilc_department}
-              </span>
-            )}
-          </div>
-          <div className='flex items-center gap-1.5'>
+          )}
+          <div className='ml-auto flex shrink-0 items-center gap-1.5'>
             {isRecentlyUpdated && (
-              <span
-                className='flex animate-pulse items-center gap-1 text-blue-500'
-                title='Recently updated'
-              >
-                <IconBellRinging className='h-4 w-4' />
-              </span>
+              <IconBellRinging className='h-3.5 w-3.5 animate-pulse text-blue-500' />
+            )}
+            {focusedUsers && focusedUsers.length > 0 && (
+              <EntityFocusPill users={focusedUsers} compact />
             )}
             <TicketStatusBadge
               status={ticket.status}
-              className='px-2 py-0 text-xs'
+              className='h-5 px-1.5 py-0 text-[10px]'
             />
           </div>
         </div>
 
-        {/* Subject */}
+        {/* Row 2: Subject */}
         {ticket.subject && (
-          <h4 className='mb-1 line-clamp-1 text-sm font-semibold'>
+          <p className='text-foreground mb-0.5 line-clamp-1 text-[13px] leading-snug font-medium'>
             {ticket.subject}
-          </h4>
+          </p>
         )}
 
-        {/* Description Preview */}
+        {/* Row 3: Description preview */}
         {ticket.description && (
-          <p className='text-muted-foreground mb-2 line-clamp-2 text-xs'>
+          <p className='text-muted-foreground mb-1.5 line-clamp-1 text-xs leading-relaxed'>
             {ticket.description}
           </p>
         )}
 
-        {/* Footer: Time, Requestor Name */}
-        <div className='text-muted-foreground flex items-center justify-between text-xs'>
-          <div className='flex items-center gap-3'>
-            <span>{timeAgo}</span>
-            {ticket.requestor_name && (
-              <span className='text-foreground font-medium'>
+        {/* Row 4: Footer meta */}
+        <div className='text-muted-foreground flex items-center gap-2 text-[11px]'>
+          <span className='tabular-nums'>{timeAgo}</span>
+          {ticket.requestor_name && (
+            <>
+              <span className='text-border'>·</span>
+              <span className='text-foreground/70 truncate font-medium'>
                 {ticket.requestor_name}
               </span>
-            )}
-          </div>
-          <div className='flex items-center gap-2'>
-            {ticket.email && (
-              <span className='max-w-[120px] truncate' title={ticket.email}>
+            </>
+          )}
+          {ticket.email && !ticket.requestor_name && (
+            <>
+              <span className='text-border'>·</span>
+              <span className='truncate'>{ticket.email}</span>
+            </>
+          )}
+          {ticket.email && ticket.requestor_name && (
+            <>
+              <span className='text-border'>·</span>
+              <span className='max-w-[100px] truncate' title={ticket.email}>
                 {ticket.email}
               </span>
-            )}
-          </div>
+            </>
+          )}
         </div>
       </div>
     </div>
   )
 }
 
-// Skeleton loader for ticket cards
 function TicketCardSkeleton() {
   return (
-    <div className='border-border bg-card rounded-lg border p-3'>
-      <div className='mb-2 flex items-center gap-2'>
-        <Skeleton className='h-4 w-16' />
-        <Skeleton className='h-5 w-14' />
-        <Skeleton className='h-5 w-12' />
-      </div>
-      <Skeleton className='mb-1 h-5 w-3/4' />
-      <Skeleton className='mb-1 h-4 w-full' />
-      <Skeleton className='mb-3 h-4 w-2/3' />
-      <div className='flex items-center justify-between'>
-        <Skeleton className='h-3 w-20' />
-        <Skeleton className='h-3 w-12' />
+    <div className='mx-1 flex gap-3 rounded-lg px-3 py-2.5'>
+      <Skeleton className='mt-0.5 h-12 w-0.5 rounded-full' />
+      <div className='flex-1 space-y-2'>
+        <div className='flex items-center gap-2'>
+          <Skeleton className='h-3.5 w-20' />
+          <Skeleton className='h-3.5 w-14' />
+          <Skeleton className='ml-auto h-5 w-16 rounded-full' />
+        </div>
+        <Skeleton className='h-4 w-4/5' />
+        <Skeleton className='h-3 w-3/5' />
+        <div className='flex gap-2'>
+          <Skeleton className='h-3 w-16' />
+          <Skeleton className='h-3 w-24' />
+        </div>
       </div>
     </div>
   )
 }
+
+// Created and developed by Jai Singh

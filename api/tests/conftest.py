@@ -1,5 +1,6 @@
+# Created and developed by Jai Singh
 """
-Shared fixtures for OmniFrame backend tests.
+Shared fixtures for OneBox AI backend tests.
 
 Provides FastAPI test client, mock auth context, and common utilities.
 
@@ -55,3 +56,5 @@ def mock_admin_headers():
         "Content-Type": "application/json",
         "Authorization": "Bearer test-admin-token",
     }
+
+# Created and developed by Jai Singh

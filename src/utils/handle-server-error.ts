@@ -1,3 +1,4 @@
+// Created and developed by Jai Singh
 import { AxiosError } from 'axios'
 import { toast } from 'sonner'
 import { logger } from '@/lib/utils/logger'
@@ -22,3 +23,5 @@ export function handleServerError(error: unknown) {
 
   toast.error(errMsg)
 }
+
+// Created and developed by Jai Singh

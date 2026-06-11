@@ -1,3 +1,4 @@
+// Created and developed by Jai Singh
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { format } from 'date-fns'
 import {
@@ -737,3 +738,5 @@ export function TimeAdjustmentApprovalsDashboard() {
     </div>
   )
 }
+
+// Created and developed by Jai Singh

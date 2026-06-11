@@ -1,3 +1,4 @@
+// Created and developed by Jai Singh
 /**
  * Step 6: Working Area Assignment
  * Assign primary and secondary work locations
@@ -232,7 +233,7 @@ export function Step6WorkingArea() {
           {availableSecondaryAreas && availableSecondaryAreas.length > 0 && (
             <div className='flex gap-2'>
               <Select onValueChange={addSecondaryArea}>
-                <SelectTrigger className='flex-1'>
+                <SelectTrigger className='min-w-0 flex-1'>
                   <SelectValue placeholder='Add secondary area...' />
                 </SelectTrigger>
                 <SelectContent>
@@ -264,3 +265,5 @@ export function Step6WorkingArea() {
 }
 
 export default Step6WorkingArea
+
+// Created and developed by Jai Singh

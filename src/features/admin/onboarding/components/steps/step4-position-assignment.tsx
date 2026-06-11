@@ -1,3 +1,4 @@
+// Created and developed by Jai Singh
 /**
  * Step 4: Position Assignment
  * Assign job position, working area, and supervisor
@@ -82,7 +83,7 @@ export function Step4PositionAssignment() {
   })
 
   const form = useForm<ExtendedPositionFormData>({
-    resolver: zodResolver(positionAssignmentSchema),
+    resolver: zodResolver(positionAssignmentSchema) as never,
     defaultValues: {
       position_id: state.positionAssignment?.position_id || '',
       position_title: state.positionAssignment?.position_title || '',
@@ -530,3 +531,5 @@ export function Step4PositionAssignment() {
 }
 
 export default Step4PositionAssignment
+
+// Created and developed by Jai Singh

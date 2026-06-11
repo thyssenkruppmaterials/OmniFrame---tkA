@@ -1,3 +1,4 @@
+// Created and developed by Jai Singh
 /**
  * Badge Generation Utility
  * Creates printable ID badges with QR codes and employee information
@@ -523,3 +524,5 @@ export default {
   downloadBadge,
   downloadCredentials,
 }
+
+// Created and developed by Jai Singh

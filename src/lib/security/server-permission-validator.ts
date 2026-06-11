@@ -1,3 +1,4 @@
+// Created and developed by Jai Singh
 import { writeAuditLog } from '@/lib/audit/audit-log-writer'
 import type { PermissionCheckContext } from '@/lib/auth/types'
 import { supabase } from '@/lib/supabase/client'
@@ -232,3 +233,5 @@ export class ServerPermissionValidator {
     return reason === 'direct_permission' || reason === 'inherited_permission'
   }
 }
+
+// Created and developed by Jai Singh

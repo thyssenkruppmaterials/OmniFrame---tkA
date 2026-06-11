@@ -1,3 +1,4 @@
+// Created and developed by Jai Singh
 import { useEffect, useState } from 'react'
 import { motion, Variants } from 'framer-motion'
 import { cn } from '@/lib/utils'
@@ -131,3 +132,5 @@ const Typewriter = ({
 }
 
 export { Typewriter }
+
+// Created and developed by Jai Singh

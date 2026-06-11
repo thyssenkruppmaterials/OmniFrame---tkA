@@ -1,5 +1,6 @@
+# Created and developed by Jai Singh
 """
-Auth fallback policy tests for OmniFrame backend.
+Auth fallback policy tests for OneBox AI backend.
 
 Validates that the insecure JWT fallback is NEVER enabled in
 production or without explicit opt-in configuration.
@@ -102,3 +103,5 @@ class TestFallbackRequiresExplicitOptIn:
         importlib.reload(auth_mod)
 
         assert auth_mod._is_fallback_enabled() is False
+
+# Created and developed by Jai Singh

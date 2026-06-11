@@ -1,3 +1,4 @@
+// Created and developed by Jai Singh
 /**
  * Supabase Edge Function: Analytics API Proxy
  * 
@@ -114,4 +115,4 @@ serve(async (req) => {
   }
 });
 
-
+// Created and developed by Jai Singh

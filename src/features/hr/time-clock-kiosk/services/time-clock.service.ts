@@ -1,3 +1,4 @@
+// Created and developed by Jai Singh
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { supabase } from '@/lib/supabase/client'
 import { logger } from '@/lib/utils/logger'
@@ -239,3 +240,5 @@ export async function clockOut(
     entry_id: entryId,
   }
 }
+
+// Created and developed by Jai Singh

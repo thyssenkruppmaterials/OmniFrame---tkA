@@ -1,4 +1,4 @@
-# OmniFrame Logistics - Multi-stage Docker Build
+# OneBox AI Logistics - Multi-stage Docker Build
 # Build timestamp: 2026-02-07T04:30:00Z - Added proxy router for attachment preview
 
 # CRITICAL: Global ARGs must be declared BEFORE any FROM statement
@@ -12,6 +12,13 @@ ARG VITE_RUST_CORE_URL
 ARG VITE_WORK_SERVICE_URL
 ARG VITE_WORK_SERVICE_WS_URL
 ARG VITE_STREAMING_SERVICE_URL
+# VITE_PRESENCE_MODE selects between the legacy Supabase Realtime presence
+# implementation ('supabase', the default) and the Option-2 Rust presence
+# implementation ('rust') backed by rust-work-service + Redis HSETs. Vite
+# inlines this at build time, so it MUST be declared as ARG here for Railway
+# to bridge the runtime variable into the Docker build context. See
+# memorybank/OmniFrame/Decisions/ADR-Capacity-Ceiling-2k-Users.md.
+ARG VITE_PRESENCE_MODE
 
 # Stage 1: Build React frontend with Node.js
 FROM node:20-alpine AS frontend-builder
@@ -26,6 +33,7 @@ ARG VITE_RUST_CORE_URL
 ARG VITE_WORK_SERVICE_URL
 ARG VITE_WORK_SERVICE_WS_URL
 ARG VITE_STREAMING_SERVICE_URL
+ARG VITE_PRESENCE_MODE
 
 WORKDIR /app
 
@@ -40,10 +48,13 @@ ENV VITE_SUPABASE_URL=$VITE_SUPABASE_URL
 ENV VITE_SUPABASE_ANON_KEY=$VITE_SUPABASE_ANON_KEY
 ENV VITE_API_URL=${VITE_API_URL:-https://$RAILWAY_PUBLIC_DOMAIN}
 ENV VITE_RUST_CORE_ENABLED=${VITE_RUST_CORE_ENABLED:-true}
-ENV VITE_RUST_CORE_URL=${VITE_RUST_CORE_URL:-https://your-rust-core-service.up.railway.app}
-ENV VITE_WORK_SERVICE_URL=${VITE_WORK_SERVICE_URL:-https://your-rust-work-service.up.railway.app}
-ENV VITE_WORK_SERVICE_WS_URL=${VITE_WORK_SERVICE_WS_URL:-wss://your-rust-work-service.up.railway.app/ws}
-ENV VITE_STREAMING_SERVICE_URL=${VITE_STREAMING_SERVICE_URL:-https://your-rust-streaming-service.up.railway.app}
+ENV VITE_RUST_CORE_URL=${VITE_RUST_CORE_URL:-https://rust-core-service-production.up.railway.app}
+ENV VITE_WORK_SERVICE_URL=${VITE_WORK_SERVICE_URL:-https://rust-work-service-production.up.railway.app}
+ENV VITE_WORK_SERVICE_WS_URL=${VITE_WORK_SERVICE_WS_URL:-wss://rust-work-service-production.up.railway.app/ws}
+ENV VITE_STREAMING_SERVICE_URL=${VITE_STREAMING_SERVICE_URL:-https://rust-streaming-service-production.up.railway.app}
+# Default 'supabase' matches src/lib/presence/constants.ts fallback; set this
+# to 'rust' on Railway to activate Option-2 server-side presence.
+ENV VITE_PRESENCE_MODE=${VITE_PRESENCE_MODE:-supabase}
 
 # Copy source code AFTER setting environment variables
 COPY . .
@@ -92,11 +103,18 @@ COPY api/requirements.txt ./api/requirements.txt
 # Install Cython first (required for building pyrfc from source)
 RUN pip install --no-cache-dir cython
 
-# Install other requirements (pyrfc will be handled separately)
-RUN pip install --no-cache-dir -r api/requirements.txt || \
-    (echo "Some packages failed, trying without pyrfc..." && \
-     grep -v "pyrfc" api/requirements.txt > /tmp/requirements_no_pyrfc.txt && \
-     pip install --no-cache-dir -r /tmp/requirements_no_pyrfc.txt)
+# Install Python dependencies. This MUST fail the build loudly on any error.
+# A previous "|| (grep -v pyrfc ...)" fallback here silently swallowed install
+# failures and shipped broken images that crashed at startup (e.g. a partial
+# smartsheet SDK -> "cannot import name 'Smartsheet' from 'smartsheet'
+# (unknown location)" -> healthcheck failure). pyrfc is NOT in requirements.txt
+# (it is installed separately below from GitHub), so no pyrfc fallback is needed.
+RUN pip install --no-cache-dir -r api/requirements.txt
+
+# Verify critical third-party SDKs actually imported cleanly so a corrupted or
+# missing install becomes a hard BUILD failure instead of a runtime healthcheck
+# failure that only surfaces after the image is already deployed.
+RUN python -c "from smartsheet import Smartsheet; import smartsheet; print(f'smartsheet SDK OK ({smartsheet.__file__})')"
 
 # Try to install pyrfc from GitHub (latest version with Python 3.11 support)
 RUN pip install --no-cache-dir git+https://github.com/SAP/PyRFC.git || \

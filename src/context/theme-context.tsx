@@ -1,5 +1,5 @@
+// Created and developed by Jai Singh
 import { createContext, useContext, useEffect, useMemo, useState } from 'react'
-import { hexToOklch, validateHex } from '@/lib/utils/color-conversion'
 import {
   computeDerivedTokens,
   getPaletteModeForBackground,
@@ -15,6 +15,7 @@ import {
   type FontOption,
   type ThemeTokens,
 } from '@/lib/theme/appearance-preferences'
+import { hexToOklch, validateHex } from '@/lib/utils/color-conversion'
 import { logger } from '@/lib/utils/logger'
 
 type ThemeProviderProps = {
@@ -101,12 +102,9 @@ function tokenKeyToCSSVar(key: string): string {
   return TOKEN_CSS_MAP[key] ?? `--${key}`
 }
 
-export function ThemeProvider({
-  children,
-  ...props
-}: ThemeProviderProps) {
-  const [preferences, _setPreferences] = useState<AppearancePreferencesV2>(
-    () => hydratePreferences()
+export function ThemeProvider({ children, ...props }: ThemeProviderProps) {
+  const [preferences, _setPreferences] = useState<AppearancePreferencesV2>(() =>
+    hydratePreferences()
   )
 
   const [systemDark, setSystemDark] = useState(
@@ -128,7 +126,8 @@ export function ThemeProvider({
     if (theme === 'dark') return 'dark'
     if (theme === 'system') return systemDark ? 'dark' : 'light'
     if (theme === 'custom') {
-      if (customBehavior === 'follow-system') return systemDark ? 'dark' : 'light'
+      if (customBehavior === 'follow-system')
+        return systemDark ? 'dark' : 'light'
       return customBehavior
     }
     return 'light'
@@ -189,7 +188,9 @@ export function ThemeProvider({
       }
 
       updateMetaThemeColor(tokens.background)
-      logger.log(`Custom theme applied from ${paletteMode} palette in ${visualMode} mode`)
+      logger.log(
+        `Custom theme applied from ${paletteMode} palette in ${visualMode} mode`
+      )
     } else {
       root.classList.add(visualMode)
       clearCustomProperties(root)
@@ -298,3 +299,5 @@ export type {
   ThemeTokens,
   AppearancePreferencesV2,
 }
+
+// Created and developed by Jai Singh

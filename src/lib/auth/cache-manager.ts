@@ -1,3 +1,4 @@
+// Created and developed by Jai Singh
 /**
  * Unified RBAC Cache Manager
  *
@@ -122,3 +123,5 @@ class RBACCacheManager {
 }
 
 export const rbacCacheManager = new RBACCacheManager()
+
+// Created and developed by Jai Singh

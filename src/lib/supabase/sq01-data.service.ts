@@ -1,3 +1,4 @@
+// Created and developed by Jai Singh
 import { toast } from 'sonner'
 import { RUST_CORE_ENABLED } from '@/lib/rust-core/config'
 import { rustSQ01DataService } from '@/lib/rust-core/sq01-data.service'
@@ -1166,4 +1167,5 @@ export class SQ01DataService {
     }
   }
 }
-// Developer and Creator: Jai Singh
+
+// Created and developed by Jai Singh

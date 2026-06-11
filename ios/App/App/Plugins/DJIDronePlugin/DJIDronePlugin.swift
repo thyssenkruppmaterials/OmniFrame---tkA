@@ -6,7 +6,7 @@ import DJISDK
 /**
  * DJIDronePlugin - Capacitor plugin for DJI drone integration
  * 
- * This plugin provides an interface between the OmniFrame RF app and DJI drones
+ * This plugin provides an interface between the OneBox RF app and DJI drones
  * for warehouse scanning operations. It handles:
  * - Drone connection/disconnection
  * - Photo capture with GPS metadata

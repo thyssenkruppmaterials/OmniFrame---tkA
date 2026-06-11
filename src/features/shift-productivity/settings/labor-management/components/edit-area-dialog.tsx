@@ -1,3 +1,4 @@
+// Created and developed by Jai Singh
 /**
  * Edit Working Area Dialog Component
  * Form modal for editing existing working areas
@@ -114,7 +115,7 @@ export function EditAreaDialog({
   const [backupSupervisorOpen, setBackupSupervisorOpen] = useState(false)
 
   const form = useForm<AreaFormData>({
-    resolver: zodResolver(areaSchema),
+    resolver: zodResolver(areaSchema) as never,
     defaultValues: {
       area_code: '',
       area_name: '',
@@ -693,3 +694,5 @@ export function EditAreaDialog({
     </Dialog>
   )
 }
+
+// Created and developed by Jai Singh

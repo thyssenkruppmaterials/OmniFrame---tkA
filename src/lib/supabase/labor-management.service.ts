@@ -1,3 +1,4 @@
+// Created and developed by Jai Singh
 /**
  * Labor Management Service
  * Comprehensive service for managing shift hierarchy, positions, and organizational structure
@@ -987,4 +988,5 @@ export class LaborManagementService {
 }
 
 export default LaborManagementService.getInstance()
-// Developer and Creator: Jai Singh
+
+// Created and developed by Jai Singh

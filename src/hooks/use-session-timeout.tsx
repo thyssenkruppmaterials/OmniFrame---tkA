@@ -1,3 +1,4 @@
+// Created and developed by Jai Singh
 import { useEffect, useRef, useCallback, useState } from 'react'
 import { toast } from 'sonner'
 import { redirectToSignIn } from '@/lib/auth/redirect-utils'
@@ -364,3 +365,5 @@ export function useSessionTimeout(options: UseSessionTimeoutOptions = {}) {
     enableFullscreenExpiryWarning: config?.enableFullscreenExpiryWarning,
   }
 }
+
+// Created and developed by Jai Singh

@@ -1,10 +1,11 @@
+# Created and developed by Jai Singh
 """
 Nefab PFC Trace API Service with Redis caching.
 
 Provides integration with Nefab's PFC Trace API for kit cart tracking.
 Implements singleton pattern, caching, and error handling.
 
-Author: Jai Singh
+Author: OneBox AI Team
 Date: December 17, 2025
 Version: 1.0.0
 """
@@ -407,5 +408,4 @@ async def get_nefab_service() -> NefabService:
     """Get Nefab service instance."""
     return await NefabService.get_instance()
 
-# Developer and Creator: Jai Singh
-
+# Created and developed by Jai Singh

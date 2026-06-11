@@ -1,3 +1,4 @@
+// Created and developed by Jai Singh
 //! Session caching for authenticated users
 //!
 //! This module provides comprehensive session management with profile caching.
@@ -149,3 +150,5 @@ impl Clone for SessionService {
         }
     }
 }
+
+// Created and developed by Jai Singh

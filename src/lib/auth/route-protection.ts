@@ -1,3 +1,4 @@
+// Created and developed by Jai Singh
 /**
  * Centralized Route Protection Utility
  * Provides consistent navigation permission checking for all protected routes
@@ -406,6 +407,11 @@ export const ROUTE_PROTECTION_CONFIGS = {
     resourcePermission: { action: 'view', resource: 'standard_work' },
   },
 
+  PRODUCTION_BOARDS: {
+    routePath: '/apps/production-boards',
+    resourcePermission: { action: 'view', resource: 'shift_productivity' },
+  },
+
   // Integration Applications
   CUSTOMER_PORTAL: {
     routePath: '/apps/customer-portal',
@@ -457,4 +463,5 @@ export function createStandardProtectedRoute<
 
 // Export types
 export type RouteProtectionConfig = keyof typeof ROUTE_PROTECTION_CONFIGS
-// Developer and Creator: Jai Singh
+
+// Created and developed by Jai Singh

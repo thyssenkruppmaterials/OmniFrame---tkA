@@ -1,3 +1,4 @@
+// Created and developed by Jai Singh
 /**
  * RF Productivity Service
  * Handles productivity tracking and statistics for RF Terminal users
@@ -32,6 +33,11 @@ export interface ProductivityStats {
   final_packed: number // Items final packed in Final Pack Tool
   putbacks: number // Putback tickets completed today
   cycle_counts: number
+  /** Kit workflow stages — migration 310 (Productivity-Wiring-Kit-Workflow-Stages) */
+  kit_picking: number // TO lines the operator picked off the floor / racks
+  kit_building: number // Materials the operator kitted onto the BOM
+  kit_inspection: number // Kits the operator inspected (org-gated)
+  kit_dock_staging: number // Kits the operator staged to a dock location
   work_queue_tasks: number // Placeholder
 }
 
@@ -839,6 +845,14 @@ class ProductivityService {
         final_packed: finalPackedResult.data,
         putbacks: putbackResult.data,
         cycle_counts: cycleCountResult.data,
+        // Kit workflow stages are populated by the batch RPC path in
+        // team-performance.service (see migration 310). This per-user
+        // legacy fallback path leaves them at 0 — the day-aware path
+        // overlays them when present.
+        kit_picking: 0,
+        kit_building: 0,
+        kit_inspection: 0,
+        kit_dock_staging: 0,
         work_queue_tasks: 0, // Placeholder - not implemented yet
       }
 
@@ -913,4 +927,5 @@ class ProductivityService {
 
 // Export singleton instance
 export const productivityService = new ProductivityService()
-// Developer and Creator: Jai Singh
+
+// Created and developed by Jai Singh

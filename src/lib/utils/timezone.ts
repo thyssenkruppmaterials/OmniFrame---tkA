@@ -1,3 +1,4 @@
+// Created and developed by Jai Singh
 /**
  * Timezone utility functions for OmniFrame
  * All date calculations should use EST/New York timezone
@@ -96,4 +97,5 @@ export function getCurrentTimestampEST(): string {
   const now = new Date()
   return now.toLocaleString('en-US', { timeZone: 'America/New_York' })
 }
-// Developer and Creator: Jai Singh
+
+// Created and developed by Jai Singh

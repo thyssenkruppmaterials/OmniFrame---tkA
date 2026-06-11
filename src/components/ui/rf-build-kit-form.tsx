@@ -1,3 +1,4 @@
+// Created and developed by Jai Singh
 'use client'
 
 /**
@@ -10,7 +11,7 @@
  * 2. Kit Materials: Scan material → Confirm quantity
  * 3. Complete Kit Build
  */
-import React, { useCallback, useEffect, useRef, useState } from 'react'
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { AnimatePresence, motion } from 'framer-motion'
 import {
   AlertCircle,
@@ -27,14 +28,17 @@ import {
 } from 'lucide-react'
 import { toast } from 'sonner'
 import { useUnifiedAuth } from '@/lib/auth/unified-auth-provider'
+import { isPotentialKitSerialNumber } from '@/lib/supabase/rf-kitting-picking.service'
 import { cn } from '@/lib/utils'
 import { logger } from '@/lib/utils/logger'
 import { useBuildKitTool } from '@/hooks/use-build-kit'
+import { useKitInspectionRequired } from '@/hooks/use-kitting-workflow-settings'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 import { Label } from '@/components/ui/label'
 import { Progress } from '@/components/ui/progress'
 import { ScannerInput } from '@/components/ui/scanner-input'
+import { RFScreenHeader } from '@/features/rf-interface/_shell'
 
 // Types
 interface TOLine {
@@ -52,6 +56,13 @@ interface TOLine {
 
 interface KitData {
   kitPoNumber: string
+  // `kit_serial_number` is the globally unique PK on `RR_Kitting_DATA`
+  // and is the scope that the downstream Build Kit mutations must use
+  // when a PO covers more than one kit. May be null on legacy rows
+  // that predate `createKitBuildPlan`; callers fall back to PO-only
+  // behaviour when it is missing. See
+  // `memorybank/OmniFrame/Debug/Fix-Build-Kit-Completion-Multi-Kit-PO.md`.
+  kitSerialNumber: string | null
   kitBuildNumber: string
   kitNumber: string
   engineProgram: string
@@ -227,6 +238,8 @@ const RFBuildKitForm: React.FC<RFBuildKitFormProps> = ({ onBack }) => {
   const {
     verifyKitAsync,
     isVerifyingKit,
+    verifyKitBySerialAsync,
+    isVerifyingKitBySerial,
     startBuildAsync,
     isStartingBuild,
     kitMaterialAsync,
@@ -240,6 +253,9 @@ const RFBuildKitForm: React.FC<RFBuildKitFormProps> = ({ onBack }) => {
   // Auth state management
   const { authState } = useUnifiedAuth()
   const { isAuthenticated, isLoading: isAuthLoading } = authState
+
+  // Org workflow flag — when off, completeKit goes straight to On Dock.
+  const kitInspectionRequired = useKitInspectionRequired()
 
   // Auto-focus management
   useEffect(() => {
@@ -259,11 +275,25 @@ const RFBuildKitForm: React.FC<RFBuildKitFormProps> = ({ onBack }) => {
   }, [state.currentStep, selectedMaterial])
 
   // Handlers
+  //
+  // The Scan step accepts BOTH a `kit_serial_number`
+  // (`KIT-YYYYMMDD-NNN`, the globally unique PK on `RR_Kitting_DATA`)
+  // and the legacy `kit_po_number`. Smart-detect:
+  //   - Input starts with `KIT-` (case-insensitive) → serial path
+  //     (`verifyKitForBuildBySerialNumber`). Direct PK lookup — does
+  //     not aggregate across sibling kits sharing a Kit PO.
+  //   - Otherwise → legacy PO path (`verifyKitForBuild`). Pre-existing
+  //     behaviour preserved verbatim.
+  // After the kit loads, the downstream `startBuildAsync` /
+  // `kitMaterialAsync` / `completeKitAsync` calls continue to take
+  // `kitData.kitPoNumber` exactly as before — the serial path simply
+  // surfaces the right PO on the loaded `kitData` payload, so the
+  // post-load state machine is unchanged.
   const handleKitPoValidation = useCallback(async () => {
-    const kitPo = kitPoNumber.trim()
+    const scanned = kitPoNumber.trim()
 
-    if (!kitPo) {
-      toast.error('Please enter a Kit PO Number')
+    if (!scanned) {
+      toast.error('Please enter a Kit Serial Number or PO')
       return
     }
 
@@ -275,24 +305,31 @@ const RFBuildKitForm: React.FC<RFBuildKitFormProps> = ({ onBack }) => {
     setState((prev) => ({ ...prev, isProcessing: true }))
 
     try {
-      const result = await verifyKitAsync(kitPo)
+      const result = isPotentialKitSerialNumber(scanned)
+        ? await verifyKitBySerialAsync(scanned)
+        : await verifyKitAsync(scanned)
 
       if (result.exists && result.kitData) {
+        const loadedKit = result.kitData
         setState((prev) => ({
           ...prev,
-          kitData: result.kitData!,
+          kitData: loadedKit,
           isProcessing: false,
         }))
 
-        // Start the kit build if not already in progress
-        if (
-          result.kitData.status === 'printed' ||
-          result.kitData.status === 'pending'
-        ) {
-          await startBuildAsync(kitPo)
+        // Start the kit build if not already in progress. Pass both
+        // the PO and the serial — `startKitBuild` scopes the status
+        // flip to a single kit when the serial is present, so we do
+        // not accidentally drag a sibling kit sharing this PO into
+        // `in_progress`. See
+        // `Debug/Fix-Build-Kit-Completion-Multi-Kit-PO.md`.
+        if (loadedKit.status === 'printed' || loadedKit.status === 'pending') {
+          await startBuildAsync({
+            kitPoNumber: loadedKit.kitPoNumber,
+            kitSerialNumber: loadedKit.kitSerialNumber,
+          })
         }
 
-        // Move to materials step
         setState((prev) => ({ ...prev, currentStep: 'kit_materials' }))
       } else {
         setState((prev) => ({ ...prev, isProcessing: false }))
@@ -308,6 +345,7 @@ const RFBuildKitForm: React.FC<RFBuildKitFormProps> = ({ onBack }) => {
     isAuthenticated,
     isAuthLoading,
     verifyKitAsync,
+    verifyKitBySerialAsync,
     startBuildAsync,
   ])
 
@@ -385,6 +423,7 @@ const RFBuildKitForm: React.FC<RFBuildKitFormProps> = ({ onBack }) => {
     try {
       const result = await kitMaterialAsync({
         kitPoNumber: state.kitData.kitPoNumber,
+        kitSerialNumber: state.kitData.kitSerialNumber,
         material: selectedMaterial.material,
         quantity,
       })
@@ -496,20 +535,34 @@ const RFBuildKitForm: React.FC<RFBuildKitFormProps> = ({ onBack }) => {
     if (!state.kitData) return
 
     try {
-      const result = await completeKitAsync(state.kitData.kitPoNumber)
+      // Pass the serial when we have one so the completion check is
+      // scoped to a single kit. Without this, a PO that covers two
+      // kits would fail "N lines still need to be kitted" even after
+      // the operator finished kitting one of them — see
+      // `Debug/Fix-Build-Kit-Completion-Multi-Kit-PO.md`.
+      const result = await completeKitAsync({
+        kitPoNumber: state.kitData.kitPoNumber,
+        kitSerialNumber: state.kitData.kitSerialNumber,
+        skipInspection: !kitInspectionRequired,
+      })
 
       if (result.success) {
         setState((prev) => ({
           ...prev,
           kitData: prev.kitData
-            ? { ...prev.kitData, status: 'kit_built' }
+            ? {
+                ...prev.kitData,
+                status: result.skippedInspection
+                  ? 'kit_inspected'
+                  : 'kit_built',
+              }
             : null,
         }))
       }
     } catch (error) {
       logger.error('Error completing kit:', error)
     }
-  }, [state.kitData, completeKitAsync])
+  }, [state.kitData, completeKitAsync, kitInspectionRequired])
 
   const handleStartNewKit = useCallback(() => {
     setState({
@@ -527,6 +580,18 @@ const RFBuildKitForm: React.FC<RFBuildKitFormProps> = ({ onBack }) => {
   const allLinesKitted =
     state.kitData?.toLines.every((line) => line.kitted) ?? false
 
+  // Sort the materials list so unkitted lines float to the top and
+  // completed (kitted) lines sink to the bottom. Within each group the
+  // original order is preserved (stable sort) so the operator's mental
+  // map of "next-to-pick" stays consistent across re-renders.
+  const sortedToLines = useMemo(() => {
+    if (!state.kitData?.toLines) return []
+    return [...state.kitData.toLines].sort((a, b) => {
+      if (a.kitted === b.kitted) return 0
+      return a.kitted ? 1 : -1
+    })
+  }, [state.kitData?.toLines])
+
   // Animation variants
   const contentVariants = {
     hidden: { opacity: 0, x: 50 },
@@ -537,23 +602,15 @@ const RFBuildKitForm: React.FC<RFBuildKitFormProps> = ({ onBack }) => {
   return (
     <div className='mx-auto w-full max-w-md space-y-4 p-4'>
       {/* Header with back button */}
-      <div className='flex items-center'>
-        {onBack && (
-          <Button variant='ghost' size='sm' onClick={onBack}>
-            <ChevronLeft className='mr-1 h-4 w-4' />
-            Back
-          </Button>
-        )}
-        <div className='flex-1 text-center'>
-          <h2 className='text-lg font-bold'>Build Kit</h2>
-          {state.kitData && (
-            <p className='text-muted-foreground text-xs'>
-              {state.kitData.kitPoNumber} • {state.kitData.kitNumber}
-            </p>
-          )}
-        </div>
-        {onBack && <div className='w-14 shrink-0' />}
-      </div>
+      <RFScreenHeader
+        title='Build Kit'
+        subtitle={
+          state.kitData
+            ? `${state.kitData.kitPoNumber} • ${state.kitData.kitNumber}`
+            : 'Assemble parts'
+        }
+        onBack={onBack}
+      />
 
       {/* Progress indicator */}
       {state.kitData && state.currentStep !== 'complete' && (
@@ -582,26 +639,28 @@ const RFBuildKitForm: React.FC<RFBuildKitFormProps> = ({ onBack }) => {
               variants={contentVariants}
               className='space-y-4'
             >
-              {/* Step 1: Scan Kit PO Number */}
+              {/* Step 1: Scan Kit Serial Number or PO */}
               {state.currentStep === 'kit_scan' && (
                 <div className='space-y-4'>
                   <div className='space-y-2 text-center'>
                     <Package className='text-primary mx-auto h-12 w-12' />
                     <h3 className='text-lg font-semibold'>
-                      Scan Kit PO Number
+                      Scan Kit Serial Number
                     </h3>
                     <p className='text-muted-foreground text-sm'>
-                      Enter or scan the Kit PO number to start building
+                      Scan the kit serial number (
+                      <span className='font-mono'>KIT-…</span>) to drop straight
+                      into building. Legacy Kit PO numbers are still accepted.
                     </p>
                   </div>
 
                   <div className='space-y-2'>
-                    <Label htmlFor='kit-po'>Kit PO Number</Label>
+                    <Label htmlFor='kit-po'>Kit Serial Number or PO</Label>
                     <ScannerInput
                       ref={kitPoRef}
                       id='kit-po'
                       type='text'
-                      placeholder='Scan or enter Kit PO number'
+                      placeholder='Scan KIT-YYYYMMDD-NNN or Kit PO'
                       value={kitPoNumber}
                       onChange={(e) =>
                         setKitPoNumber(e.target.value.toUpperCase())
@@ -614,13 +673,17 @@ const RFBuildKitForm: React.FC<RFBuildKitFormProps> = ({ onBack }) => {
                       }}
                       className='h-12 text-center font-mono text-lg'
                       disabled={
-                        state.isProcessing || isVerifyingKit || isStartingBuild
+                        state.isProcessing ||
+                        isVerifyingKit ||
+                        isVerifyingKitBySerial ||
+                        isStartingBuild
                       }
                     />
                   </div>
 
                   {(state.isProcessing ||
                     isVerifyingKit ||
+                    isVerifyingKitBySerial ||
                     isStartingBuild) && (
                     <div className='flex items-center justify-center py-4'>
                       <Loader2 className='mr-2 h-6 w-6 animate-spin' />
@@ -634,6 +697,7 @@ const RFBuildKitForm: React.FC<RFBuildKitFormProps> = ({ onBack }) => {
                       !kitPoNumber.trim() ||
                       state.isProcessing ||
                       isVerifyingKit ||
+                      isVerifyingKitBySerial ||
                       isStartingBuild
                     }
                     className='h-12 w-full'
@@ -699,61 +763,64 @@ const RFBuildKitForm: React.FC<RFBuildKitFormProps> = ({ onBack }) => {
                       Validate Material
                     </Button>
 
-                    {/* Materials List */}
-                    <div className='max-h-48 space-y-2 overflow-y-auto'>
+                    {/* Materials List — unkitted lines float to the top
+                        so the operator's "next-to-pick" group is always
+                        clustered at the head of the list. Completed
+                        lines sink to the bottom for audit. */}
+                    <div className='max-h-64 space-y-2 overflow-y-auto'>
                       <h4 className='text-muted-foreground text-sm font-medium'>
                         Materials to Kit:
                       </h4>
-                      {state.kitData.toLines.map((line) => (
+                      {sortedToLines.map((line) => (
                         <div
                           key={line.id}
                           className={cn(
-                            'rounded border p-2 text-xs',
+                            'rounded border p-2.5',
                             line.kitted
-                              ? 'border-green-200 bg-green-50 dark:border-green-800 dark:bg-green-950/30'
+                              ? 'border-green-200 bg-green-50 opacity-70 dark:border-green-800 dark:bg-green-950/30'
                               : 'bg-muted/30 border-muted'
                           )}
                         >
-                          <div className='flex items-center justify-between'>
-                            <div className='flex items-center gap-2'>
+                          <div className='flex items-center justify-between gap-2'>
+                            <div className='flex min-w-0 items-center gap-2'>
                               {line.kitted ? (
-                                <CheckCircle className='h-4 w-4 flex-shrink-0 text-green-500' />
+                                <CheckCircle className='h-5 w-5 shrink-0 text-green-500' />
                               ) : (
-                                <Target className='text-muted-foreground h-4 w-4 flex-shrink-0' />
+                                <Target className='text-muted-foreground h-5 w-5 shrink-0' />
                               )}
-                              <div>
-                                <span className='font-mono font-medium'>
+                              <div className='min-w-0'>
+                                <span className='font-mono text-lg font-semibold break-all sm:text-xl'>
                                   {line.material}
                                 </span>
-                                <span className='text-muted-foreground ml-2'>
+                                <span className='text-muted-foreground ml-2 text-base font-semibold sm:text-lg'>
                                   × {line.quantity}
                                 </span>
                               </div>
                             </div>
-                            <div className='flex items-center gap-1'>
+                            <div className='flex shrink-0 items-center gap-1'>
                               {/* Visual Inspection Button - for materials without barcodes */}
                               {!line.kitted && (
                                 <Button
                                   variant='ghost'
                                   size='sm'
-                                  className='h-6 px-2 text-blue-600 hover:bg-blue-50 hover:text-blue-700 dark:text-blue-400 dark:hover:bg-blue-950/30'
+                                  className='h-8 px-2 text-blue-600 hover:bg-blue-50 hover:text-blue-700 dark:text-blue-400 dark:hover:bg-blue-950/30'
                                   onClick={() => handleVisualInspection(line)}
                                   title='Visual inspection - confirm without scanning'
                                 >
-                                  <Eye className='h-3 w-3' />
+                                  <Eye className='h-4 w-4' />
                                 </Button>
                               )}
                               {line.kitted && (
                                 <Button
                                   variant='ghost'
                                   size='sm'
-                                  className='h-6 px-2'
+                                  className='h-8 px-2'
                                   onClick={() =>
                                     handleUndoKitting(line.id, line.material)
                                   }
                                   disabled={isUnmarkingLine}
                                 >
-                                  <Undo2 className='h-3 w-3' />
+                                  <Undo2 className='h-4 w-4' />
                                 </Button>
                               )}
                             </div>
@@ -976,3 +1043,5 @@ const RFBuildKitForm: React.FC<RFBuildKitFormProps> = ({ onBack }) => {
 }
 
 export default RFBuildKitForm
+
+// Created and developed by Jai Singh

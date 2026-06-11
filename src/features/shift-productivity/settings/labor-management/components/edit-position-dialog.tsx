@@ -1,3 +1,4 @@
+// Created and developed by Jai Singh
 /**
  * Edit Position Dialog Component
  * Form modal for editing existing organizational positions
@@ -96,7 +97,7 @@ export function EditPositionDialog({
   const [isSubmitting, setIsSubmitting] = useState(false)
 
   const form = useForm<PositionFormData>({
-    resolver: zodResolver(positionSchema),
+    resolver: zodResolver(positionSchema) as never,
     defaultValues: {
       position_code: '',
       position_title: '',
@@ -596,3 +597,5 @@ export function EditPositionDialog({
     </Dialog>
   )
 }
+
+// Created and developed by Jai Singh

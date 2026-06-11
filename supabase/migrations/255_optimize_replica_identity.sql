@@ -1,0 +1,70 @@
+-- Migration: Optimize REPLICA IDENTITY for Realtime (v1.7.8)
+-- Date: 2026-05-02
+-- Description:
+--   Tier 2 fix from the OmniFrame agent + Supabase load investigation.
+--   Most of our Realtime-published tables were defaulted to
+--   `REPLICA IDENTITY FULL` in their original migrations because the
+--   v1.4-era browser code occasionally inspected the `old` row in
+--   UPDATE payloads (filter-on-changed-columns logic). The current
+--   frontend (`usePutawayOperations`, `useAgentJobsRealtime`,
+--   `useAgentsFleetRealtime`, the `<ImportLt22Dialog />` status pill)
+--   AND the v1.6.4+ agent (`_on_rf_putaway_change`,
+--   `_on_hardcoded_table_change`, `_on_jobs_insert`) ONLY consume the
+--   `record`/`new` field. The `old` payload is dead bandwidth.
+--
+--   `REPLICA IDENTITY FULL` instructs PostgreSQL's logical replication
+--   slot to capture the ENTIRE pre-image of every UPDATE row. That
+--   pre-image flows through the WAL → Supabase Realtime decoder →
+--   every connected WebSocket client. On `sap_agents` (heartbeat
+--   UPDATE every 30s × N agents = N×2 UPDATEs/min × every dashboard
+--   tab) the FULL setting roughly doubles WebSocket bytes for no
+--   consumer benefit. Switching to `DEFAULT` ships the primary key
+--   only in the `old` payload (sufficient to identify the changed
+--   row); the `new` payload is unchanged and remains the full row.
+--
+--   `rf_putaway_operations` intentionally STAYS `REPLICA IDENTITY
+--   FULL`. The agent's hardcoded trigger evaluator
+--   (`_on_hardcoded_table_change` + `_hardcoded_trigger_match`)
+--   inspects the `record` field which Supabase Realtime synthesizes
+--   from the OLD image when REPLICA IDENTITY is FULL — switching to
+--   DEFAULT here would silently strip the row content from
+--   the trigger callback and the auto-confirm-TO trigger would stop
+--   firing. Revisit in v1.8 when we audit consumers and migrate the
+--   trigger evaluator to read the `new` row directly (it's available
+--   on UPDATE; we use OLD only because of a v1.6.4-era assumption).
+--
+--   This migration is idempotent — `ALTER TABLE ... REPLICA IDENTITY`
+--   is unconditional and converges to the requested setting whether
+--   the table is currently FULL, DEFAULT, INDEX, or NOTHING. Safe to
+--   re-run.
+--
+--   Verification (post-apply):
+--     SELECT relname,
+--            CASE relreplident
+--              WHEN 'd' THEN 'DEFAULT'
+--              WHEN 'n' THEN 'NOTHING'
+--              WHEN 'f' THEN 'FULL'
+--              WHEN 'i' THEN 'INDEX'
+--            END AS replica_identity
+--       FROM pg_class
+--      WHERE relname IN (
+--        'sap_agents', 'sap_agent_jobs', 'sap_agent_schedules',
+--        'sap_outbound_to_import_runs', 'rf_putaway_operations'
+--      );
+--   Expected: rf_putaway_operations=FULL, all others=DEFAULT.
+--
+--   See [[Implementations/Implement-Agent-DB-Load-Reduction]].
+
+-- v1.7.8 — Reduce Realtime payload bandwidth by switching tables from
+-- REPLICA IDENTITY FULL (ships entire old + new row) to DEFAULT
+-- (PK only). Only `rf_putaway_operations` needs FULL because the
+-- agent-side trigger evaluator consumes the `record` payload Realtime
+-- synthesizes from the OLD image. Same audit applies to the other
+-- four tables — current consumers only inspect `new`.
+ALTER TABLE public.sap_agents REPLICA IDENTITY DEFAULT;
+ALTER TABLE public.sap_agent_jobs REPLICA IDENTITY DEFAULT;
+ALTER TABLE public.sap_agent_schedules REPLICA IDENTITY DEFAULT;
+ALTER TABLE public.sap_outbound_to_import_runs REPLICA IDENTITY DEFAULT;
+-- LEAVE rf_putaway_operations as FULL for now (some tooling may rely
+-- on old-row diffs in future); revisit in v1.8 when we audit
+-- consumers.

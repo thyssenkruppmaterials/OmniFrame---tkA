@@ -1,3 +1,4 @@
+// Created and developed by Jai Singh
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useNavigate } from '@tanstack/react-router'
 import { useUnifiedAuth } from '@/lib/auth/unified-auth-provider'
@@ -17,7 +18,7 @@ import type { NavGroup, NavItem } from '@/components/layout/types'
 interface FlatNavItem {
   title: string
   url: string
-  icon?: React.ElementType
+  icon?: React.ComponentType<{ className?: string }>
   group: string
 }
 
@@ -146,3 +147,5 @@ export function CommandPalette() {
     </CommandDialog>
   )
 }
+
+// Created and developed by Jai Singh

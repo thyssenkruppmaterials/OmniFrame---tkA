@@ -1,3 +1,4 @@
+// Created and developed by Jai Singh
 /**
  * Numeric keypad for kiosk touch input.
  * Use with a display div (not an input) to prevent native keyboard from opening.
@@ -100,3 +101,5 @@ export function KioskNumericKeypad({
     </div>
   )
 }
+
+// Created and developed by Jai Singh

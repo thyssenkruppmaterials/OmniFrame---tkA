@@ -1,3 +1,4 @@
+// Created and developed by Jai Singh
 use serde::Deserialize;
 
 #[derive(Debug, Clone, Deserialize)]
@@ -71,3 +72,5 @@ mod tests {
         std::env::remove_var("RUST_CORE_API_KEY");
     }
 }
+
+// Created and developed by Jai Singh

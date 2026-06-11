@@ -1,3 +1,4 @@
+// Created and developed by Jai Singh
 /**
  * Edit Labor Standard Dialog Component
  * Form modal for editing existing labor standards
@@ -131,7 +132,7 @@ export function EditStandardDialog({
   const [activityComboOpen, setActivityComboOpen] = useState(false)
 
   const form = useForm<StandardFormData>({
-    resolver: zodResolver(standardSchema),
+    resolver: zodResolver(standardSchema) as never,
     defaultValues: {
       linked_activity: '',
       standard_name: '',
@@ -778,3 +779,5 @@ export function EditStandardDialog({
     </Dialog>
   )
 }
+
+// Created and developed by Jai Singh

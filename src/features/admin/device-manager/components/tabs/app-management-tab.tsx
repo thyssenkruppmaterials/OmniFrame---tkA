@@ -1,3 +1,4 @@
+// Created and developed by Jai Singh
 import { useState } from 'react'
 import { IconSearch, IconApps } from '@tabler/icons-react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
@@ -174,3 +175,5 @@ export function AppManagementTab() {
     </div>
   )
 }
+
+// Created and developed by Jai Singh

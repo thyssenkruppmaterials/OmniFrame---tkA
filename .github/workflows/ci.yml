@@ -1,0 +1,491 @@
+name: Continuous Integration
+
+on:
+  push:
+    branches:
+      - main
+
+  pull_request:
+    branches:
+      - main
+
+jobs:
+  # ── Frontend: lint, format, build, unit tests ──────────────────────────
+  frontend-unit:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install pnpm
+        run: npm install -g pnpm
+
+      - name: Setup pnpm cache
+        uses: actions/cache@v4
+        with:
+          path: ~/.pnpm-store
+          key: ${{ runner.os }}-pnpm-${{ hashFiles('pnpm-lock.yaml') }}
+          restore-keys: ${{ runner.os }}-pnpm-
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Check tracked artifacts
+        id: artifacts
+        run: node scripts/check-tracked-artifacts.mjs
+
+      - name: Check forbidden client env
+        id: forbidden-env
+        run: node scripts/check-forbidden-client-env.mjs
+
+      - name: Lint (check-only, no auto-fix)
+        id: lint
+        run: pnpm lint:check
+
+      - name: Lint ratchet gate
+        run: node scripts/lint-ratchet.mjs
+
+      - name: Prettier format check
+        run: pnpm format:check
+
+      - name: Build the project
+        id: build
+        run: pnpm build
+
+      - name: Check bundle size budget
+        run: node scripts/check-bundle-budget.mjs
+
+      - name: Validate CI / check-matrix alignment
+        run: node scripts/validate-check-matrix.mjs
+
+      - name: Run unit tests
+        id: unit-tests
+        run: pnpm test:unit
+
+      - name: Job summary
+        if: always()
+        run: |
+          echo "### Frontend Unit Pipeline" >> $GITHUB_STEP_SUMMARY
+          echo "- Tracked artifacts: ${{ steps.artifacts.outcome == 'success' && '✅' || '❌' }}" >> $GITHUB_STEP_SUMMARY
+          echo "- Forbidden env: ${{ steps.forbidden-env.outcome == 'success' && '✅' || '❌' }}" >> $GITHUB_STEP_SUMMARY
+          echo "- Lint: ${{ steps.lint.outcome == 'success' && '✅' || '❌' }}" >> $GITHUB_STEP_SUMMARY
+          echo "- Build: ${{ steps.build.outcome == 'success' && '✅' || '❌' }}" >> $GITHUB_STEP_SUMMARY
+          echo "- Unit tests: ${{ steps.unit-tests.outcome == 'success' && '✅' || '❌' }}" >> $GITHUB_STEP_SUMMARY
+
+  # ── Dependency audit gate ────────────────────────────────────────────────
+  dependency-audit:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install pnpm
+        run: npm install -g pnpm
+
+      - name: Setup pnpm cache
+        uses: actions/cache@v4
+        with:
+          path: ~/.pnpm-store
+          key: ${{ runner.os }}-pnpm-${{ hashFiles('pnpm-lock.yaml') }}
+          restore-keys: ${{ runner.os }}-pnpm-
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Audit production dependencies
+        run: |
+          node -e "
+            const { execSync } = require('child_process');
+            const fs = require('fs');
+
+            // Run structured JSON audit
+            let auditJson;
+            try {
+              const raw = execSync('pnpm audit --prod --audit-level=high --json 2>/dev/null', { encoding: 'utf8' });
+              auditJson = JSON.parse(raw);
+            } catch (e) {
+              // pnpm audit exits non-zero when findings exist; parse stdout anyway
+              if (e.stdout) {
+                auditJson = JSON.parse(e.stdout);
+              } else {
+                console.error('::error::Failed to run pnpm audit --json');
+                process.exit(1);
+              }
+            }
+
+            // Load and validate allowlist
+            const allowlist = JSON.parse(fs.readFileSync('.audit-allowlist.json', 'utf8'));
+            const now = new Date().toISOString().slice(0, 10);
+            const allowedIds = new Set();
+
+            // Validate allowlist entries: must have id, owner, reason, expires
+            for (const entry of allowlist.allowlist) {
+              if (!entry.id || !entry.owner || !entry.reason || !entry.expires) {
+                console.error('::error::Allowlist entry missing required fields (id, owner, reason, expires): ' + JSON.stringify(entry));
+                process.exit(1);
+              }
+              if (entry.expires < now) {
+                console.error('::error::EXPIRED allowlist entry: ' + entry.id + ' (' + entry.package + ') expired ' + entry.expires);
+                process.exit(1);
+              }
+              allowedIds.add(entry.id);
+            }
+
+            // Count advisories by severity
+            const advisories = auditJson.advisories || {};
+            const highFindings = Object.values(advisories).filter(a => a.severity === 'high' || a.severity === 'critical');
+            const unexpectedHigh = highFindings.filter(a => !allowedIds.has(a.github_advisory_id) && !allowedIds.has(String(a.id)));
+
+            // Write step summary
+            const summary = [
+              '### Dependency Audit',
+              '- High/Critical findings: ' + highFindings.length,
+              '- Allowlisted: ' + allowlist.allowlist.length,
+              '- Unexpected: ' + unexpectedHigh.length,
+            ].join('\n');
+            fs.appendFileSync(process.env.GITHUB_STEP_SUMMARY || '/dev/null', summary + '\n');
+            console.log(summary);
+
+            if (unexpectedHigh.length > 0) {
+              unexpectedHigh.forEach(a => console.error('::error::Unexpected finding: ' + (a.github_advisory_id || a.id) + ' (' + a.module_name + ')'));
+              process.exit(1);
+            }
+            console.log('✅ Audit gate passed');
+          "
+
+  # ── Frontend: deterministic integration tests (required on every PR) ───
+  frontend-integration:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install pnpm
+        run: npm install -g pnpm
+
+      - name: Setup pnpm cache
+        uses: actions/cache@v4
+        with:
+          path: ~/.pnpm-store
+          key: ${{ runner.os }}-pnpm-${{ hashFiles('pnpm-lock.yaml') }}
+          restore-keys: ${{ runner.os }}-pnpm-
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Run deterministic integration tests
+        env:
+          INTEGRATION_MODE: 'deterministic'
+        run: |
+          pnpm test:integration --reporter=json --outputFile=integration-results.json 2>&1 | tee integration-output.txt
+
+      - name: Enforce non-zero execution count
+        if: always()
+        run: |
+          if [ -f integration-results.json ]; then
+            TOTAL=$(node -e "const r=require('./integration-results.json'); console.log(r.numTotalTests||0)")
+            PASSED=$(node -e "const r=require('./integration-results.json'); console.log(r.numPassedTests||0)")
+            SKIPPED=$(node -e "const r=require('./integration-results.json'); console.log((r.numTotalTests||0)-(r.numPassedTests||0)-(r.numFailedTests||0))")
+            FAILED=$(node -e "const r=require('./integration-results.json'); console.log(r.numFailedTests||0)")
+          else
+            TOTAL=0; PASSED=0; SKIPPED=0; FAILED=0
+          fi
+          echo "### Integration Tests (deterministic)" >> $GITHUB_STEP_SUMMARY
+          echo "- Mode: deterministic" >> $GITHUB_STEP_SUMMARY
+          echo "- Total: $TOTAL" >> $GITHUB_STEP_SUMMARY
+          echo "- Passed: $PASSED" >> $GITHUB_STEP_SUMMARY
+          echo "- Skipped (infra): $SKIPPED" >> $GITHUB_STEP_SUMMARY
+          echo "- Failed: $FAILED" >> $GITHUB_STEP_SUMMARY
+          if [ "$PASSED" = "0" ] && [ "$FAILED" = "0" ]; then
+            echo "::error::All deterministic tests skipped — zero executed. Required lane must execute > 0 tests."
+            exit 1
+          fi
+          if [ "$FAILED" != "0" ]; then
+            echo "::error::$FAILED integration test(s) failed"
+            exit 1
+          fi
+
+      - name: Upload integration test logs
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: integration-deterministic-logs
+          path: |
+            integration-results.json
+            integration-output.txt
+            tests/integration/**/*.log
+          retention-days: 14
+
+  # ── Frontend: infra integration tests (required for protected branches) ─
+  frontend-integration-infra:
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/heads/release/')
+
+    services:
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install pnpm
+        run: npm install -g pnpm
+
+      - name: Setup pnpm cache
+        uses: actions/cache@v4
+        with:
+          path: ~/.pnpm-store
+          key: ${{ runner.os }}-pnpm-${{ hashFiles('pnpm-lock.yaml') }}
+          restore-keys: ${{ runner.os }}-pnpm-
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Run infra integration tests
+        env:
+          INTEGRATION_MODE: 'infra'
+          REQUIRE_INTEGRATION_INFRA: 'true'
+          REDIS_URL: redis://localhost:6379
+        run: |
+          pnpm test:integration --reporter=json --outputFile=integration-results.json 2>&1 | tee integration-output.txt
+
+      - name: Enforce non-zero infra execution count
+        if: always()
+        run: |
+          if [ -f integration-results.json ]; then
+            TOTAL=$(node -e "const r=require('./integration-results.json'); console.log(r.numTotalTests||0)")
+            PASSED=$(node -e "const r=require('./integration-results.json'); console.log(r.numPassedTests||0)")
+            SKIPPED=$(node -e "const r=require('./integration-results.json'); console.log((r.numTotalTests||0)-(r.numPassedTests||0)-(r.numFailedTests||0))")
+            FAILED=$(node -e "const r=require('./integration-results.json'); console.log(r.numFailedTests||0)")
+          else
+            TOTAL=0; PASSED=0; SKIPPED=0; FAILED=0
+          fi
+          echo "### Integration Tests (infra)" >> $GITHUB_STEP_SUMMARY
+          echo "- Mode: infra" >> $GITHUB_STEP_SUMMARY
+          echo "- Total: $TOTAL" >> $GITHUB_STEP_SUMMARY
+          echo "- Passed: $PASSED" >> $GITHUB_STEP_SUMMARY
+          echo "- Skipped: $SKIPPED" >> $GITHUB_STEP_SUMMARY
+          echo "- Failed: $FAILED" >> $GITHUB_STEP_SUMMARY
+          if [ "$PASSED" = "0" ] && [ "$FAILED" = "0" ]; then
+            echo "::error::All infra tests skipped — zero executed. Infra lane must execute > 0 tests."
+            exit 1
+          fi
+          if [ "$FAILED" != "0" ]; then
+            echo "::error::$FAILED infra integration test(s) failed"
+            exit 1
+          fi
+
+      - name: Upload infra integration test logs
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: integration-infra-logs
+          path: |
+            integration-results.json
+            integration-output.txt
+            tests/integration/**/*.log
+          retention-days: 14
+
+  # ── Rust services: build and test (strict) ──────────────────────────────
+  rust:
+    runs-on: ubuntu-latest
+
+    env:
+      RUSTFLAGS: "-D warnings"
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache Cargo registry and target
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            rust-core-service/target
+            rust-ai-service/target
+            rust-work-service/target
+            rust-dashboard-service/target
+            rust-streaming-service/target
+          key: ${{ runner.os }}-cargo-all-${{ hashFiles('rust-*/Cargo.lock') }}
+          restore-keys: ${{ runner.os }}-cargo-all-
+
+      - name: Run rust-core-service tests (strict, minimum 3 tests)
+        working-directory: rust-core-service
+        run: |
+          TEST_OUTPUT=$(cargo test --release --quiet 2>&1)
+          echo "$TEST_OUTPUT"
+          PASSED=$(echo "$TEST_OUTPUT" | grep -oP '\d+(?= passed)' | tail -1 || echo "0")
+          echo "rust-core-service passed: $PASSED"
+          if [ "${PASSED:-0}" -lt 3 ]; then
+            echo "::error::rust-core-service has $PASSED tests (minimum 3 required)"
+            exit 1
+          fi
+
+      # ── Additional Rust services: build + test (strict, minimum 3 tests each) ──
+      - name: Build and test rust-ai-service (minimum 3 tests)
+        working-directory: rust-ai-service
+        run: |
+          cargo check 2>&1 | tee /tmp/ai-check.txt
+          TEST_OUTPUT=$(cargo test --quiet 2>&1)
+          echo "$TEST_OUTPUT"
+          PASSED=$(echo "$TEST_OUTPUT" | grep -oP '\d+(?= passed)' | tail -1 || echo "0")
+          echo "rust-ai-service passed: $PASSED"
+          if [ "${PASSED:-0}" -lt 3 ]; then
+            echo "::error::rust-ai-service has $PASSED tests (minimum 3 required)"
+            exit 1
+          fi
+
+      - name: Build and test rust-work-service (minimum 3 tests)
+        working-directory: rust-work-service
+        run: |
+          cargo check 2>&1 | tee /tmp/work-check.txt
+          TEST_OUTPUT=$(cargo test --quiet 2>&1)
+          echo "$TEST_OUTPUT"
+          PASSED=$(echo "$TEST_OUTPUT" | grep -oP '\d+(?= passed)' | tail -1 || echo "0")
+          echo "rust-work-service passed: $PASSED"
+          if [ "${PASSED:-0}" -lt 3 ]; then
+            echo "::error::rust-work-service has $PASSED tests (minimum 3 required)"
+            exit 1
+          fi
+
+      - name: Check rust-dashboard-service (minimum 3 tests required)
+        working-directory: rust-dashboard-service
+        run: |
+          cargo check 2>&1 | tee /tmp/dashboard-check.txt
+          TEST_OUTPUT=$(cargo test --quiet 2>&1)
+          echo "$TEST_OUTPUT"
+          PASSED=$(echo "$TEST_OUTPUT" | grep -oP '\d+(?= passed)' | tail -1 || echo "0")
+          echo "rust-dashboard-service passed: $PASSED"
+          if [ "${PASSED:-0}" -lt 3 ]; then
+            echo "::error::rust-dashboard-service has $PASSED tests (minimum 3 required)"
+            exit 1
+          fi
+
+      - name: Check rust-streaming-service (minimum 3 tests required)
+        working-directory: rust-streaming-service
+        run: |
+          cargo check 2>&1 | tee /tmp/streaming-check.txt
+          TEST_OUTPUT=$(cargo test --quiet 2>&1)
+          echo "$TEST_OUTPUT"
+          PASSED=$(echo "$TEST_OUTPUT" | grep -oP '\d+(?= passed)' | tail -1 || echo "0")
+          echo "rust-streaming-service passed: $PASSED"
+          if [ "${PASSED:-0}" -lt 3 ]; then
+            echo "::error::rust-streaming-service has $PASSED tests (minimum 3 required)"
+            exit 1
+          fi
+
+      - name: Job summary with per-service test counts
+        if: always()
+        run: |
+          echo "### Rust Services" >> $GITHUB_STEP_SUMMARY
+          echo "| Service | Build | Tests | Count |" >> $GITHUB_STEP_SUMMARY
+          echo "|---------|-------|-------|-------|" >> $GITHUB_STEP_SUMMARY
+          for svc in core ai work dashboard streaming; do
+            TEST_OUTPUT=$(cd "rust-${svc}-service" && cargo test --quiet 2>&1 || true)
+            PASSED=$(echo "$TEST_OUTPUT" | grep -oP '\d+(?= passed)' | tail -1 || echo "0")
+            IGNORED=$(echo "$TEST_OUTPUT" | grep -oP '\d+(?= ignored)' | tail -1 || echo "0")
+            CHECK_FILE="/tmp/${svc}-check.txt"
+            if [ "$svc" = "core" ] || ([ -f "$CHECK_FILE" ] && ! grep -q "^error" "$CHECK_FILE"); then
+              echo "| rust-${svc}-service | ✅ | ✅ | ${PASSED:-0} passed, ${IGNORED:-0} ignored |" >> $GITHUB_STEP_SUMMARY
+            else
+              echo "| rust-${svc}-service | ❌ | see logs | — |" >> $GITHUB_STEP_SUMMARY
+            fi
+          done
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Policy:** RUSTFLAGS=\"-D warnings\" (zero-warning enforcement)" >> $GITHUB_STEP_SUMMARY
+          echo "**Minimum tests:** All 5 services require >= 3 passing functional tests" >> $GITHUB_STEP_SUMMARY
+
+      - name: Upload test results
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: rust-test-results
+          path: |
+            rust-core-service/target/
+            rust-ai-service/target/
+            rust-work-service/target/
+            rust-dashboard-service/target/
+            rust-streaming-service/target/
+          retention-days: 7
+
+  # ── Python backend: real pytest suite ────────────────────────────────────
+  python:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: |
+          pip install -r api/requirements.txt
+          pip install -r api/requirements-dev.txt
+
+      - name: Setup test environment
+        run: |
+          cp .env.test .env.test.ci
+          echo "TESTING=true" >> .env.test.ci
+        env:
+          TESTING: 'true'
+
+      - name: Run pytest
+        env:
+          TESTING: 'true'
+        run: |
+          python -m pytest -q --tb=short --junitxml=test-results/pytest-report.xml
+          TEST_COUNT=$(python -m pytest --collect-only -q 2>/dev/null | tail -1 | grep -oP '\d+(?= test)' || echo "0")
+          echo "### Python Tests" >> $GITHUB_STEP_SUMMARY
+          echo "Collected tests: $TEST_COUNT" >> $GITHUB_STEP_SUMMARY
+          if [ "$TEST_COUNT" = "0" ]; then
+            echo "::error::Zero tests collected — Python job provides no signal."
+            exit 1
+          fi
+
+      - name: Upload test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: python-test-results
+          path: test-results/
+          retention-days: 14

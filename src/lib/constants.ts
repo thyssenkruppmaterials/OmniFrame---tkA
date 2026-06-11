@@ -1,3 +1,4 @@
+// Created and developed by Jai Singh
 /**
  * Application-wide constants
  * Centralized location for configuration values used across the codebase
@@ -88,3 +89,5 @@ export const STATUS_COLORS = {
   info: 'bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200',
   neutral: 'bg-gray-100 text-gray-800 dark:bg-gray-700 dark:text-gray-200',
 } as const
+
+// Created and developed by Jai Singh

@@ -1,3 +1,4 @@
+// Created and developed by Jai Singh
 //! Authentication client for rust-ai-service
 //!
 //! Validates JWT tokens by calling rust-core-service.
@@ -119,7 +120,7 @@ impl AuthClient {
     /// Validate service API key (for internal service-to-service calls)
     pub fn validate_service_key(&self, key: &str) -> bool {
         // SECURITY: Only accept the exact configured service API key.
-        // The previous starts_with("omf_") pattern accepted ANY key with that prefix,
+        // The previous starts_with("onbx_") pattern accepted ANY key with that prefix,
         // bypassing proper authentication. Centralized DB validation is done by rust-core-service.
         key == self.config.service_api_key
     }
@@ -168,3 +169,5 @@ pub fn extract_service_key(headers: &HeaderMap) -> Option<&str> {
         .get("X-Service-Key")
         .and_then(|v| v.to_str().ok())
 }
+
+// Created and developed by Jai Singh

@@ -1,3 +1,4 @@
+// Created and developed by Jai Singh
 //! Database health monitoring and metrics
 
 use sqlx::PgPool;
@@ -155,3 +156,5 @@ pub struct RedisHealth {
     pub connected: bool,
     pub latency_ms: u64,
 }
+
+// Created and developed by Jai Singh

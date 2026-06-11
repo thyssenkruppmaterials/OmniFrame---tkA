@@ -1,3 +1,4 @@
+// Created and developed by Jai Singh
 /**
  * Labor Management Settings Component
  * Comprehensive shift hierarchy and organizational structure management
@@ -26,6 +27,7 @@ import type {
   ShiftAssignmentWithDetails,
 } from '@/lib/supabase/labor-management.service'
 import { useLaborManagement } from '@/hooks/use-labor-management'
+import { useShiftProductivitySettings } from '@/hooks/use-shift-productivity-settings'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -69,9 +71,52 @@ import { DeletePositionDialog } from './components/delete-position-dialog'
 import { EditAreaDialog } from './components/edit-area-dialog'
 import { EditAssignmentDialog } from './components/edit-assignment-dialog'
 import { EditPositionDialog } from './components/edit-position-dialog'
+import { LaborManagementOverview } from './components/labor-management-overview'
 import { LaborStandardsTab } from './components/labor-standards-tab'
 import { OrgChartTree } from './components/org-chart-tree'
 import { PositionOptionsTab } from './components/position-options-tab'
+
+type ExportFormat = 'csv' | 'excel' | 'json'
+
+function downloadRows({
+  headers,
+  rows,
+  fileName,
+  format,
+}: {
+  headers: string[]
+  rows: Array<Array<string | number | boolean | null | undefined>>
+  fileName: string
+  format: ExportFormat
+}) {
+  const extension =
+    format === 'json' ? 'json' : format === 'excel' ? 'xls' : 'csv'
+  const mimeType =
+    format === 'json'
+      ? 'application/json;charset=utf-8;'
+      : format === 'excel'
+        ? 'application/vnd.ms-excel;charset=utf-8;'
+        : 'text/csv;charset=utf-8;'
+  const content =
+    format === 'json'
+      ? JSON.stringify(
+          rows.map((row) =>
+            Object.fromEntries(
+              headers.map((header, index) => [header, row[index] ?? ''])
+            )
+          ),
+          null,
+          2
+        )
+      : [headers, ...rows]
+          .map((row) => row.map((cell) => `"${cell ?? ''}"`).join(','))
+          .join('\n')
+  const blob = new Blob([content], { type: mimeType })
+  const link = document.createElement('a')
+  link.href = URL.createObjectURL(blob)
+  link.download = `${fileName}-${new Date().toISOString().split('T')[0]}.${extension}`
+  link.click()
+}
 
 export function LaborManagementSettings() {
   const {
@@ -86,6 +131,8 @@ export function LaborManagementSettings() {
     assignmentsLoading,
     organizationalTree,
   } = useLaborManagement()
+  const { advancedFormValues } = useShiftProductivitySettings()
+  const exportFormat = advancedFormValues.exportFormat
 
   const [activeTab, setActiveTab] = useState('overview')
   const [addPositionOpen, setAddPositionOpen] = useState(false)
@@ -170,14 +217,7 @@ export function LaborManagementSettings() {
       pos.is_supervisory ? 'Yes' : 'No',
       pos.is_active ? 'Active' : 'Inactive',
     ])
-    const csvContent = [headers, ...rows]
-      .map((row) => row.map((cell) => `"${cell}"`).join(','))
-      .join('\n')
-    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' })
-    const link = document.createElement('a')
-    link.href = URL.createObjectURL(blob)
-    link.download = `positions-${new Date().toISOString().split('T')[0]}.csv`
-    link.click()
+    downloadRows({ headers, rows, fileName: 'positions', format: exportFormat })
   }
 
   const exportAreas = () => {
@@ -197,14 +237,12 @@ export function LaborManagementSettings() {
       area.requires_certification ? 'Yes' : 'No',
       area.is_active ? 'Active' : 'Inactive',
     ])
-    const csvContent = [headers, ...rows]
-      .map((row) => row.map((cell) => `"${cell}"`).join(','))
-      .join('\n')
-    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' })
-    const link = document.createElement('a')
-    link.href = URL.createObjectURL(blob)
-    link.download = `working-areas-${new Date().toISOString().split('T')[0]}.csv`
-    link.click()
+    downloadRows({
+      headers,
+      rows,
+      fileName: 'working-areas',
+      format: exportFormat,
+    })
   }
 
   const exportAssignments = () => {
@@ -232,26 +270,32 @@ export function LaborManagementSettings() {
       assignment.start_date,
       assignment.end_date || '',
     ])
-    const csvContent = [headers, ...rows]
-      .map((row) => row.map((cell) => `"${cell}"`).join(','))
-      .join('\n')
-    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' })
-    const link = document.createElement('a')
-    link.href = URL.createObjectURL(blob)
-    link.download = `assignments-${new Date().toISOString().split('T')[0]}.csv`
-    link.click()
+    downloadRows({
+      headers,
+      rows,
+      fileName: 'assignments',
+      format: exportFormat,
+    })
   }
 
   return (
     <ContentSection
       title='Labor Management'
-      desc='Manage shift hierarchy, positions, working areas, and organizational structure.'
+      desc='Manage the operating model that feeds departments, assignments, labor board context, and team performance calculations.'
     >
       <>
         <TooltipProvider>
-          <div className='space-y-6'>
+          <div className='flex flex-col gap-6'>
+            <Alert>
+              <Network className='h-4 w-4' />
+              <AlertDescription>
+                Positions, areas, assignments, and standards are live runtime
+                configuration. Changes invalidate Shift Productivity dashboards
+                and refresh the labor model used by team views.
+              </AlertDescription>
+            </Alert>
             <Tabs value={activeTab} onValueChange={setActiveTab}>
-              <TabsList className='grid w-full grid-cols-7'>
+              <TabsList className='grid h-auto w-full grid-cols-2 gap-1 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-7'>
                 <TabsTrigger value='overview'>
                   <BarChart3 className='mr-2 h-4 w-4' />
                   Overview
@@ -284,144 +328,16 @@ export function LaborManagementSettings() {
 
               {/* OVERVIEW TAB */}
               <TabsContent value='overview' className='space-y-6'>
-                <div className='grid gap-4 md:grid-cols-2 lg:grid-cols-4'>
-                  <Card>
-                    <CardHeader className='flex flex-row items-center justify-between space-y-0 pb-2'>
-                      <CardTitle className='text-sm font-medium'>
-                        Total Positions
-                      </CardTitle>
-                      <Briefcase className='text-muted-foreground h-4 w-4' />
-                    </CardHeader>
-                    <CardContent>
-                      <div className='text-2xl font-bold'>
-                        {positionStats?.totalPositions || 0}
-                      </div>
-                      <p className='text-muted-foreground text-xs'>
-                        {positionStats?.activePositions || 0} active
-                      </p>
-                    </CardContent>
-                  </Card>
-
-                  <Card>
-                    <CardHeader className='flex flex-row items-center justify-between space-y-0 pb-2'>
-                      <CardTitle className='text-sm font-medium'>
-                        Working Areas
-                      </CardTitle>
-                      <MapPin className='text-muted-foreground h-4 w-4' />
-                    </CardHeader>
-                    <CardContent>
-                      <div className='text-2xl font-bold'>
-                        {areaStats?.totalAreas || 0}
-                      </div>
-                      <p className='text-muted-foreground text-xs'>
-                        {areaStats?.activeAreas || 0} active
-                      </p>
-                    </CardContent>
-                  </Card>
-
-                  <Card>
-                    <CardHeader className='flex flex-row items-center justify-between space-y-0 pb-2'>
-                      <CardTitle className='text-sm font-medium'>
-                        Total Assignments
-                      </CardTitle>
-                      <Users className='text-muted-foreground h-4 w-4' />
-                    </CardHeader>
-                    <CardContent>
-                      <div className='text-2xl font-bold'>
-                        {shiftAssignments?.length || 0}
-                      </div>
-                      <p className='text-muted-foreground text-xs'>
-                        {positionStats?.actualHeadcount || 0} active workers
-                      </p>
-                    </CardContent>
-                  </Card>
-
-                  <Card>
-                    <CardHeader className='flex flex-row items-center justify-between space-y-0 pb-2'>
-                      <CardTitle className='text-sm font-medium'>
-                        Headcount Budget
-                      </CardTitle>
-                      <Target className='text-muted-foreground h-4 w-4' />
-                    </CardHeader>
-                    <CardContent>
-                      <div className='text-2xl font-bold'>
-                        {positionStats?.totalHeadcountBudget || 0}
-                      </div>
-                      <p className='text-muted-foreground text-xs'>
-                        {(
-                          ((positionStats?.actualHeadcount || 0) /
-                            (positionStats?.totalHeadcountBudget || 1)) *
-                          100
-                        ).toFixed(0)}
-                        % utilized
-                      </p>
-                    </CardContent>
-                  </Card>
-                </div>
-
-                <Card>
-                  <CardHeader>
-                    <CardTitle>Quick Start Guide</CardTitle>
-                    <CardDescription>
-                      Follow these steps to set up your labor management system
-                    </CardDescription>
-                  </CardHeader>
-                  <CardContent className='space-y-4'>
-                    <div className='flex items-start space-x-4'>
-                      <div className='bg-primary text-primary-foreground flex h-8 w-8 items-center justify-center rounded-full'>
-                        1
-                      </div>
-                      <div>
-                        <h4 className='font-semibold'>Define Positions</h4>
-                        <p className='text-muted-foreground text-sm'>
-                          Create organizational positions like Supervisor, Team
-                          Lead, Warehouse Associate, etc.
-                        </p>
-                      </div>
-                    </div>
-                    <div className='flex items-start space-x-4'>
-                      <div className='bg-primary text-primary-foreground flex h-8 w-8 items-center justify-center rounded-full'>
-                        2
-                      </div>
-                      <div>
-                        <h4 className='font-semibold'>Create Working Areas</h4>
-                        <p className='text-muted-foreground text-sm'>
-                          Define physical zones like Receiving Dock, Shipping
-                          Area, Quality Lab, etc.
-                        </p>
-                      </div>
-                    </div>
-                    <div className='flex items-start space-x-4'>
-                      <div className='bg-primary text-primary-foreground flex h-8 w-8 items-center justify-center rounded-full'>
-                        3
-                      </div>
-                      <div>
-                        <h4 className='font-semibold'>Assign Users</h4>
-                        <p className='text-muted-foreground text-sm'>
-                          Assign team members to positions and areas with
-                          supervisor relationships
-                        </p>
-                      </div>
-                    </div>
-                    <div className='flex items-start space-x-4'>
-                      <div className='bg-primary text-primary-foreground flex h-8 w-8 items-center justify-center rounded-full'>
-                        4
-                      </div>
-                      <div>
-                        <h4 className='font-semibold'>View Org Chart</h4>
-                        <p className='text-muted-foreground text-sm'>
-                          Visualize your complete organizational hierarchy and
-                          reporting structure
-                        </p>
-                      </div>
-                    </div>
-                  </CardContent>
-                </Card>
+                <LaborManagementOverview
+                  positionStats={positionStats}
+                  areaStats={areaStats}
+                  assignmentCount={shiftAssignments.length}
+                />
               </TabsContent>
 
               {/* POSITIONS TAB */}
               <TabsContent value='positions' className='space-y-4'>
-                <div className='flex items-center justify-between'>
+                <div className='flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between'>
                   <div>
                     <h3 className='text-lg font-semibold'>
                       Position Management
@@ -430,7 +346,7 @@ export function LaborManagementSettings() {
                       Define organizational positions and their relationships
                     </p>
                   </div>
-                  <div className='flex items-center gap-2'>
+                  <div className='flex flex-wrap items-center gap-2'>
                     <Button
                       variant='outline'
                       size='sm'
@@ -485,116 +401,124 @@ export function LaborManagementSettings() {
                 ) : (
                   <Card>
                     <CardContent className='p-0'>
-                      <Table>
-                        <TableHeader>
-                          <TableRow>
-                            <TableHead>Position Title</TableHead>
-                            <TableHead>Code</TableHead>
-                            <TableHead>Type</TableHead>
-                            <TableHead>Level</TableHead>
-                            <TableHead>Reports To</TableHead>
-                            <TableHead>Headcount</TableHead>
-                            <TableHead>Status</TableHead>
-                            <TableHead className='w-[70px]'>Actions</TableHead>
-                          </TableRow>
-                        </TableHeader>
-                        <TableBody>
-                          {filteredPositions.map((position) => {
-                            const fullPosition = shiftPositions.find(
-                              (p) => p.id === position.position_id
-                            )
-                            return (
-                              <TableRow key={position.position_id}>
-                                <TableCell className='font-medium'>
-                                  {position.position_title}
-                                  {position.is_supervisory && (
-                                    <Badge variant='outline' className='ml-2'>
-                                      Supervisor
+                      <div className='overflow-x-auto'>
+                        <Table>
+                          <TableHeader>
+                            <TableRow>
+                              <TableHead>Position Title</TableHead>
+                              <TableHead>Code</TableHead>
+                              <TableHead>Type</TableHead>
+                              <TableHead>Level</TableHead>
+                              <TableHead>Reports To</TableHead>
+                              <TableHead>Headcount</TableHead>
+                              <TableHead>Status</TableHead>
+                              <TableHead className='w-[70px]'>
+                                Actions
+                              </TableHead>
+                            </TableRow>
+                          </TableHeader>
+                          <TableBody>
+                            {filteredPositions.map((position) => {
+                              const fullPosition = shiftPositions.find(
+                                (p) => p.id === position.position_id
+                              )
+                              return (
+                                <TableRow key={position.position_id}>
+                                  <TableCell className='font-medium'>
+                                    {position.position_title}
+                                    {position.is_supervisory && (
+                                      <Badge variant='outline' className='ml-2'>
+                                        Supervisor
+                                      </Badge>
+                                    )}
+                                  </TableCell>
+                                  <TableCell>
+                                    {position.position_code}
+                                  </TableCell>
+                                  <TableCell>
+                                    <Badge
+                                      variant={
+                                        position.position_type === 'leadership'
+                                          ? 'default'
+                                          : position.position_type ===
+                                              'operational'
+                                            ? 'secondary'
+                                            : 'outline'
+                                      }
+                                      className='capitalize'
+                                    >
+                                      {position.position_type}
                                     </Badge>
-                                  )}
-                                </TableCell>
-                                <TableCell>{position.position_code}</TableCell>
-                                <TableCell>
-                                  <Badge
-                                    variant={
-                                      position.position_type === 'leadership'
-                                        ? 'default'
-                                        : position.position_type ===
-                                            'operational'
-                                          ? 'secondary'
-                                          : 'outline'
-                                    }
-                                    className='capitalize'
-                                  >
-                                    {position.position_type}
-                                  </Badge>
-                                </TableCell>
-                                <TableCell>
-                                  <Badge variant='secondary'>
-                                    L{position.position_level}
-                                  </Badge>
-                                </TableCell>
-                                <TableCell className='text-muted-foreground'>
-                                  {position.reports_to_title || '—'}
-                                </TableCell>
-                                <TableCell>
-                                  <Badge variant='outline'>
-                                    {position.current_headcount || 0}
-                                  </Badge>
-                                </TableCell>
-                                <TableCell>
-                                  <Badge
-                                    variant={
-                                      position.is_active
-                                        ? 'default'
-                                        : 'secondary'
-                                    }
-                                  >
-                                    {position.is_active ? 'Active' : 'Inactive'}
-                                  </Badge>
-                                </TableCell>
-                                <TableCell>
-                                  <Tooltip>
-                                    <TooltipTrigger asChild>
-                                      <DropdownMenu>
-                                        <DropdownMenuTrigger asChild>
-                                          <Button variant='ghost' size='sm'>
-                                            <MoreHorizontal className='h-4 w-4' />
-                                          </Button>
-                                        </DropdownMenuTrigger>
-                                        <DropdownMenuContent align='end'>
-                                          <DropdownMenuItem
-                                            onClick={() =>
-                                              fullPosition &&
-                                              setEditPosition(fullPosition)
-                                            }
-                                          >
-                                            <Edit className='mr-2 h-4 w-4' />
-                                            Edit
-                                          </DropdownMenuItem>
-                                          <DropdownMenuItem
-                                            onClick={() =>
-                                              fullPosition &&
-                                              setDeletePosition(fullPosition)
-                                            }
-                                            className='text-destructive'
-                                          >
-                                            <Trash2 className='mr-2 h-4 w-4' />
-                                            Delete
-                                          </DropdownMenuItem>
-                                        </DropdownMenuContent>
-                                      </DropdownMenu>
-                                    </TooltipTrigger>
-                                    <TooltipContent>
-                                      <p>Position actions</p>
-                                    </TooltipContent>
-                                  </Tooltip>
-                                </TableCell>
-                              </TableRow>
-                            )
-                          })}
-                        </TableBody>
-                      </Table>
+                                  </TableCell>
+                                  <TableCell>
+                                    <Badge variant='secondary'>
+                                      L{position.position_level}
+                                    </Badge>
+                                  </TableCell>
+                                  <TableCell className='text-muted-foreground'>
+                                    {position.reports_to_title || '—'}
+                                  </TableCell>
+                                  <TableCell>
+                                    <Badge variant='outline'>
+                                      {position.current_headcount || 0}
+                                    </Badge>
+                                  </TableCell>
+                                  <TableCell>
+                                    <Badge
+                                      variant={
+                                        position.is_active
+                                          ? 'default'
+                                          : 'secondary'
+                                      }
+                                    >
+                                      {position.is_active
+                                        ? 'Active'
+                                        : 'Inactive'}
+                                    </Badge>
+                                  </TableCell>
+                                  <TableCell>
+                                    <Tooltip>
+                                      <TooltipTrigger asChild>
+                                        <DropdownMenu>
+                                          <DropdownMenuTrigger asChild>
+                                            <Button variant='ghost' size='sm'>
+                                              <MoreHorizontal className='h-4 w-4' />
+                                            </Button>
+                                          </DropdownMenuTrigger>
+                                          <DropdownMenuContent align='end'>
+                                            <DropdownMenuItem
+                                              onClick={() =>
+                                                fullPosition &&
+                                                setEditPosition(fullPosition)
+                                              }
+                                            >
+                                              <Edit className='mr-2 h-4 w-4' />
+                                              Edit
+                                            </DropdownMenuItem>
+                                            <DropdownMenuItem
+                                              onClick={() =>
+                                                fullPosition &&
+                                                setDeletePosition(fullPosition)
+                                              }
+                                              className='text-destructive'
+                                            >
+                                              <Trash2 className='mr-2 h-4 w-4' />
+                                              Delete
+                                            </DropdownMenuItem>
+                                          </DropdownMenuContent>
+                                        </DropdownMenu>
+                                      </TooltipTrigger>
+                                      <TooltipContent>
+                                        <p>Position actions</p>
+                                      </TooltipContent>
+                                    </Tooltip>
+                                  </TableCell>
+                                </TableRow>
+                              )
+                            })}
+                          </TableBody>
+                        </Table>
+                      </div>
                     </CardContent>
                   </Card>
                 )}
@@ -602,7 +526,7 @@ export function LaborManagementSettings() {
 
               {/* WORKING AREAS TAB */}
               <TabsContent value='areas' className='space-y-4'>
-                <div className='flex items-center justify-between'>
+                <div className='flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between'>
                   <div>
                     <h3 className='text-lg font-semibold'>
                       Working Area Management
@@ -611,7 +535,7 @@ export function LaborManagementSettings() {
                       Define physical and logical work zones
                     </p>
                   </div>
-                  <div className='flex items-center gap-2'>
+                  <div className='flex flex-wrap items-center gap-2'>
                     <Button
                       variant='outline'
                       size='sm'
@@ -742,14 +666,14 @@ export function LaborManagementSettings() {
 
               {/* ASSIGNMENTS TAB */}
               <TabsContent value='assignments' className='space-y-4'>
-                <div className='flex items-center justify-between'>
+                <div className='flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between'>
                   <div>
                     <h3 className='text-lg font-semibold'>User Assignments</h3>
                     <p className='text-muted-foreground text-sm'>
                       Assign team members to positions and working areas
                     </p>
                   </div>
-                  <div className='flex items-center gap-2'>
+                  <div className='flex flex-wrap items-center gap-2'>
                     <Button
                       variant='outline'
                       size='sm'
@@ -811,101 +735,107 @@ export function LaborManagementSettings() {
                 ) : (
                   <Card>
                     <CardContent className='p-0'>
-                      <Table>
-                        <TableHeader>
-                          <TableRow>
-                            <TableHead>Employee</TableHead>
-                            <TableHead>Position</TableHead>
-                            <TableHead>Working Area</TableHead>
-                            <TableHead>Supervisor</TableHead>
-                            <TableHead>Type</TableHead>
-                            <TableHead>Status</TableHead>
-                            <TableHead className='w-[70px]'>Actions</TableHead>
-                          </TableRow>
-                        </TableHeader>
-                        <TableBody>
-                          {filteredAssignments.map((assignment) => (
-                            <TableRow key={assignment.id}>
-                              <TableCell>
-                                <div>
-                                  <div className='font-medium'>
-                                    {assignment.user_full_name}
-                                  </div>
-                                  <div className='text-muted-foreground text-sm'>
-                                    {assignment.user_email}
-                                  </div>
-                                </div>
-                              </TableCell>
-                              <TableCell>{assignment.position_title}</TableCell>
-                              <TableCell>
-                                {assignment.area_name || '—'}
-                              </TableCell>
-                              <TableCell className='text-muted-foreground'>
-                                {assignment.supervisor_name || '—'}
-                              </TableCell>
-                              <TableCell>
-                                <Badge
-                                  variant={
-                                    assignment.assignment_type === 'permanent'
-                                      ? 'default'
-                                      : assignment.assignment_type ===
-                                          'temporary'
-                                        ? 'secondary'
-                                        : 'outline'
-                                  }
-                                  className='capitalize'
-                                >
-                                  {assignment.assignment_type}
-                                </Badge>
-                              </TableCell>
-                              <TableCell>
-                                <Badge
-                                  variant={
-                                    assignment.status === 'active'
-                                      ? 'default'
-                                      : assignment.status === 'on_leave'
-                                        ? 'secondary'
-                                        : assignment.status === 'terminated'
-                                          ? 'destructive'
-                                          : 'outline'
-                                  }
-                                  className='capitalize'
-                                >
-                                  {assignment.status.replace('_', ' ')}
-                                </Badge>
-                              </TableCell>
-                              <TableCell>
-                                <DropdownMenu>
-                                  <DropdownMenuTrigger asChild>
-                                    <Button variant='ghost' size='sm'>
-                                      <MoreHorizontal className='h-4 w-4' />
-                                    </Button>
-                                  </DropdownMenuTrigger>
-                                  <DropdownMenuContent align='end'>
-                                    <DropdownMenuItem
-                                      onClick={() =>
-                                        setEditAssignment(assignment)
-                                      }
-                                    >
-                                      <Edit className='mr-2 h-4 w-4' />
-                                      Edit
-                                    </DropdownMenuItem>
-                                    <DropdownMenuItem
-                                      onClick={() =>
-                                        setDeleteAssignment(assignment)
-                                      }
-                                      className='text-destructive'
-                                    >
-                                      <Trash2 className='mr-2 h-4 w-4' />
-                                      Delete
-                                    </DropdownMenuItem>
-                                  </DropdownMenuContent>
-                                </DropdownMenu>
-                              </TableCell>
+                      <div className='overflow-x-auto'>
+                        <Table>
+                          <TableHeader>
+                            <TableRow>
+                              <TableHead>Employee</TableHead>
+                              <TableHead>Position</TableHead>
+                              <TableHead>Working Area</TableHead>
+                              <TableHead>Supervisor</TableHead>
+                              <TableHead>Type</TableHead>
+                              <TableHead>Status</TableHead>
+                              <TableHead className='w-[70px]'>
+                                Actions
+                              </TableHead>
                             </TableRow>
-                          ))}
-                        </TableBody>
-                      </Table>
+                          </TableHeader>
+                          <TableBody>
+                            {filteredAssignments.map((assignment) => (
+                              <TableRow key={assignment.id}>
+                                <TableCell>
+                                  <div>
+                                    <div className='font-medium'>
+                                      {assignment.user_full_name}
+                                    </div>
+                                    <div className='text-muted-foreground text-sm'>
+                                      {assignment.user_email}
+                                    </div>
+                                  </div>
+                                </TableCell>
+                                <TableCell>
+                                  {assignment.position_title}
+                                </TableCell>
+                                <TableCell>
+                                  {assignment.area_name || '—'}
+                                </TableCell>
+                                <TableCell className='text-muted-foreground'>
+                                  {assignment.supervisor_name || '—'}
+                                </TableCell>
+                                <TableCell>
+                                  <Badge
+                                    variant={
+                                      assignment.assignment_type === 'permanent'
+                                        ? 'default'
+                                        : assignment.assignment_type ===
+                                            'temporary'
+                                          ? 'secondary'
+                                          : 'outline'
+                                    }
+                                    className='capitalize'
+                                  >
+                                    {assignment.assignment_type}
+                                  </Badge>
+                                </TableCell>
+                                <TableCell>
+                                  <Badge
+                                    variant={
+                                      assignment.status === 'active'
+                                        ? 'default'
+                                        : assignment.status === 'on_leave'
+                                          ? 'secondary'
+                                          : assignment.status === 'terminated'
+                                            ? 'destructive'
+                                            : 'outline'
+                                    }
+                                    className='capitalize'
+                                  >
+                                    {assignment.status.replace('_', ' ')}
+                                  </Badge>
+                                </TableCell>
+                                <TableCell>
+                                  <DropdownMenu>
+                                    <DropdownMenuTrigger asChild>
+                                      <Button variant='ghost' size='sm'>
+                                        <MoreHorizontal className='h-4 w-4' />
+                                      </Button>
+                                    </DropdownMenuTrigger>
+                                    <DropdownMenuContent align='end'>
+                                      <DropdownMenuItem
+                                        onClick={() =>
+                                          setEditAssignment(assignment)
+                                        }
+                                      >
+                                        <Edit className='mr-2 h-4 w-4' />
+                                        Edit
+                                      </DropdownMenuItem>
+                                      <DropdownMenuItem
+                                        onClick={() =>
+                                          setDeleteAssignment(assignment)
+                                        }
+                                        className='text-destructive'
+                                      >
+                                        <Trash2 className='mr-2 h-4 w-4' />
+                                        Delete
+                                      </DropdownMenuItem>
+                                    </DropdownMenuContent>
+                                  </DropdownMenu>
+                                </TableCell>
+                              </TableRow>
+                            ))}
+                          </TableBody>
+                        </Table>
+                      </div>
                     </CardContent>
                   </Card>
                 )}
@@ -934,7 +864,9 @@ export function LaborManagementSettings() {
                   </p>
                 </div>
 
-                <OrgChartTree data={organizationalTree} />
+                <div className='min-w-0 overflow-x-auto'>
+                  <OrgChartTree data={organizationalTree} />
+                </div>
               </TabsContent>
             </Tabs>
 
@@ -1004,3 +936,5 @@ export function LaborManagementSettings() {
     </ContentSection>
   )
 }
+
+// Created and developed by Jai Singh

@@ -1,3 +1,4 @@
+// Created and developed by Jai Singh
 import { type ReactNode } from 'react'
 import { type ToastPrioritySettings } from '@/lib/services/settings-service'
 import { cn } from '@/lib/utils'
@@ -88,3 +89,5 @@ export function CustomToast({
     </div>
   )
 }
+
+// Created and developed by Jai Singh

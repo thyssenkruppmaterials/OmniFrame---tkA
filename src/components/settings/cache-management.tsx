@@ -1,3 +1,4 @@
+// Created and developed by Jai Singh
 /**
  * Cache Management Component for OmniFrame
  * Provides users with tools to clear caches and resolve caching issues
@@ -364,3 +365,5 @@ export const CacheManagement: React.FC = () => {
 }
 
 export default CacheManagement
+
+// Created and developed by Jai Singh

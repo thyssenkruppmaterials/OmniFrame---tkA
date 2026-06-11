@@ -1,3 +1,4 @@
+// Created and developed by Jai Singh
 import { useState } from 'react'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
@@ -137,7 +138,7 @@ export function CreateUserDialog() {
 
         <Form {...form}>
           <form onSubmit={form.handleSubmit(onSubmit)} className='space-y-4'>
-            <div className='grid grid-cols-2 gap-4'>
+            <div className='grid grid-cols-1 gap-4 md:grid-cols-2'>
               <FormField
                 control={form.control}
                 name='first_name'
@@ -166,7 +167,7 @@ export function CreateUserDialog() {
               />
             </div>
 
-            <div className='grid grid-cols-2 gap-4'>
+            <div className='grid grid-cols-1 gap-4 md:grid-cols-2'>
               <FormField
                 control={form.control}
                 name='email'
@@ -199,7 +200,7 @@ export function CreateUserDialog() {
               />
             </div>
 
-            <div className='grid grid-cols-2 gap-4'>
+            <div className='grid grid-cols-1 gap-4 md:grid-cols-2'>
               <FormField
                 control={form.control}
                 name='phone_number'
@@ -274,7 +275,7 @@ export function CreateUserDialog() {
             />
 
             {!watchSendInvite && (
-              <div className='grid grid-cols-2 gap-4'>
+              <div className='grid grid-cols-1 gap-4 md:grid-cols-2'>
                 <FormField
                   control={form.control}
                   name='password'
@@ -332,3 +333,5 @@ export function CreateUserDialog() {
     </Dialog>
   )
 }
+
+// Created and developed by Jai Singh

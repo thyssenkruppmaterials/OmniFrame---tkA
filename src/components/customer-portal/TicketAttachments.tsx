@@ -1,3 +1,4 @@
+// Created and developed by Jai Singh
 import { useState } from 'react'
 import {
   Download,
@@ -288,3 +289,5 @@ export function TicketAttachments({ ticketId }: TicketAttachmentsProps) {
     </div>
   )
 }
+
+// Created and developed by Jai Singh

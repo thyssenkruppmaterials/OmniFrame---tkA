@@ -1,3 +1,4 @@
+// Created and developed by Jai Singh
 import { useCallback, useEffect, useState } from 'react'
 
 /**
@@ -73,3 +74,5 @@ export function useTabSearchParam(
 
   return [activeTab, setActiveTab]
 }
+
+// Created and developed by Jai Singh

@@ -1,3 +1,4 @@
+// Created and developed by Jai Singh
 /**
  * Rust-enabled Putaway Log Service
  *
@@ -6,9 +7,12 @@
  *
  * Enable by setting VITE_RUST_CORE_ENABLED=true and VITE_RUST_CORE_URL
  */
-import type { QueryData } from '@supabase/supabase-js'
-import { supabase } from '@/lib/supabase/client'
+import { supabase, supabaseRead } from '@/lib/supabase/client'
 import type { Tables } from '@/lib/supabase/database.types'
+import {
+  attachUserProfiles,
+  type UserProfileSummary,
+} from '@/lib/supabase/enrich-with-user-profiles'
 import { logger } from '@/lib/utils/logger'
 import { getTodayEST } from '@/lib/utils/timezone'
 import { initRustCoreClient } from './client'
@@ -19,26 +23,16 @@ const RUST_CORE_ENABLED = import.meta.env.VITE_RUST_CORE_ENABLED === 'true'
 // Re-export types for compatibility
 export type PutawayOperationData = Tables<'rf_putaway_operations'>
 
-// User profile join query for Supabase fallback
-// eslint-disable-next-line @typescript-eslint/no-unused-vars
-const putawayOperationsWithUserQuery = supabase.from('rf_putaway_operations')
-  .select(`
-    *,
-    confirmed_by_user:user_profiles!confirmed_by(
-      id,
-      full_name,
-      email
-    ),
-    mca_processed_by_user:user_profiles!mca_processed_by(
-      id,
-      full_name,
-      email
-    )
-  `)
+// Same shape that `src/lib/supabase/putaway-log.service.ts` exports. The
+// previous `QueryData<…>` inference relied on a LATERAL embed that was
+// measured at ~2.1s mean per call in pg_stat_statements; we now build
+// the shape via the two-query `attachUserProfiles` pattern.
+export type PutawayOperationRow = PutawayOperationData & {
+  confirmed_by_user?: UserProfileSummary | null
+  mca_processed_by_user?: UserProfileSummary | null
+}
 
-export type PutawayOperationsWithUser = QueryData<
-  typeof putawayOperationsWithUserQuery
->
+export type PutawayOperationsWithUser = PutawayOperationRow[]
 
 // Statistics interface (same as Supabase service)
 export interface PutawayLogStatistics {
@@ -75,7 +69,7 @@ function ensureRustClientInitialized(): boolean {
   try {
     const baseUrl =
       import.meta.env.VITE_RUST_CORE_URL ||
-      'https://your-rust-core-service.up.railway.app'
+      'https://rust-core-service-production.up.railway.app'
     initRustCoreClient({ baseUrl })
     return true
   } catch {
@@ -128,8 +122,11 @@ export class RustPutawayLogService {
       )
       const startTime = performance.now()
 
-      // First, get total count
-      const { count, error: countError } = await supabase
+      // Read-replica routing for the count query and all subsequent
+      // chunked fetches. The previous LATERAL embed on this call site
+      // averaged 2.1s mean over 625k calls in pg_stat_statements; we now
+      // fetch planar rows + one `user_profiles WHERE id IN (…)` lookup.
+      const { count, error: countError } = await supabaseRead
         .from('rf_putaway_operations')
         .select('*', { count: 'exact', head: true })
 
@@ -150,41 +147,25 @@ export class RustPutawayLogService {
       const pageSize = 1000
       const totalPages = Math.ceil(count / pageSize)
       const maxConcurrent = 10 // Max 10 parallel requests
-      const allRecords: PutawayOperationsWithUser = []
+      const allRecords: PutawayOperationRow[] = []
 
       for (let batch = 0; batch < totalPages; batch += maxConcurrent) {
-        const batchPromises: Promise<PutawayOperationsWithUser[0][]>[] = []
+        const batchPromises: Promise<PutawayOperationRow[]>[] = []
         const batchEnd = Math.min(batch + maxConcurrent, totalPages)
 
         for (let page = batch; page < batchEnd; page++) {
           const from = page * pageSize
           const to = from + pageSize - 1
 
-          const promise = (async (): Promise<
-            PutawayOperationsWithUser[0][]
-          > => {
-            const { data, error } = await supabase
+          const promise = (async (): Promise<PutawayOperationRow[]> => {
+            const { data, error } = await supabaseRead
               .from('rf_putaway_operations')
-              .select(
-                `
-                *,
-                confirmed_by_user:user_profiles!confirmed_by(
-                  id,
-                  full_name,
-                  email
-                ),
-                mca_processed_by_user:user_profiles!mca_processed_by(
-                  id,
-                  full_name,
-                  email
-                )
-              `
-              )
+              .select('*')
               .order('created_at', { ascending: false })
               .range(from, to)
 
             if (error) throw error
-            return data || []
+            return (data ?? []) as PutawayOperationRow[]
           })()
 
           batchPromises.push(promise)
@@ -199,6 +180,13 @@ export class RustPutawayLogService {
           `🦀 Fetched ${allRecords.length}/${count} putaway operations (batch ${Math.floor(batch / maxConcurrent) + 1})`
         )
       }
+
+      // Two-query enrichment: one IN-list lookup against user_profiles
+      // replaces ~N LATERAL subqueries from the planner's perspective.
+      await attachUserProfiles(allRecords, [
+        ['confirmed_by', 'confirmed_by_user'],
+        ['mca_processed_by', 'mca_processed_by_user'],
+      ])
 
       // Re-sort all records by created_at descending to ensure correct order after parallel fetching
       // This is critical because parallel requests may return in different orders
@@ -232,7 +220,7 @@ export class RustPutawayLogService {
     try {
       logger.log('📦 Fetching putaway operations via Supabase (fallback)...')
 
-      const { count, error: countError } = await supabase
+      const { count, error: countError } = await supabaseRead
         .from('rf_putaway_operations')
         .select('*', { count: 'exact', head: true })
 
@@ -246,29 +234,15 @@ export class RustPutawayLogService {
 
       const chunkSize = 1000
       const totalChunks = Math.ceil(count / chunkSize)
-      const allRecords: PutawayOperationsWithUser = []
+      const allRecords: PutawayOperationRow[] = []
 
       for (let i = 0; i < totalChunks; i++) {
         const from = i * chunkSize
         const to = from + chunkSize - 1
 
-        const { data, error } = await supabase
+        const { data, error } = await supabaseRead
           .from('rf_putaway_operations')
-          .select(
-            `
-            *,
-            confirmed_by_user:user_profiles!confirmed_by(
-              id,
-              full_name,
-              email
-            ),
-            mca_processed_by_user:user_profiles!mca_processed_by(
-              id,
-              full_name,
-              email
-            )
-          `
-          )
+          .select('*')
           .order('created_at', { ascending: false })
           .range(from, to)
 
@@ -277,9 +251,15 @@ export class RustPutawayLogService {
         }
 
         if (data) {
-          allRecords.push(...data)
+          allRecords.push(...(data as PutawayOperationRow[]))
         }
       }
+
+      // Same two-query enrichment as the parallel path.
+      await attachUserProfiles(allRecords, [
+        ['confirmed_by', 'confirmed_by_user'],
+        ['mca_processed_by', 'mca_processed_by_user'],
+      ])
 
       // Re-sort to ensure correct date order after all fetches
       allRecords.sort((a, b) => {
@@ -343,12 +323,12 @@ export class RustPutawayLogService {
       logger.log(`📅 Putaway Log Statistics: Using EST date - Today: ${today}`)
 
       // Get total count (entire database)
-      const { count: totalCount } = await supabase
+      const { count: totalCount } = await supabaseRead
         .from('rf_putaway_operations')
         .select('*', { count: 'exact', head: true })
 
       // Get today's putaways by fetching all and filtering client-side
-      const { data: allPutaways } = await supabase
+      const { data: allPutaways } = await supabaseRead
         .from('rf_putaway_operations')
         .select('created_at')
 
@@ -377,7 +357,7 @@ export class RustPutawayLogService {
 
       // Get PENDING MCA workflow count (only from Jan 14, 2026 onwards)
       // Only count MCA operations that haven't been processed yet (excludes MCA Confirmed and MCA Processed)
-      const { count: mcaCount } = await supabase
+      const { count: mcaCount } = await supabaseRead
         .from('rf_putaway_operations')
         .select('*', { count: 'exact', head: true })
         .eq('is_mca_workflow', true)
@@ -385,7 +365,7 @@ export class RustPutawayLogService {
         .gte('created_at', '2026-01-14T00:00:00.000Z')
 
       // Get completed count
-      const { count: completedCount } = await supabase
+      const { count: completedCount } = await supabaseRead
         .from('rf_putaway_operations')
         .select('*', { count: 'exact', head: true })
         .eq('to_status', 'Completed')
@@ -393,7 +373,7 @@ export class RustPutawayLogService {
       // Get pending confirms count (TOs awaiting TO Confirmation in SAP, from Jan 1, 2026 onwards)
       // 'Completed' status = putaway done on RF but TO not yet confirmed in SAP (IS pending)
       // Date filter excludes stale historical data from before TO confirmation workflow
-      const { count: pendingConfirmsCount } = await supabase
+      const { count: pendingConfirmsCount } = await supabaseRead
         .from('rf_putaway_operations')
         .select('*', { count: 'exact', head: true })
         .not(
@@ -405,13 +385,13 @@ export class RustPutawayLogService {
         .gte('created_at', '2026-01-01T00:00:00.000Z')
 
       // Get unique materials
-      const { data: materialData } = await supabase
+      const { data: materialData } = await supabaseRead
         .from('rf_putaway_operations')
         .select('material_number')
         .not('material_number', 'is', null)
 
       // Get all drivers and created_at for calculations
-      const { data: driverData } = await supabase
+      const { data: driverData } = await supabaseRead
         .from('rf_putaway_operations')
         .select('putaway_driver, created_at')
         .not('putaway_driver', 'is', null)
@@ -446,12 +426,12 @@ export class RustPutawayLogService {
         : 0
 
       // Get status data for breakdown
-      const { data: statusData } = await supabase
+      const { data: statusData } = await supabaseRead
         .from('rf_putaway_operations')
         .select('to_status')
 
       // Get warehouse data for distribution
-      const { data: warehouseData } = await supabase
+      const { data: warehouseData } = await supabaseRead
         .from('rf_putaway_operations')
         .select('warehouse')
 
@@ -893,4 +873,5 @@ export class RustPutawayLogService {
 
 // Export singleton instance
 export const rustPutawayLogService = RustPutawayLogService.getInstance()
-// Developer and Creator: Jai Singh
+
+// Created and developed by Jai Singh

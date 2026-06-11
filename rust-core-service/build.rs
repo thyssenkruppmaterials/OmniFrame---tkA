@@ -1,3 +1,4 @@
+// Created and developed by Jai Singh
 //! Build script for rust-core-service
 //!
 //! This build script is prepared for future gRPC support using tonic-build.
@@ -19,3 +20,5 @@ fn main() {
     // Rerun if proto files change
     println!("cargo:rerun-if-changed=src/grpc/proto/core.proto");
 }
+
+// Created and developed by Jai Singh

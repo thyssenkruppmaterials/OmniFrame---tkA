@@ -1,3 +1,4 @@
+# Created and developed by Jai Singh
 """Shared helpers for the admin sub-package."""
 
 import logging
@@ -97,4 +98,4 @@ async def log_admin_action(
     except Exception as e:
         logger.warning(f"Failed to log admin action: {e}")
 
-# Developer and Creator: Jai Singh
+# Created and developed by Jai Singh

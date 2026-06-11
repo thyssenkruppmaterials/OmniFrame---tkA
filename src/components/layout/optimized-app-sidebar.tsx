@@ -1,3 +1,4 @@
+// Created and developed by Jai Singh
 import { useEffect, useMemo } from 'react'
 import { useNavigationStore } from '@/stores/navigationStore'
 import { usePermissionStore } from '@/stores/permissionStore'
@@ -27,15 +28,19 @@ export function OptimizedAppSidebar({
   const presence = usePresenceOptional()
   const { canViewPresence, visibility } = usePresenceVisibility()
   usePermissionStore() // Subscribe to permission store for OptimizedNavGroup re-renders
-  const { initializeExpandedGroups } = useNavigationStore()
+  const { initializeExpandedGroups, initializePinnedGroups } =
+    useNavigationStore()
   const { state: sidebarState } = useSidebar()
 
-  // Step 16: Load persisted expanded nav group state for the current user
+  // Step 16: Load persisted expanded nav group state for the current user.
+  // We also hydrate pinned groups (the "lock" feature) from per-user
+  // localStorage so users keep their preferred layout across reloads.
   useEffect(() => {
     if (user?.id) {
       initializeExpandedGroups(user.id)
+      initializePinnedGroups(user.id)
     }
-  }, [user?.id, initializeExpandedGroups])
+  }, [user?.id, initializeExpandedGroups, initializePinnedGroups])
 
   // Memoize sidebar data to prevent recalculation on every render
   // Include permission store states as dependencies to recalculate when permissions change
@@ -71,3 +76,5 @@ export function OptimizedAppSidebar({
     </Sidebar>
   )
 }
+
+// Created and developed by Jai Singh

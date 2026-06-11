@@ -1,3 +1,4 @@
+// Created and developed by Jai Singh
 /**
  * Unified Auth Provider
  * Single provider that handles authentication, permissions, and session management
@@ -436,3 +437,5 @@ export function useSession() {
 
 // Export contexts for advanced use cases
 export { AuthContext, PermissionContext }
+
+// Created and developed by Jai Singh

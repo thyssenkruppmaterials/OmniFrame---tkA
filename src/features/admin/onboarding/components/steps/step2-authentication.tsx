@@ -1,3 +1,4 @@
+// Created and developed by Jai Singh
 /**
  * Step 2: Authentication Setup
  * Configure login credentials
@@ -64,7 +65,7 @@ export function Step2Authentication() {
   const [copied, setCopied] = useState(false)
 
   const form = useForm<AuthenticationSetupData>({
-    resolver: zodResolver(authenticationSetupSchema),
+    resolver: zodResolver(authenticationSetupSchema) as never,
     defaultValues: state.authenticationSetup || {
       auto_generate_password: true,
       password: '',
@@ -307,3 +308,5 @@ export function Step2Authentication() {
 }
 
 export default Step2Authentication
+
+// Created and developed by Jai Singh

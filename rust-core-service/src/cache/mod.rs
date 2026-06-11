@@ -1,3 +1,4 @@
+// Created and developed by Jai Singh
 //! Caching module with Redis connection pooling
 //!
 //! Provides high-performance caching with:
@@ -12,3 +13,5 @@ pub mod query_cache;
 
 pub use redis_pool::{create_redis_pool, CacheService, RedisConfig, RedisPool};
 pub use session::SessionService;
+
+// Created and developed by Jai Singh

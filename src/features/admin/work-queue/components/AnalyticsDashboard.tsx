@@ -1,3 +1,4 @@
+// Created and developed by Jai Singh
 /**
  * Analytics Dashboard Component
  * Comprehensive analytics and reporting for work queue system
@@ -319,3 +320,5 @@ export function AnalyticsDashboard() {
     </div>
   )
 }
+
+// Created and developed by Jai Singh

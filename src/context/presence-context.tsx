@@ -1,3 +1,4 @@
+// Created and developed by Jai Singh
 /**
  * Presence Context Provider
  * Provides presence state to the entire app via React context.
@@ -38,3 +39,5 @@ export function usePresence(): PresenceContextType {
 export function usePresenceOptional(): PresenceContextType | null {
   return useContext(PresenceContext)
 }
+
+// Created and developed by Jai Singh

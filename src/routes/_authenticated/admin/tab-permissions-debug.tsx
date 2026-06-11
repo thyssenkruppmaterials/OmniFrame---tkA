@@ -1,3 +1,4 @@
+// Created and developed by Jai Singh
 import { useState, useEffect } from 'react'
 import { createFileRoute } from '@tanstack/react-router'
 import { AlertTriangle } from 'lucide-react'
@@ -464,4 +465,5 @@ export const Route = createFileRoute(
   }),
   component: TabPermissionsDebug,
 })
-// Developer and Creator: Jai Singh
+
+// Created and developed by Jai Singh

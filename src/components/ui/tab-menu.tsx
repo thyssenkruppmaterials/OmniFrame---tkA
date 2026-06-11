@@ -1,7 +1,9 @@
+// Created and developed by Jai Singh
 'use client'
 
 import * as React from 'react'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { IconChevronLeft, IconChevronRight } from '@tabler/icons-react'
 import { cn } from '@/lib/utils'
 import { useTabPermissions } from '@/hooks/useTabPermissions'
 
@@ -14,10 +16,12 @@ interface TabMenuProps extends React.HTMLAttributes<HTMLDivElement> {
   tabs: Tab[]
   activeTab?: string
   onTabChange?: (tabId: string) => void
-  pageResource?: string // New prop for permission filtering
-  showHiddenTabs?: boolean // For admin override (show all tabs regardless of permissions)
-  fallbackTab?: string // Tab to fallback to if activeTab is not accessible
+  pageResource?: string
+  showHiddenTabs?: boolean
+  fallbackTab?: string
 }
+
+const SCROLL_AMOUNT = 200
 
 const TabMenu = React.forwardRef<HTMLDivElement, TabMenuProps>(
   (
@@ -40,52 +44,41 @@ const TabMenu = React.forwardRef<HTMLDivElement, TabMenuProps>(
       left: '0px',
       width: '0px',
     })
+    const [canScrollLeft, setCanScrollLeft] = useState(false)
+    const [canScrollRight, setCanScrollRight] = useState(false)
     const tabRefs = useRef<(HTMLDivElement | null)[]>([])
     const containerRef = useRef<HTMLDivElement>(null)
+    const scrollRef = useRef<HTMLDivElement>(null)
 
-    // Permission-aware tab filtering
     const { hasTabAccess, isLoading } = useTabPermissions(
       pageResource || '',
-      !pageResource
+      Boolean(pageResource)
     )
 
-    // Filter tabs based on permissions
     const visibleTabs = useMemo(() => {
-      // Show all tabs during loading to prevent the empty-state flash
       if (isLoading && pageResource) {
         return tabs
       }
-
       if (showHiddenTabs || !pageResource) {
         return tabs
       }
-
-      // Filter using hasTabAccess (which already handles admin bypass and loading)
       return tabs.filter((tab) => hasTabAccess(tab.id))
     }, [tabs, pageResource, showHiddenTabs, hasTabAccess, isLoading])
 
-    // Handle active tab fallback when permissions change
     const effectiveActiveTab = useMemo(() => {
       if (!pageResource || showHiddenTabs) {
         return activeTab
       }
-
-      // Check if current activeTab is accessible
       if (activeTab && hasTabAccess(activeTab)) {
         return activeTab
       }
-
-      // Fallback to specified fallback tab if accessible
       if (fallbackTab && hasTabAccess(fallbackTab)) {
         return fallbackTab
       }
-
-      // Fallback to first visible tab
       if (visibleTabs.length > 0) {
         return visibleTabs[0].id
       }
-
-      return activeTab // Return original even if not accessible (for debugging)
+      return activeTab
     }, [
       activeTab,
       fallbackTab,
@@ -95,9 +88,48 @@ const TabMenu = React.forwardRef<HTMLDivElement, TabMenuProps>(
       visibleTabs,
     ])
 
-    // Recalculate positions for active and hover states
+    const updateScrollState = useCallback(() => {
+      const el = scrollRef.current
+      if (!el) return
+      const threshold = 2
+      setCanScrollLeft(el.scrollLeft > threshold)
+      setCanScrollRight(
+        el.scrollLeft + el.clientWidth < el.scrollWidth - threshold
+      )
+    }, [])
+
+    const scrollBy = useCallback(
+      (direction: 'left' | 'right') => {
+        const el = scrollRef.current
+        if (!el) return
+        el.scrollBy({
+          left: direction === 'left' ? -SCROLL_AMOUNT : SCROLL_AMOUNT,
+          behavior: 'smooth',
+        })
+        requestAnimationFrame(updateScrollState)
+      },
+      [updateScrollState]
+    )
+
+    const scrollActiveTabIntoView = useCallback((index: number) => {
+      const tabEl = tabRefs.current[index]
+      const scrollEl = scrollRef.current
+      if (!tabEl || !scrollEl) return
+      const tabLeft = tabEl.offsetLeft
+      const tabRight = tabLeft + tabEl.offsetWidth
+      const viewLeft = scrollEl.scrollLeft
+      const viewRight = viewLeft + scrollEl.clientWidth
+      if (tabLeft < viewLeft) {
+        scrollEl.scrollTo({ left: tabLeft - 12, behavior: 'smooth' })
+      } else if (tabRight > viewRight) {
+        scrollEl.scrollTo({
+          left: tabRight - scrollEl.clientWidth + 12,
+          behavior: 'smooth',
+        })
+      }
+    }, [])
+
     const recalculatePositions = useCallback(() => {
-      // Recalculate active position
       const activeElement = tabRefs.current[activeIndex]
       if (activeElement) {
         const { offsetLeft, offsetWidth } = activeElement
@@ -106,8 +138,6 @@ const TabMenu = React.forwardRef<HTMLDivElement, TabMenuProps>(
           width: `${offsetWidth}px`,
         })
       }
-
-      // Recalculate hover position if hovering
       if (hoveredIndex !== null) {
         const hoveredElement = tabRefs.current[hoveredIndex]
         if (hoveredElement) {
@@ -120,7 +150,6 @@ const TabMenu = React.forwardRef<HTMLDivElement, TabMenuProps>(
       }
     }, [activeIndex, hoveredIndex])
 
-    // Sync effectiveActiveTab with activeIndex state and notify parent of changes
     useEffect(() => {
       if (effectiveActiveTab) {
         const tabIndex = visibleTabs.findIndex(
@@ -129,15 +158,12 @@ const TabMenu = React.forwardRef<HTMLDivElement, TabMenuProps>(
         if (tabIndex !== -1 && tabIndex !== activeIndex) {
           setActiveIndex(tabIndex)
         }
-
-        // Notify parent if the effective active tab changed
         if (effectiveActiveTab !== activeTab) {
           onTabChange?.(effectiveActiveTab)
         }
       }
     }, [effectiveActiveTab, visibleTabs, activeIndex, activeTab, onTabChange])
 
-    // Update hover style when hovered index changes
     useEffect(() => {
       if (hoveredIndex !== null) {
         const hoveredElement = tabRefs.current[hoveredIndex]
@@ -151,7 +177,6 @@ const TabMenu = React.forwardRef<HTMLDivElement, TabMenuProps>(
       }
     }, [hoveredIndex])
 
-    // Update active style when active index changes
     useEffect(() => {
       const activeElement = tabRefs.current[activeIndex]
       if (activeElement) {
@@ -161,20 +186,18 @@ const TabMenu = React.forwardRef<HTMLDivElement, TabMenuProps>(
           width: `${offsetWidth}px`,
         })
       }
-    }, [activeIndex])
+      scrollActiveTabIntoView(activeIndex)
+    }, [activeIndex, scrollActiveTabIntoView])
 
-    // Initialize positions on mount
     useEffect(() => {
       const initializePositions = () => {
         const initialIndex = effectiveActiveTab
           ? visibleTabs.findIndex((tab) => tab.id === effectiveActiveTab)
           : 0
         const finalIndex = initialIndex !== -1 ? initialIndex : 0
-
         if (finalIndex !== activeIndex) {
           setActiveIndex(finalIndex)
         }
-
         const activeElement = tabRefs.current[finalIndex]
         if (activeElement) {
           const { offsetLeft, offsetWidth } = activeElement
@@ -183,39 +206,56 @@ const TabMenu = React.forwardRef<HTMLDivElement, TabMenuProps>(
             width: `${offsetWidth}px`,
           })
         }
+        updateScrollState()
       }
-
-      // Use a small delay to ensure elements are rendered
       const timeoutId = setTimeout(initializePositions, 10)
       return () => clearTimeout(timeoutId)
-    }, [visibleTabs, effectiveActiveTab, activeIndex])
+    }, [visibleTabs, effectiveActiveTab, activeIndex, updateScrollState])
 
-    // Handle window resize
     useEffect(() => {
       const handleResize = () => {
-        // Use requestAnimationFrame to ensure DOM updates are complete
-        requestAnimationFrame(recalculatePositions)
+        requestAnimationFrame(() => {
+          recalculatePositions()
+          updateScrollState()
+        })
       }
-
       window.addEventListener('resize', handleResize)
       return () => window.removeEventListener('resize', handleResize)
-    }, [recalculatePositions])
+    }, [recalculatePositions, updateScrollState])
 
-    // ResizeObserver for more granular resize detection
     useEffect(() => {
       if (!containerRef.current) return
-
       const resizeObserver = new ResizeObserver(() => {
-        // Debounce rapid resize events
-        requestAnimationFrame(recalculatePositions)
+        requestAnimationFrame(() => {
+          recalculatePositions()
+          updateScrollState()
+        })
       })
-
       resizeObserver.observe(containerRef.current)
+      return () => resizeObserver.disconnect()
+    }, [recalculatePositions, updateScrollState])
 
-      return () => {
-        resizeObserver.disconnect()
-      }
-    }, [recalculatePositions])
+    useEffect(() => {
+      const el = scrollRef.current
+      if (!el) return
+      el.addEventListener('scroll', updateScrollState, { passive: true })
+      return () => el.removeEventListener('scroll', updateScrollState)
+    }, [updateScrollState])
+
+    const handleWheel = useCallback(
+      (e: React.WheelEvent) => {
+        const el = scrollRef.current
+        if (!el) return
+        const hasOverflow = el.scrollWidth > el.clientWidth
+        if (!hasOverflow) return
+        if (Math.abs(e.deltaY) > Math.abs(e.deltaX)) {
+          e.preventDefault()
+          el.scrollLeft += e.deltaY
+          updateScrollState()
+        }
+      },
+      [updateScrollState]
+    )
 
     if (visibleTabs.length === 0 && !isLoading && pageResource) {
       return (
@@ -227,57 +267,98 @@ const TabMenu = React.forwardRef<HTMLDivElement, TabMenuProps>(
 
     return (
       <div ref={ref} className={cn('relative', className)} {...props}>
-        <div ref={containerRef} className='relative'>
-          {/* Hover Highlight */}
-          <div
-            className='bg-primary/10 absolute flex h-[33px] items-center rounded-[6px] transition-all duration-300 ease-out'
-            style={{
-              ...hoverStyle,
-              opacity: hoveredIndex !== null ? 1 : 0,
-            }}
-          />
+        {/* Left scroll button */}
+        <div
+          className={cn(
+            'from-background pointer-events-none absolute top-0 bottom-0 left-0 z-10 flex items-center bg-linear-to-r to-transparent pr-4 transition-opacity duration-200',
+            canScrollLeft ? 'opacity-100' : 'pointer-events-none opacity-0'
+          )}
+        >
+          <button
+            type='button'
+            tabIndex={-1}
+            onClick={() => scrollBy('left')}
+            className='bg-background hover:bg-muted border-border pointer-events-auto flex h-7 w-7 items-center justify-center rounded-full border shadow-sm transition-colors'
+            aria-label='Scroll tabs left'
+          >
+            <IconChevronLeft size={14} />
+          </button>
+        </div>
 
-          {/* Active Indicator */}
-          <div
-            className='bg-primary absolute bottom-[-6px] h-[2px] transition-all duration-300 ease-out'
-            style={activeStyle}
-          />
+        {/* Scrollable tab area */}
+        <div
+          ref={scrollRef}
+          onWheel={handleWheel}
+          className='overflow-x-auto'
+          style={{ scrollbarWidth: 'none' }}
+        >
+          <div ref={containerRef} className='relative mx-auto w-fit pb-[8px]'>
+            {/* Hover Highlight */}
+            <div
+              className='bg-primary/10 absolute flex h-[33px] items-center rounded-[6px] transition-all duration-300 ease-out'
+              style={{
+                ...hoverStyle,
+                opacity: hoveredIndex !== null ? 1 : 0,
+              }}
+            />
 
-          {/* Tabs */}
-          <div className='relative flex items-center justify-center space-x-[6px]'>
-            {visibleTabs.map((tab, index) => (
-              <div
-                key={tab.id}
-                ref={(el) => {
-                  tabRefs.current[index] = el
-                }}
-                className={cn(
-                  'h-[33px] cursor-pointer px-3 py-2 transition-colors duration-300',
-                  index === activeIndex
-                    ? 'text-foreground font-semibold'
-                    : 'text-muted-foreground hover:text-foreground/80',
-                  // ✅ CRITICAL FIX: Add visual loading state
-                  isLoading && 'cursor-wait opacity-70'
-                )}
-                onMouseEnter={() => setHoveredIndex(index)}
-                onMouseLeave={() => setHoveredIndex(null)}
-                onClick={() => {
-                  // ✅ CRITICAL FIX: Prevent clicks during loading
-                  if (isLoading) return
-                  setActiveIndex(index)
-                  onTabChange?.(tab.id)
-                }}
-              >
-                <div className='flex h-full items-center justify-center text-sm leading-5 font-medium whitespace-nowrap'>
-                  {tab.label}
-                  {/* ✅ CRITICAL FIX: Show loading indicator on tabs during permission loading */}
-                  {isLoading && pageResource && (
-                    <div className='ml-2 h-3 w-3 animate-spin rounded-full border border-current border-t-transparent opacity-50' />
+            {/* Active Indicator */}
+            <div
+              className='bg-primary absolute bottom-0 h-[2px] transition-all duration-300 ease-out'
+              style={activeStyle}
+            />
+
+            {/* Tabs */}
+            <div className='relative flex items-center space-x-[6px]'>
+              {visibleTabs.map((tab, index) => (
+                <div
+                  key={tab.id}
+                  ref={(el) => {
+                    tabRefs.current[index] = el
+                  }}
+                  className={cn(
+                    'h-[33px] cursor-pointer px-3 py-2 transition-colors duration-300',
+                    index === activeIndex
+                      ? 'text-foreground font-semibold'
+                      : 'text-muted-foreground hover:text-foreground/80',
+                    isLoading && 'cursor-wait opacity-70'
                   )}
+                  onMouseEnter={() => setHoveredIndex(index)}
+                  onMouseLeave={() => setHoveredIndex(null)}
+                  onClick={() => {
+                    if (isLoading) return
+                    setActiveIndex(index)
+                    onTabChange?.(tab.id)
+                  }}
+                >
+                  <div className='flex h-full items-center justify-center text-sm leading-5 font-medium whitespace-nowrap'>
+                    {tab.label}
+                    {isLoading && pageResource && (
+                      <div className='ml-2 h-3 w-3 animate-spin rounded-full border border-current border-t-transparent opacity-50' />
+                    )}
+                  </div>
                 </div>
-              </div>
-            ))}
+              ))}
+            </div>
           </div>
+        </div>
+
+        {/* Right scroll button */}
+        <div
+          className={cn(
+            'from-background pointer-events-none absolute top-0 right-0 bottom-0 z-10 flex items-center bg-linear-to-l to-transparent pl-4 transition-opacity duration-200',
+            canScrollRight ? 'opacity-100' : 'pointer-events-none opacity-0'
+          )}
+        >
+          <button
+            type='button'
+            tabIndex={-1}
+            onClick={() => scrollBy('right')}
+            className='bg-background hover:bg-muted border-border pointer-events-auto flex h-7 w-7 items-center justify-center rounded-full border shadow-sm transition-colors'
+            aria-label='Scroll tabs right'
+          >
+            <IconChevronRight size={14} />
+          </button>
         </div>
       </div>
     )
@@ -286,3 +367,5 @@ const TabMenu = React.forwardRef<HTMLDivElement, TabMenuProps>(
 TabMenu.displayName = 'TabMenu'
 
 export { TabMenu }
+
+// Created and developed by Jai Singh

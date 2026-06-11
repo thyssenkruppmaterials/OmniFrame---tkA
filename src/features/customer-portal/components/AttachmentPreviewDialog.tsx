@@ -1,3 +1,4 @@
+// Created and developed by Jai Singh
 /**
  * Attachment Preview Dialog Component
  *
@@ -18,13 +19,14 @@ import { supabase } from '@/lib/supabase/client'
 import { cn } from '@/lib/utils'
 import { logger } from '@/lib/utils/logger'
 import { Button } from '@/components/ui/button'
+import { Dialog } from '@/components/ui/dialog'
 import {
-  Dialog,
-  DialogContent,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from '@/components/ui/dialog'
+  ResponsiveDialogBody,
+  ResponsiveDialogContent,
+  ResponsiveDialogFooter,
+  ResponsiveDialogHeader,
+  ResponsiveDialogTitle,
+} from '@/components/ui/responsive-dialog'
 import type { Attachment } from '../hooks/useTickets'
 import { TICKET_SHEET_ID } from '../hooks/useTickets'
 import { ExcelViewer } from './ExcelViewer'
@@ -539,13 +541,13 @@ export function AttachmentPreviewDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent
+      <ResponsiveDialogContent
         ref={dialogContentRef}
+        size='lg'
         className={cn(
-          'flex flex-col overflow-hidden',
           isFullscreen
             ? '!fixed !inset-0 !top-0 !left-0 !h-screen !max-h-none !w-screen !max-w-none !translate-x-0 !translate-y-0 !rounded-none'
-            : 'h-[85vh] max-h-[85vh] w-[95vw] max-w-[1400px] min-w-[900px]'
+            : 'h-[85vh] max-h-[85vh]'
         )}
         style={
           isFullscreen
@@ -562,11 +564,14 @@ export function AttachmentPreviewDialog({
             : undefined
         }
       >
-        <DialogHeader className='shrink-0'>
+        <ResponsiveDialogHeader>
           <div className='flex items-center justify-between pr-8'>
-            <DialogTitle className='truncate pr-4' title={attachment.name}>
+            <ResponsiveDialogTitle
+              className='truncate pr-4'
+              title={attachment.name}
+            >
               {attachment.name}
-            </DialogTitle>
+            </ResponsiveDialogTitle>
             <div className='flex items-center gap-2'>
               {fileType !== 'unknown' && (
                 <Button
@@ -591,16 +596,18 @@ export function AttachmentPreviewDialog({
                 : `${(attachment.size_in_kb / 1024).toFixed(1)} MB`}
             </p>
           )}
-        </DialogHeader>
+        </ResponsiveDialogHeader>
 
-        <div
-          className='bg-muted/30 min-h-0 flex-1 overflow-auto rounded-md border'
-          style={{ minHeight: '60vh' }}
-        >
-          {renderPreviewContent()}
-        </div>
+        <ResponsiveDialogBody className='overflow-hidden'>
+          <div
+            className='bg-muted/30 min-h-0 flex-1 overflow-auto rounded-md border'
+            style={{ minHeight: '60vh' }}
+          >
+            {renderPreviewContent()}
+          </div>
+        </ResponsiveDialogBody>
 
-        <DialogFooter className='shrink-0 gap-2 sm:gap-2'>
+        <ResponsiveDialogFooter className='gap-2 sm:gap-2'>
           {previewUrl && (fileType === 'pdf' || fileType === 'image') && (
             <Button
               variant='outline'
@@ -619,8 +626,10 @@ export function AttachmentPreviewDialog({
             <IconDownload className='mr-2 h-4 w-4' />
             Download
           </Button>
-        </DialogFooter>
-      </DialogContent>
+        </ResponsiveDialogFooter>
+      </ResponsiveDialogContent>
     </Dialog>
   )
 }
+
+// Created and developed by Jai Singh

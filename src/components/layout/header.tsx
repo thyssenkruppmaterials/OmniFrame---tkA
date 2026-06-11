@@ -1,3 +1,4 @@
+// Created and developed by Jai Singh
 import React from 'react'
 import { cn } from '@/lib/utils'
 import { Separator } from '@/components/ui/separator'
@@ -46,3 +47,5 @@ export const Header = ({
 }
 
 Header.displayName = 'Header'
+
+// Created and developed by Jai Singh

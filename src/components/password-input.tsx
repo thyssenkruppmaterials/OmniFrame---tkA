@@ -1,3 +1,4 @@
+// Created and developed by Jai Singh
 import * as React from 'react'
 import { IconEye, IconEyeOff } from '@tabler/icons-react'
 import { cn } from '@/lib/utils'
@@ -38,3 +39,5 @@ const PasswordInput = React.forwardRef<HTMLInputElement, PasswordInputProps>(
 PasswordInput.displayName = 'PasswordInput'
 
 export { PasswordInput }
+
+// Created and developed by Jai Singh

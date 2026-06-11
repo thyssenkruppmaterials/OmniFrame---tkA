@@ -1,3 +1,4 @@
+// Created and developed by Jai Singh
 //! Drone Dashboard Aggregation Service
 //!
 //! Background service that periodically aggregates drone scan statistics
@@ -10,6 +11,7 @@
 
 mod auth;
 mod middleware;
+mod omnibelt;
 
 use axum::{
     routing::get,
@@ -17,7 +19,10 @@ use axum::{
     Json,
     middleware as axum_middleware,
 };
-use sqlx::postgres::PgPoolOptions;
+use bb8::Pool;
+use bb8_redis::RedisConnectionManager;
+use sqlx::postgres::{PgConnectOptions, PgPoolOptions};
+use std::str::FromStr;
 use std::sync::Arc;
 use tokio_cron_scheduler::{Job, JobScheduler};
 use tower_http::cors::CorsLayer;
@@ -31,6 +36,18 @@ use crate::middleware::require_auth;
 /// Application state
 pub struct AppState {
     pub db: sqlx::PgPool,
+    /// Read-replica pool (or clone of `db` when DASHBOARD_SERVICE_DATABASE_READ_POOLER_URL
+    /// is unset). Use for pure-read endpoints. Tagged with
+    /// `application_name = "rust-dashboard-service-read"` for forensic clarity
+    /// in pg_stat_activity.
+    pub read_pool: sqlx::PgPool,
+    /// Optional Redis connection pool used by `/omnibelt/bootstrap` for
+    /// the 30-second cache (key
+    /// `omnibelt:bootstrap:{org_id}:{user_id}`). `None` when Redis is
+    /// unconfigured or unreachable at startup — the bootstrap endpoint
+    /// degrades to "always read replica" without erroring. Reads
+    /// `DASHBOARD_SERVICE_REDIS_URL` first, falling back to `REDIS_URL`.
+    pub redis_pool: Option<Pool<RedisConnectionManager>>,
     pub auth_client: AuthClient,
 }
 
@@ -56,6 +73,7 @@ struct HealthResponse {
     service: String,
     version: String,
     database: String,
+    read_database: String,
 }
 
 #[tokio::main]
@@ -85,13 +103,144 @@ async fn main() -> anyhow::Result<()> {
 
     tracing::info!("Connected to database");
 
+    // Optional read-replica pool. When `DASHBOARD_SERVICE_DATABASE_READ_POOLER_URL`
+    // (or fallback `DATABASE_READ_POOLER_URL`) is set and distinct from the
+    // primary URL, pure-read paths can route through this pool tagged with
+    // `application_name = "rust-dashboard-service-read"` for forensic clarity in
+    // `pg_stat_activity`. Gracefully falls back to a clone of the primary pool
+    // when the env var is unset, blank, equal to the primary URL, or if the
+    // connection fails — so call sites can use `state.read_pool` unconditionally
+    // and a misconfigured replica never crashes startup.
+    let read_url_opt = std::env::var("DASHBOARD_SERVICE_DATABASE_READ_POOLER_URL")
+        .ok()
+        .or_else(|| std::env::var("DATABASE_READ_POOLER_URL").ok())
+        .map(|s| s.trim().to_string())
+        .filter(|s| !s.is_empty() && s != &database_url);
+
+    let read_pool = match read_url_opt {
+        Some(read_url) => {
+            let connect_attempt = PgConnectOptions::from_str(&read_url)
+                .map(|o| o.application_name("rust-dashboard-service-read"));
+
+            match connect_attempt {
+                Ok(opts) => match PgPoolOptions::new()
+                    .max_connections(5)
+                    .connect_with(opts)
+                    .await
+                {
+                    Ok(pool) => {
+                        tracing::info!(
+                            "Connected to read-replica via DASHBOARD_SERVICE_DATABASE_READ_POOLER_URL"
+                        );
+                        pool
+                    }
+                    Err(err) => {
+                        tracing::warn!(
+                            "Read pool falling back to primary (connection failed: {err})"
+                        );
+                        db_pool.clone()
+                    }
+                },
+                Err(err) => {
+                    tracing::warn!(
+                        "Read pool falling back to primary (connection failed: {err})"
+                    );
+                    db_pool.clone()
+                }
+            }
+        }
+        None => {
+            tracing::info!(
+                "Read pool falling back to primary (DASHBOARD_SERVICE_DATABASE_READ_POOLER_URL unset)"
+            );
+            db_pool.clone()
+        }
+    };
+
     // Initialize auth client
     let auth_config = AuthConfig::from_env();
     let auth_client = AuthClient::new(auth_config);
     tracing::info!("Auth client initialized for rust-core-service");
 
-    let state = Arc::new(AppState { 
+    // Optional Redis pool for the `/omnibelt/bootstrap` cache.
+    //
+    // Reads `DASHBOARD_SERVICE_REDIS_URL` first, falls back to plain
+    // `REDIS_URL` so the service can share the existing project-wide
+    // Redis instance without a separate var. When neither is set, OR
+    // when the connection probe fails, we log a `warn!` and disable
+    // caching — the endpoint still works (it just hits the replica
+    // every time, which is exactly the cache-miss path). This keeps
+    // the service bootable on local dev machines without Redis.
+    let redis_url = std::env::var("DASHBOARD_SERVICE_REDIS_URL")
+        .ok()
+        .or_else(|| std::env::var("REDIS_URL").ok())
+        .map(|s| s.trim().to_string())
+        .filter(|s| !s.is_empty());
+
+    let redis_pool: Option<Pool<RedisConnectionManager>> = match redis_url {
+        Some(url) => match RedisConnectionManager::new(url.as_str()) {
+            Ok(manager) => match Pool::builder()
+                .max_size(8)
+                .connection_timeout(std::time::Duration::from_secs(2))
+                .build(manager)
+                .await
+            {
+                Ok(pool) => {
+                    // Probe so a misconfigured URL surfaces at boot
+                    // rather than at first request. The probe handle
+                    // borrows `pool`; we collapse it to a plain
+                    // Result<(), String> before deciding whether to
+                    // move `pool` into the `Some(pool)` branch.
+                    let probe_err: Option<String> = match pool.get().await {
+                        Ok(_) => None,
+                        Err(e) => Some(e.to_string()),
+                    };
+                    match probe_err {
+                        None => {
+                            tracing::info!(
+                                "Redis pool connected for /omnibelt/bootstrap cache (TTL 30s)"
+                            );
+                            Some(pool)
+                        }
+                        Some(err) => {
+                            tracing::warn!(
+                                error = %err,
+                                "Redis pool probe failed at boot — caching disabled (\
+                                 /omnibelt/bootstrap will hit the replica unconditionally)"
+                            );
+                            None
+                        }
+                    }
+                }
+                Err(e) => {
+                    tracing::warn!(
+                        error = %e,
+                        "Redis pool build failed — caching disabled"
+                    );
+                    None
+                }
+            },
+            Err(e) => {
+                tracing::warn!(
+                    error = %e,
+                    "Redis URL parse failed — caching disabled"
+                );
+                None
+            }
+        },
+        None => {
+            tracing::info!(
+                "Redis URL unset (DASHBOARD_SERVICE_REDIS_URL / REDIS_URL) — \
+                 /omnibelt/bootstrap cache disabled"
+            );
+            None
+        }
+    };
+
+    let state = Arc::new(AppState {
         db: db_pool.clone(),
+        read_pool,
+        redis_pool,
         auth_client,
     });
 
@@ -123,6 +272,7 @@ async fn main() -> anyhow::Result<()> {
     let protected_routes = Router::new()
         .route("/stats", get(get_stats))
         .route("/trigger", get(trigger_aggregation))
+        .route("/omnibelt/bootstrap", get(omnibelt::get_bootstrap))
         .layer(axum_middleware::from_fn_with_state(state.clone(), require_auth));
 
     let app = Router::new()
@@ -133,8 +283,8 @@ async fn main() -> anyhow::Result<()> {
                 .allow_origin([
                     "http://localhost:5173".parse().unwrap(),
                     "http://localhost:3000".parse().unwrap(),
-                    "https://omniframe.example.com".parse().unwrap(),
-                    // Add production domains via CORS_ALLOWED_ORIGINS
+                    "https://onebox-ai.netlify.app".parse().unwrap(),
+                    // Add Railway domains in production
                 ])
                 .allow_methods([
                     axum::http::Method::GET,
@@ -205,12 +355,18 @@ async fn health_check(
         Ok(_) => "connected".to_string(),
         Err(_) => "disconnected".to_string(),
     };
-    
+
+    let read_db_status = match sqlx::query("SELECT 1").fetch_one(&state.read_pool).await {
+        Ok(_) => "connected".to_string(),
+        Err(_) => "disconnected".to_string(),
+    };
+
     Json(HealthResponse {
         status: "healthy".to_string(),
         service: "drone-dashboard-service".to_string(),
         version: env!("CARGO_PKG_VERSION").to_string(),
         database: db_status,
+        read_database: read_db_status,
     })
 }
 
@@ -276,4 +432,5 @@ async fn trigger_aggregation(
         "message": "Aggregation triggered"
     })))
 }
-// Developer and Creator: Jai Singh
+
+// Created and developed by Jai Singh

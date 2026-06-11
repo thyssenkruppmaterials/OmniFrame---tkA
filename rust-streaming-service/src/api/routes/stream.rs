@@ -1,3 +1,4 @@
+// Created and developed by Jai Singh
 //! Video streaming endpoints
 //!
 //! Provides MJPEG stream proxying and snapshot capture from ExacqVision cameras.
@@ -193,3 +194,5 @@ fn build_snapshot_response(bytes: Bytes) -> Response {
         .body(Body::from(bytes))
         .unwrap()
 }
+
+// Created and developed by Jai Singh

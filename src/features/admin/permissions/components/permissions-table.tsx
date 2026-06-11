@@ -1,3 +1,4 @@
+// Created and developed by Jai Singh
 import { useEffect, useState } from 'react'
 import {
   ColumnDef,
@@ -141,3 +142,5 @@ export function PermissionsTable({ columns, data }: DataTableProps) {
     </div>
   )
 }
+
+// Created and developed by Jai Singh

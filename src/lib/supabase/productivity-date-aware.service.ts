@@ -1,3 +1,4 @@
+// Created and developed by Jai Singh
 /**
  * Date-Aware Productivity Service
  * Extends productivity service with date selection support
@@ -231,4 +232,5 @@ class DateAwareProductivityService {
 
 // Export singleton instance
 export const dateAwareProductivityService = new DateAwareProductivityService()
-// Developer and Creator: Jai Singh
+
+// Created and developed by Jai Singh

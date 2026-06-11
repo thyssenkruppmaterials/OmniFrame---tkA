@@ -1,3 +1,4 @@
+// Created and developed by Jai Singh
 //! Database configuration
 
 use serde::Deserialize;
@@ -6,8 +7,19 @@ use std::time::Duration;
 /// Database connection configuration
 #[derive(Debug, Clone, Deserialize)]
 pub struct DatabaseConfig {
-    /// PostgreSQL connection URL
+    /// PostgreSQL connection URL (primary writes + read-after-write paths)
     pub url: String,
+    /// Optional Supabase read-replica pooler URL. When set, a separate
+    /// `read_pool` is built and used for pure-read paths (RBAC permission
+    /// lookups, user-profile fetches in `validate-with-profile`). When
+    /// unset, `read_pool` is a clone of the primary pool so call sites
+    /// stay uniform and behaviour is unchanged.
+    ///
+    /// Read from `DATABASE_READ_POOLER_URL`. Must NOT point at the primary
+    /// pooler — that would silently accept writes against primary instead
+    /// of failing fast.
+    #[serde(default)]
+    pub read_url: Option<String>,
     /// Maximum number of connections in the pool
     #[serde(default = "default_max_connections")]
     pub max_connections: u32,
@@ -50,6 +62,9 @@ impl Default for DatabaseConfig {
         Self {
             url: std::env::var("DATABASE_URL")
                 .expect("DATABASE_URL must be set"),
+            read_url: std::env::var("DATABASE_READ_POOLER_URL")
+                .ok()
+                .filter(|s| !s.trim().is_empty()),
             max_connections: default_max_connections(),
             min_connections: default_min_connections(),
             acquire_timeout_secs: default_acquire_timeout(),
@@ -64,6 +79,9 @@ impl DatabaseConfig {
     pub fn from_env() -> anyhow::Result<Self> {
         Ok(Self {
             url: std::env::var("DATABASE_URL")?,
+            read_url: std::env::var("DATABASE_READ_POOLER_URL")
+                .ok()
+                .filter(|s| !s.trim().is_empty()),
             max_connections: std::env::var("DB_MAX_CONNECTIONS")
                 .ok()
                 .and_then(|s| s.parse().ok())
@@ -102,3 +120,5 @@ impl DatabaseConfig {
         Duration::from_secs(self.max_lifetime_secs)
     }
 }
+
+// Created and developed by Jai Singh

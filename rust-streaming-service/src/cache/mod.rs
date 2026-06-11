@@ -1,3 +1,4 @@
+// Created and developed by Jai Singh
 //! Redis caching module
 //!
 //! Provides session caching and camera metadata caching with Redis.
@@ -216,3 +217,5 @@ pub struct CacheHealth {
     pub pool_size: u32,
     pub idle_connections: u32,
 }
+
+// Created and developed by Jai Singh

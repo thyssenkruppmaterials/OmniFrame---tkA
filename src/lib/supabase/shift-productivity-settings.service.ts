@@ -1,3 +1,4 @@
+// Created and developed by Jai Singh
 /**
  * Shift Productivity Settings Service
  * Service for managing shift productivity settings per organization
@@ -423,4 +424,5 @@ export class ShiftProductivitySettingsService {
 }
 
 export default ShiftProductivitySettingsService.getInstance()
-// Developer and Creator: Jai Singh
+
+// Created and developed by Jai Singh

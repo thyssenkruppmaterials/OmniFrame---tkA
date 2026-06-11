@@ -1,3 +1,4 @@
+// Created and developed by Jai Singh
 //! Recording endpoints
 //!
 //! Provides access to recorded video clips from ExacqVision.
@@ -345,3 +346,5 @@ pub async fn playback_stream(
 
     Ok(response)
 }
+
+// Created and developed by Jai Singh

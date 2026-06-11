@@ -1,4 +1,4 @@
-# SAP RFC Deployment Guide for OmniFrame
+# SAP RFC Deployment Guide for OneBox AI
 
 ## Overview
 
@@ -70,7 +70,7 @@ For maximum flexibility, run the API on your own server.
    sudo apt update
    sudo apt install python3.11 python3.11-venv python3-pip
    
-   cd /opt/omniframe-api
+   cd /opt/onebox-api
    python3.11 -m venv venv
    source venv/bin/activate
    pip install -r requirements.txt
@@ -78,7 +78,7 @@ For maximum flexibility, run the API on your own server.
 
 4. **Run with systemd**:
    ```bash
-   sudo systemctl start omniframe-api
+   sudo systemctl start onebox-api
    ```
 
 ### Option 3: Hybrid Architecture (Recommended for Existing Setup)

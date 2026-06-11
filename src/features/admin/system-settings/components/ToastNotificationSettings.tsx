@@ -1,3 +1,4 @@
+// Created and developed by Jai Singh
 import { useEffect, useState } from 'react'
 import {
   IconBell,
@@ -525,3 +526,5 @@ export function ToastNotificationSettings() {
     </div>
   )
 }
+
+// Created and developed by Jai Singh

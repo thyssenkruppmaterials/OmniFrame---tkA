@@ -1,3 +1,4 @@
+// Created and developed by Jai Singh
 export interface SecurityEvent {
   id: string
   event_type:
@@ -112,3 +113,5 @@ export interface ThreatDetectionRule {
   created_at: string
   updated_at: string
 }
+
+// Created and developed by Jai Singh

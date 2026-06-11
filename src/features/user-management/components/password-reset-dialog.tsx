@@ -1,3 +1,4 @@
+// Created and developed by Jai Singh
 import { useState } from 'react'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
@@ -231,3 +232,5 @@ export function PasswordResetDialogTrigger() {
     </>
   )
 }
+
+// Created and developed by Jai Singh

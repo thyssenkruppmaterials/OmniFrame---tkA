@@ -1,3 +1,4 @@
+// Created and developed by Jai Singh
 /**
  * Shared types for Role Management components.
  *
@@ -58,3 +59,5 @@ export interface RoleSummaryData {
   tabsGrantedCount: number
   tabsTotalCount: number
 }
+
+// Created and developed by Jai Singh

@@ -1,3 +1,4 @@
+// Created and developed by Jai Singh
 //! Health check endpoints
 //!
 //! Provides basic and detailed health status for the streaming service.
@@ -131,3 +132,5 @@ pub async fn detailed_health(
         session: session_health,
     })
 }
+
+// Created and developed by Jai Singh

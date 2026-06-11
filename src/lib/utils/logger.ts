@@ -1,3 +1,4 @@
+// Created and developed by Jai Singh
 /**
  * Structured logger for OmniFrame
  *
@@ -94,4 +95,5 @@ export const logger = {
 }
 
 export default logger
-// Developer and Creator: Jai Singh
+
+// Created and developed by Jai Singh

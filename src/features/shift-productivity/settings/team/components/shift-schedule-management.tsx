@@ -1,3 +1,4 @@
+// Created and developed by Jai Singh
 /**
  * Shift Schedule Management Component
  * Create, edit, and manage shift schedules with configurable break times
@@ -40,14 +41,6 @@ import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from '@/components/ui/dialog'
-import {
   Form,
   FormControl,
   FormDescription,
@@ -57,6 +50,14 @@ import {
   FormMessage,
 } from '@/components/ui/form'
 import { Input } from '@/components/ui/input'
+import {
+  ResponsiveDialog,
+  ResponsiveDialogBody,
+  ResponsiveDialogDescription,
+  ResponsiveDialogFooter,
+  ResponsiveDialogHeader,
+  ResponsiveDialogTitle,
+} from '@/components/ui/responsive-dialog'
 import {
   Select,
   SelectContent,
@@ -517,7 +518,7 @@ function ShiftScheduleDialog({
   const [isSubmitting, setIsSubmitting] = useState(false)
 
   const form = useForm<ShiftScheduleFormData>({
-    resolver: zodResolver(shiftScheduleSchema),
+    resolver: zodResolver(shiftScheduleSchema) as never,
     defaultValues: {
       schedule_name: '',
       schedule_code: '',
@@ -600,19 +601,20 @@ function ShiftScheduleDialog({
   }
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className='max-h-[90vh] w-[90vw] max-w-[1200px] min-w-[900px] overflow-y-auto'>
-        <DialogHeader>
-          <DialogTitle>
-            {schedule ? 'Edit Shift Schedule' : 'Create Shift Schedule'}
-          </DialogTitle>
-          <DialogDescription>
-            Configure a shift schedule with work hours and break times
-          </DialogDescription>
-        </DialogHeader>
+    <ResponsiveDialog open={open} onOpenChange={onOpenChange} size='lg'>
+      <ResponsiveDialogHeader>
+        <ResponsiveDialogTitle>
+          {schedule ? 'Edit Shift Schedule' : 'Create Shift Schedule'}
+        </ResponsiveDialogTitle>
+        <ResponsiveDialogDescription>
+          Configure a shift schedule with work hours and break times
+        </ResponsiveDialogDescription>
+      </ResponsiveDialogHeader>
 
+      <ResponsiveDialogBody>
         <Form {...form}>
           <form
+            id='shift-schedule-form'
             onSubmit={form.handleSubmit(handleSubmit)}
             className='space-y-6'
           >
@@ -938,28 +940,33 @@ function ShiftScheduleDialog({
                 </FormItem>
               )}
             />
-
-            <DialogFooter>
-              <Button
-                type='button'
-                variant='outline'
-                onClick={() => onOpenChange(false)}
-              >
-                Cancel
-              </Button>
-              <Button type='submit' disabled={isSubmitting}>
-                {isSubmitting
-                  ? 'Saving...'
-                  : schedule
-                    ? 'Update Schedule'
-                    : 'Create Schedule'}
-              </Button>
-            </DialogFooter>
           </form>
         </Form>
-      </DialogContent>
-    </Dialog>
+      </ResponsiveDialogBody>
+      <ResponsiveDialogFooter>
+        <Button
+          type='button'
+          variant='outline'
+          onClick={() => onOpenChange(false)}
+        >
+          Cancel
+        </Button>
+        <Button
+          type='submit'
+          form='shift-schedule-form'
+          disabled={isSubmitting}
+        >
+          {isSubmitting
+            ? 'Saving...'
+            : schedule
+              ? 'Update Schedule'
+              : 'Create Schedule'}
+        </Button>
+      </ResponsiveDialogFooter>
+    </ResponsiveDialog>
   )
 }
 
 export default ShiftScheduleManagement
+
+// Created and developed by Jai Singh

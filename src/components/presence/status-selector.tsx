@@ -1,3 +1,4 @@
+// Created and developed by Jai Singh
 /**
  * StatusSelector - Dropdown to set your own presence status
  * Placed in the NavUser area of the sidebar
@@ -159,3 +160,5 @@ export function StatusSelector({ className }: StatusSelectorProps) {
     </div>
   )
 }
+
+// Created and developed by Jai Singh

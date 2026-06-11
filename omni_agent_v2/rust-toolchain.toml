@@ -1,0 +1,7 @@
+[toolchain]
+channel = "stable"
+components = ["rustfmt", "clippy"]
+# Targets we cross-compile to. macOS host stays implicit (whatever stable
+# ships); Windows MSVC is the production deploy target for agent.exe.
+targets = ["x86_64-pc-windows-msvc"]
+profile = "minimal"

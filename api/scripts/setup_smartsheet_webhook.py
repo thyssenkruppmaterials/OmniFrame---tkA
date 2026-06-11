@@ -1,3 +1,4 @@
+# Created and developed by Jai Singh
 """
 Setup script for registering Smartsheet webhooks.
 Registers webhook for ticket sheet to enable real-time updates.
@@ -154,3 +155,4 @@ def main():
 if __name__ == "__main__":
     main()
 
+# Created and developed by Jai Singh

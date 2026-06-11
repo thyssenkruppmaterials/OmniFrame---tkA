@@ -1,29 +1,24 @@
+// Created and developed by Jai Singh
 /**
  * Standard Work Settings Component
  * Enterprise-grade template management with visual builder and scheduling
  * Updated: February 8, 2026 - Complete UI redesign for modern enterprise experience
  */
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import {
-  Archive,
   BarChart3,
-  Blocks,
-  CalendarClock,
   CalendarDays,
   CheckCircle2,
-  Clock,
-  Copy,
-  Edit,
   FileText,
   LayoutGrid,
+  List,
   Loader2,
-  MapPin,
-  MoreHorizontal,
   Plus,
+  Search,
   Target,
   TrendingUp,
-  UserPlus,
   Users,
+  X,
 } from 'lucide-react'
 import { toast } from 'sonner'
 import { cn, getLocalDateString } from '@/lib/utils'
@@ -49,13 +44,6 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog'
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from '@/components/ui/dropdown-menu'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Progress } from '@/components/ui/progress'
@@ -88,6 +76,8 @@ import {
 import { AssignmentPanel } from './assignment-panel'
 import { SchedulingPanel } from './scheduling-panel'
 import { TemplateBuilder } from './template-builder'
+import { TemplateCard } from './templates/template-card'
+import { TemplateListRow } from './templates/template-list-row'
 
 const frequencyOptions = [
   { value: 'daily', label: 'Daily' },
@@ -102,20 +92,20 @@ const statusOptions = [
   {
     value: 'draft',
     label: 'Draft',
-    color: 'bg-gray-500',
-    text: 'text-gray-600',
+    color: 'bg-muted-foreground/60',
+    text: 'text-muted-foreground',
   },
   {
     value: 'active',
     label: 'Active',
     color: 'bg-green-500',
-    text: 'text-green-600',
+    text: 'text-green-600 dark:text-green-400',
   },
   {
     value: 'archived',
     label: 'Archived',
     color: 'bg-yellow-500',
-    text: 'text-yellow-600',
+    text: 'text-yellow-600 dark:text-yellow-400',
   },
 ]
 
@@ -365,22 +355,32 @@ function TemplateFormDialog({
           </div>
 
           <div className='space-y-2'>
-            <Label>Color</Label>
-            <div className='flex flex-wrap gap-2'>
-              {colorOptions.map((color) => (
-                <button
-                  key={color}
-                  type='button'
-                  className={cn(
-                    'h-8 w-8 rounded-lg border-2 transition-all hover:scale-110',
-                    formData.color === color
-                      ? 'border-foreground ring-foreground/20 scale-110 ring-2'
-                      : 'border-transparent'
-                  )}
-                  style={{ backgroundColor: color }}
-                  onClick={() => setFormData((prev) => ({ ...prev, color }))}
-                />
-              ))}
+            <Label id='color-label'>Color</Label>
+            <div
+              role='radiogroup'
+              aria-labelledby='color-label'
+              className='flex flex-wrap gap-2'
+            >
+              {colorOptions.map((color) => {
+                const isSelected = formData.color === color
+                return (
+                  <button
+                    key={color}
+                    type='button'
+                    role='radio'
+                    aria-checked={isSelected}
+                    aria-label={`Color ${color}`}
+                    className={cn(
+                      'focus-visible:ring-ring h-8 w-8 rounded-lg border-2 transition-all hover:scale-110 focus-visible:ring-2 focus-visible:ring-offset-2',
+                      isSelected
+                        ? 'border-foreground ring-foreground/20 scale-110 ring-2'
+                        : 'border-transparent'
+                    )}
+                    style={{ backgroundColor: color }}
+                    onClick={() => setFormData((prev) => ({ ...prev, color }))}
+                  />
+                )
+              })}
             </div>
           </div>
 
@@ -446,6 +446,21 @@ export default function StandardWorkSettings() {
     useState<StandardWorkTemplate | null>(null)
   const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null)
   const [activeTab, setActiveTab] = useState('templates')
+  // View preference persisted across reloads. Default to grid; switch to
+  // list once the user has more than ~12 templates.
+  const [viewMode, setViewMode] = useState<'grid' | 'list'>(() => {
+    if (typeof window === 'undefined') return 'grid'
+    const stored = window.localStorage.getItem('sw-templates-view')
+    return stored === 'list' ? 'list' : 'grid'
+  })
+  useEffect(() => {
+    if (typeof window === 'undefined') return
+    window.localStorage.setItem('sw-templates-view', viewMode)
+  }, [viewMode])
+  const [search, setSearch] = useState('')
+  const [statusFilter, setStatusFilter] = useState<
+    'all' | 'active' | 'draft' | 'archived'
+  >('all')
 
   const handleCreateTemplate = () => {
     setEditingTemplate(null)
@@ -491,6 +506,28 @@ export default function StandardWorkSettings() {
     setAssignmentTemplate(template)
   }
 
+  // ----- Derivations (must run on every render before any early return so
+  // the hook order stays stable across the dashboard / builder / loading paths). -----
+  const activeCount = templates.filter((t) => t.status === 'active').length
+  const draftCount = templates.filter((t) => t.status === 'draft').length
+  const archivedCount = templates.filter((t) => t.status === 'archived').length
+
+  const filteredTemplates = useMemo(() => {
+    const q = search.trim().toLowerCase()
+    return templates.filter((t) => {
+      if (statusFilter !== 'all' && t.status !== statusFilter) return false
+      if (!q) return true
+      const haystack = [
+        t.template_name,
+        t.template_code ?? '',
+        t.description ?? '',
+      ]
+        .join(' ')
+        .toLowerCase()
+      return haystack.includes(q)
+    })
+  }, [templates, search, statusFilter])
+
   // Template Builder View
   if (builderTemplate) {
     return (
@@ -517,10 +554,6 @@ export default function StandardWorkSettings() {
     )
   }
 
-  // Compute some stats for the template overview
-  const activeCount = templates.filter((t) => t.status === 'active').length
-  const draftCount = templates.filter((t) => t.status === 'draft').length
-
   return (
     <div className='space-y-6'>
       <Tabs value={activeTab} onValueChange={setActiveTab}>
@@ -544,20 +577,146 @@ export default function StandardWorkSettings() {
         </div>
 
         <TabsContent value='templates' className='mt-6'>
-          {/* Summary strip */}
+          {/* Toolbar: counts + filters + search + view toggle */}
           {templates.length > 0 && (
-            <div className='text-muted-foreground mb-6 flex items-center gap-4 text-sm'>
-              <span>{templates.length} total</span>
-              <Separator orientation='vertical' className='h-4' />
-              <span className='flex items-center gap-1'>
-                <div className='h-2 w-2 rounded-full bg-green-500' />
-                {activeCount} active
-              </span>
-              <Separator orientation='vertical' className='h-4' />
-              <span className='flex items-center gap-1'>
-                <div className='h-2 w-2 rounded-full bg-gray-400' />
-                {draftCount} draft
-              </span>
+            <div className='mb-4 flex flex-wrap items-center justify-between gap-3'>
+              <div className='text-muted-foreground flex flex-wrap items-center gap-2 text-sm'>
+                <button
+                  type='button'
+                  onClick={() => setStatusFilter('all')}
+                  className={cn(
+                    'rounded-md px-2 py-0.5 transition-colors',
+                    statusFilter === 'all'
+                      ? 'bg-muted text-foreground font-medium'
+                      : 'hover:bg-muted/60'
+                  )}
+                  aria-pressed={statusFilter === 'all'}
+                >
+                  {templates.length} total
+                </button>
+                <Separator orientation='vertical' className='h-4' />
+                <button
+                  type='button'
+                  onClick={() =>
+                    setStatusFilter(
+                      statusFilter === 'active' ? 'all' : 'active'
+                    )
+                  }
+                  className={cn(
+                    'flex items-center gap-1 rounded-md px-2 py-0.5 transition-colors',
+                    statusFilter === 'active'
+                      ? 'bg-green-500/10 text-green-600 dark:text-green-400'
+                      : 'hover:bg-muted/60'
+                  )}
+                  aria-pressed={statusFilter === 'active'}
+                >
+                  <div className='h-2 w-2 rounded-full bg-green-500' />
+                  {activeCount} active
+                </button>
+                <Separator orientation='vertical' className='h-4' />
+                <button
+                  type='button'
+                  onClick={() =>
+                    setStatusFilter(statusFilter === 'draft' ? 'all' : 'draft')
+                  }
+                  className={cn(
+                    'flex items-center gap-1 rounded-md px-2 py-0.5 transition-colors',
+                    statusFilter === 'draft'
+                      ? 'bg-muted text-foreground font-medium'
+                      : 'hover:bg-muted/60'
+                  )}
+                  aria-pressed={statusFilter === 'draft'}
+                >
+                  <div className='bg-muted-foreground/60 h-2 w-2 rounded-full' />
+                  {draftCount} draft
+                </button>
+                {archivedCount > 0 && (
+                  <>
+                    <Separator orientation='vertical' className='h-4' />
+                    <button
+                      type='button'
+                      onClick={() =>
+                        setStatusFilter(
+                          statusFilter === 'archived' ? 'all' : 'archived'
+                        )
+                      }
+                      className={cn(
+                        'flex items-center gap-1 rounded-md px-2 py-0.5 transition-colors',
+                        statusFilter === 'archived'
+                          ? 'bg-yellow-500/10 text-yellow-600 dark:text-yellow-400'
+                          : 'hover:bg-muted/60'
+                      )}
+                      aria-pressed={statusFilter === 'archived'}
+                    >
+                      <div className='h-2 w-2 rounded-full bg-yellow-500' />
+                      {archivedCount} archived
+                    </button>
+                  </>
+                )}
+              </div>
+
+              <div className='flex items-center gap-2'>
+                <div className='relative'>
+                  <Search
+                    className='text-muted-foreground/60 absolute top-1/2 left-2.5 h-3.5 w-3.5 -translate-y-1/2'
+                    aria-hidden='true'
+                  />
+                  <Input
+                    type='search'
+                    value={search}
+                    onChange={(e) => setSearch(e.target.value)}
+                    placeholder='Search templates…'
+                    aria-label='Search templates by name, code, or description'
+                    className='h-8 w-[200px] pl-8 text-sm md:w-[260px]'
+                  />
+                  {search && (
+                    <button
+                      type='button'
+                      onClick={() => setSearch('')}
+                      aria-label='Clear search'
+                      className='text-muted-foreground/60 hover:text-foreground absolute top-1/2 right-2 -translate-y-1/2'
+                    >
+                      <X className='h-3.5 w-3.5' aria-hidden='true' />
+                    </button>
+                  )}
+                </div>
+                <div
+                  className='bg-muted flex items-center gap-0.5 rounded-md p-0.5'
+                  role='group'
+                  aria-label='View mode'
+                >
+                  <Button
+                    variant='ghost'
+                    size='icon'
+                    className={cn(
+                      'h-7 w-7',
+                      viewMode === 'grid' &&
+                        'bg-background text-foreground shadow-sm'
+                    )}
+                    onClick={() => setViewMode('grid')}
+                    aria-pressed={viewMode === 'grid'}
+                    aria-label='Grid view'
+                    title='Grid view'
+                  >
+                    <LayoutGrid className='h-3.5 w-3.5' aria-hidden='true' />
+                  </Button>
+                  <Button
+                    variant='ghost'
+                    size='icon'
+                    className={cn(
+                      'h-7 w-7',
+                      viewMode === 'list' &&
+                        'bg-background text-foreground shadow-sm'
+                    )}
+                    onClick={() => setViewMode('list')}
+                    aria-pressed={viewMode === 'list'}
+                    aria-label='List view'
+                    title='List view'
+                  >
+                    <List className='h-3.5 w-3.5' aria-hidden='true' />
+                  </Button>
+                </div>
+              </div>
             </div>
           )}
 
@@ -578,201 +737,96 @@ export default function StandardWorkSettings() {
                 </Button>
               </CardContent>
             </Card>
-          ) : (
-            <div className='grid gap-4 md:grid-cols-2 xl:grid-cols-3'>
-              {templates.map((template) => {
+          ) : filteredTemplates.length === 0 ? (
+            <Card className='border-dashed'>
+              <CardContent className='flex flex-col items-center justify-center py-12 text-center'>
+                <div className='bg-muted mb-3 flex h-12 w-12 items-center justify-center rounded-xl'>
+                  <Search
+                    className='text-muted-foreground/40 h-6 w-6'
+                    aria-hidden='true'
+                  />
+                </div>
+                <p className='text-sm font-medium'>No templates match</p>
+                <p className='text-muted-foreground mt-0.5 max-w-xs text-xs'>
+                  Try clearing the search or filters above.
+                </p>
+                {(search || statusFilter !== 'all') && (
+                  <Button
+                    size='sm'
+                    variant='outline'
+                    className='mt-4 h-8'
+                    onClick={() => {
+                      setSearch('')
+                      setStatusFilter('all')
+                    }}
+                  >
+                    Clear filters
+                  </Button>
+                )}
+              </CardContent>
+            </Card>
+          ) : viewMode === 'grid' ? (
+            <div className='grid gap-3 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-4'>
+              {filteredTemplates.map((template, idx) => {
                 const area = workingAreas.find(
                   (a) => a.id === template.working_area_id
                 )
-                const statusConfig =
-                  statusOptions.find((s) => s.value === template.status) ||
-                  statusOptions[0]
-
                 return (
-                  <Card
+                  <TemplateCard
                     key={template.id}
-                    className='group relative overflow-hidden transition-all duration-200 hover:shadow-md'
-                  >
-                    {/* Color accent bar */}
-                    <div
-                      className='h-1'
-                      style={{ backgroundColor: template.color }}
-                    />
-
-                    <CardHeader className='pb-3'>
-                      <div className='flex items-start justify-between'>
-                        <div className='flex items-start gap-3'>
-                          <div
-                            className='flex h-10 w-10 shrink-0 items-center justify-center rounded-xl'
-                            style={{ backgroundColor: `${template.color}12` }}
-                          >
-                            <FileText
-                              className='h-5 w-5'
-                              style={{ color: template.color }}
-                            />
-                          </div>
-                          <div className='min-w-0'>
-                            <CardTitle className='truncate pr-8 text-sm font-semibold'>
-                              {template.template_name}
-                            </CardTitle>
-                            {template.template_code && (
-                              <p className='text-muted-foreground mt-0.5 font-mono text-xs'>
-                                {template.template_code}
-                              </p>
-                            )}
-                          </div>
-                        </div>
-                        <DropdownMenu>
-                          <DropdownMenuTrigger asChild>
-                            <Button
-                              variant='ghost'
-                              size='icon'
-                              className='h-8 w-8 opacity-0 transition-opacity group-hover:opacity-100'
-                            >
-                              <MoreHorizontal className='h-4 w-4' />
-                            </Button>
-                          </DropdownMenuTrigger>
-                          <DropdownMenuContent align='end'>
-                            <DropdownMenuItem
-                              onClick={() => handleOpenBuilder(template)}
-                            >
-                              <Blocks className='mr-2 h-4 w-4' />
-                              Build Checklist
-                            </DropdownMenuItem>
-                            <DropdownMenuItem
-                              onClick={() => handleOpenScheduling(template)}
-                            >
-                              <CalendarClock className='mr-2 h-4 w-4' />
-                              Schedule
-                            </DropdownMenuItem>
-                            <DropdownMenuItem
-                              onClick={() => handleOpenAssignment(template)}
-                            >
-                              <UserPlus className='mr-2 h-4 w-4' />
-                              Assign
-                            </DropdownMenuItem>
-                            <DropdownMenuSeparator />
-                            <DropdownMenuItem
-                              onClick={() => handleEditTemplate(template)}
-                            >
-                              <Edit className='mr-2 h-4 w-4' />
-                              Edit Details
-                            </DropdownMenuItem>
-                            <DropdownMenuItem
-                              onClick={() => handleDuplicateTemplate(template)}
-                            >
-                              <Copy className='mr-2 h-4 w-4' />
-                              Duplicate
-                            </DropdownMenuItem>
-                            <DropdownMenuSeparator />
-                            <DropdownMenuItem
-                              onClick={() => setDeleteConfirmId(template.id)}
-                              className='text-destructive'
-                            >
-                              <Archive className='mr-2 h-4 w-4' />
-                              Archive
-                            </DropdownMenuItem>
-                          </DropdownMenuContent>
-                        </DropdownMenu>
-                      </div>
-
-                      {template.description && (
-                        <p className='text-muted-foreground mt-2 line-clamp-2 text-xs'>
-                          {template.description}
-                        </p>
-                      )}
-                    </CardHeader>
-
-                    <CardContent className='space-y-4 pt-0'>
-                      {/* Badges */}
-                      <div className='flex flex-wrap gap-1.5'>
-                        <Badge
-                          variant='outline'
-                          className={cn(
-                            'h-5 gap-1 text-[10px]',
-                            template.status === 'active'
-                              ? 'border-green-500/20 bg-green-500/10 text-green-600 dark:text-green-400'
-                              : template.status === 'draft'
-                                ? 'bg-muted text-muted-foreground'
-                                : 'border-yellow-500/20 bg-yellow-500/10 text-yellow-600 dark:text-yellow-400'
-                          )}
-                        >
-                          <div
-                            className={cn(
-                              'h-1.5 w-1.5 rounded-full',
-                              statusConfig.color
-                            )}
-                          />
-                          {statusConfig.label}
-                        </Badge>
-                        <Badge
-                          variant='outline'
-                          className='h-5 text-[10px] capitalize'
-                        >
-                          {template.frequency.replace('_', ' ')}
-                        </Badge>
-                      </div>
-
-                      {/* Meta */}
-                      <div className='text-muted-foreground flex items-center gap-4 text-xs'>
-                        <span className='flex items-center gap-1'>
-                          <FileText className='h-3 w-3' />
-                          {template.items_count || 0} items
-                        </span>
-                        <span className='flex items-center gap-1'>
-                          <Clock className='h-3 w-3' />~
-                          {template.estimated_duration_minutes}m
-                        </span>
-                        {area && (
-                          <span className='flex items-center gap-1 truncate'>
-                            <MapPin className='h-3 w-3 shrink-0' />
-                            {area.area_name}
-                          </span>
-                        )}
-                      </div>
-
-                      {/* Actions */}
-                      <div className='flex gap-2 pt-1'>
-                        <Button
-                          variant='outline'
-                          size='sm'
-                          className='h-8 flex-1 gap-1.5 text-xs'
-                          onClick={() => handleOpenBuilder(template)}
-                        >
-                          <Blocks className='h-3.5 w-3.5' />
-                          Build
-                        </Button>
-                        <Button
-                          variant='outline'
-                          size='sm'
-                          className='h-8 w-8 p-0'
-                          onClick={() => handleOpenAssignment(template)}
-                          title='Assign'
-                        >
-                          <UserPlus className='h-3.5 w-3.5' />
-                        </Button>
-                        <Button
-                          variant='outline'
-                          size='sm'
-                          className='h-8 w-8 p-0'
-                          onClick={() => handleOpenScheduling(template)}
-                        >
-                          <CalendarClock className='h-3.5 w-3.5' />
-                        </Button>
-                        <Button
-                          variant='outline'
-                          size='sm'
-                          className='h-8 w-8 p-0'
-                          onClick={() => handleEditTemplate(template)}
-                        >
-                          <Edit className='h-3.5 w-3.5' />
-                        </Button>
-                      </div>
-                    </CardContent>
-                  </Card>
+                    template={template}
+                    areaName={area?.area_name}
+                    index={idx}
+                    onOpenBuilder={() => handleOpenBuilder(template)}
+                    onOpenAssignment={() => handleOpenAssignment(template)}
+                    onOpenScheduling={() => handleOpenScheduling(template)}
+                    onEdit={() => handleEditTemplate(template)}
+                    onDuplicate={() => handleDuplicateTemplate(template)}
+                    onArchive={() => setDeleteConfirmId(template.id)}
+                  />
                 )
               })}
             </div>
+          ) : (
+            <Card className='overflow-hidden p-0'>
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead className='text-xs'>Template</TableHead>
+                    <TableHead className='text-xs'>Status</TableHead>
+                    <TableHead className='text-xs'>Frequency</TableHead>
+                    <TableHead className='text-center text-xs'>Items</TableHead>
+                    <TableHead className='text-center text-xs'>
+                      Duration
+                    </TableHead>
+                    <TableHead className='text-xs'>Working Area</TableHead>
+                    <TableHead className='w-[180px] text-right text-xs'>
+                      Actions
+                    </TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {filteredTemplates.map((template) => {
+                    const area = workingAreas.find(
+                      (a) => a.id === template.working_area_id
+                    )
+                    return (
+                      <TemplateListRow
+                        key={template.id}
+                        template={template}
+                        areaName={area?.area_name}
+                        onOpenBuilder={() => handleOpenBuilder(template)}
+                        onOpenAssignment={() => handleOpenAssignment(template)}
+                        onOpenScheduling={() => handleOpenScheduling(template)}
+                        onEdit={() => handleEditTemplate(template)}
+                        onDuplicate={() => handleDuplicateTemplate(template)}
+                        onArchive={() => setDeleteConfirmId(template.id)}
+                      />
+                    )
+                  })}
+                </TableBody>
+              </Table>
+            </Card>
           )}
         </TabsContent>
 
@@ -1391,3 +1445,5 @@ export default function StandardWorkSettings() {
     </div>
   )
 }
+
+// Created and developed by Jai Singh

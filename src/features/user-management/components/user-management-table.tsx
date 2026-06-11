@@ -1,3 +1,4 @@
+// Created and developed by Jai Singh
 import { useEffect, useMemo, useState } from 'react'
 import {
   type Column,
@@ -820,3 +821,5 @@ export function UserManagementTable({ filter }: UserManagementTableProps) {
     </div>
   )
 }
+
+// Created and developed by Jai Singh

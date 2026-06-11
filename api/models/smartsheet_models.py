@@ -1,3 +1,4 @@
+# Created and developed by Jai Singh
 """
 Pydantic models for Smartsheet API integration.
 Provides complete type definitions for requests and responses.
@@ -572,3 +573,5 @@ class ExportResponse(SmartsheetBaseResponse):
     download_url: Optional[str] = None
     file_name: Optional[str] = None
     expires_at: Optional[datetime] = None
+
+# Created and developed by Jai Singh

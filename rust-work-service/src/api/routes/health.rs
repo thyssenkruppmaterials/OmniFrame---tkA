@@ -1,3 +1,4 @@
+// Created and developed by Jai Singh
 //! Health check endpoints for rust-work-service
 //!
 //! Provides endpoints for load balancer health checks and
@@ -166,3 +167,5 @@ async fn check_redis(pool: &bb8::Pool<bb8_redis::RedisConnectionManager>) -> Com
         }
     }
 }
+
+// Created and developed by Jai Singh

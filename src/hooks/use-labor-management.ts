@@ -1,3 +1,4 @@
+// Created and developed by Jai Singh
 /**
  * Labor Management React Hook
  * Provides state management for shift hierarchy and organizational structure
@@ -18,6 +19,18 @@ export function useLaborManagement() {
   const { profile } = authState
   const organizationId = profile?.organization_id || ''
   const queryClient = useQueryClient()
+
+  const invalidatePerformanceRuntime = () => {
+    queryClient.invalidateQueries({
+      queryKey: ['team-performance', organizationId],
+    })
+    queryClient.invalidateQueries({
+      queryKey: ['team-performance-weekly', organizationId],
+    })
+    queryClient.invalidateQueries({
+      queryKey: ['department-names', organizationId],
+    })
+  }
 
   // ===== WORKING AREAS =====
 
@@ -51,6 +64,7 @@ export function useLaborManagement() {
       queryClient.invalidateQueries({
         queryKey: ['working-area-statistics', organizationId],
       })
+      invalidatePerformanceRuntime()
       toast.success('Working area created successfully')
     },
     onError: (error: Error) => {
@@ -73,6 +87,7 @@ export function useLaborManagement() {
       queryClient.invalidateQueries({
         queryKey: ['working-area-statistics', organizationId],
       })
+      invalidatePerformanceRuntime()
       toast.success('Working area updated successfully')
     },
     onError: (error: Error) => {
@@ -89,6 +104,7 @@ export function useLaborManagement() {
       queryClient.invalidateQueries({
         queryKey: ['working-area-statistics', organizationId],
       })
+      invalidatePerformanceRuntime()
       toast.success('Working area deleted successfully')
     },
     onError: (error: Error) => {
@@ -140,6 +156,7 @@ export function useLaborManagement() {
       queryClient.invalidateQueries({
         queryKey: ['position-statistics', organizationId],
       })
+      invalidatePerformanceRuntime()
       toast.success('Position created successfully')
     },
     onError: (error: Error) => {
@@ -165,6 +182,7 @@ export function useLaborManagement() {
       queryClient.invalidateQueries({
         queryKey: ['position-statistics', organizationId],
       })
+      invalidatePerformanceRuntime()
       toast.success('Position updated successfully')
     },
     onError: (error: Error) => {
@@ -184,6 +202,7 @@ export function useLaborManagement() {
       queryClient.invalidateQueries({
         queryKey: ['position-statistics', organizationId],
       })
+      invalidatePerformanceRuntime()
       toast.success('Position deleted successfully')
     },
     onError: (error: Error) => {
@@ -217,6 +236,7 @@ export function useLaborManagement() {
       queryClient.invalidateQueries({
         queryKey: ['organizational-tree', organizationId],
       })
+      invalidatePerformanceRuntime()
       toast.success('Assignment created successfully')
     },
     onError: (error: Error) => {
@@ -239,6 +259,7 @@ export function useLaborManagement() {
       queryClient.invalidateQueries({
         queryKey: ['organizational-tree', organizationId],
       })
+      invalidatePerformanceRuntime()
       toast.success('Assignment updated successfully')
     },
     onError: (error: Error) => {
@@ -256,6 +277,7 @@ export function useLaborManagement() {
       queryClient.invalidateQueries({
         queryKey: ['organizational-tree', organizationId],
       })
+      invalidatePerformanceRuntime()
       toast.success('Assignment deleted successfully')
     },
     onError: (error: Error) => {
@@ -293,6 +315,7 @@ export function useLaborManagement() {
       queryClient.invalidateQueries({
         queryKey: ['labor-standards', organizationId],
       })
+      invalidatePerformanceRuntime()
       toast.success('Labor standard created successfully')
     },
     onError: (error: Error) => {
@@ -312,6 +335,7 @@ export function useLaborManagement() {
       queryClient.invalidateQueries({
         queryKey: ['labor-standards', organizationId],
       })
+      invalidatePerformanceRuntime()
       toast.success('Labor standard updated successfully')
     },
     onError: (error: Error) => {
@@ -325,6 +349,7 @@ export function useLaborManagement() {
       queryClient.invalidateQueries({
         queryKey: ['labor-standards', organizationId],
       })
+      invalidatePerformanceRuntime()
       toast.success('Labor standard deleted successfully')
     },
     onError: (error: Error) => {
@@ -405,3 +430,5 @@ export function useLaborManagement() {
     currentUser: profile,
   }
 }
+
+// Created and developed by Jai Singh

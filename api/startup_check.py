@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# Created and developed by Jai Singh
 """
 FastAPI Startup Check (MANUAL OPERATION -- NOT A PYTEST TEST)
 
@@ -39,3 +40,5 @@ except Exception as e:
     print(f"❌ Error: {e}")
     print("🔍 Full traceback:")
     traceback.print_exc()
+
+# Created and developed by Jai Singh

@@ -29,6 +29,8 @@ const MAX_CHUNKS_OVER   = 0;          // Number of first-party chunks allowed ov
 const LAZY_VENDOR_EXEMPT = [
   'exceljs',      // ~937 KB, dynamic import() in ExcelViewer
   'vendor-pdfjs', // ~400 KB, lazy-loaded PDF viewer (chunk name from vite.config.ts manualChunks)
+  'vendor-three', // ~1 MB three.js engine + pure-JS ecosystem; only loads when the
+                  //   3D Location Tab opens (React.lazy in warehouse-location-map).
 ];
 
 // ── CLI args ────────────────────────────────────────────────────────────────

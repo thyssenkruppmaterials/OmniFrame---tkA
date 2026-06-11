@@ -1,3 +1,4 @@
+// Created and developed by Jai Singh
 /**
  * Rust-enabled SQ01 Data Service
  *
@@ -381,4 +382,5 @@ export class RustSQ01DataService {
 
 // Export singleton instance
 export const rustSQ01DataService = RustSQ01DataService.getInstance()
-// Developer and Creator: Jai Singh
+
+// Created and developed by Jai Singh

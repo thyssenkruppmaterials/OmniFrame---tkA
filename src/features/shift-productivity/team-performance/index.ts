@@ -1,3 +1,4 @@
+// Created and developed by Jai Singh
 /**
  * Team Performance Feature Module
  * Export all components and hooks for the Team Performance Dashboard
@@ -49,3 +50,5 @@ export { useTeamPerformance } from './hooks/use-team-performance'
 
 // Types
 export * from './types/team-performance.types'
+
+// Created and developed by Jai Singh

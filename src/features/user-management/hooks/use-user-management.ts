@@ -1,3 +1,4 @@
+// Created and developed by Jai Singh
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import {
   keepPreviousData,
@@ -268,8 +269,15 @@ export function useUserManagement() {
   })
 
   // Bulk update mutation
+  // IMPORTANT: wrap in an arrow so `this` inside `bulkUpdateUsers` keeps
+  // pointing at the class. TanStack Query calls `options.mutationFn(vars)`
+  // which would otherwise re-bind `this` to the mutation options object,
+  // making `this.updateUserRole` (and every other dispatch in the switch)
+  // resolve to `undefined` at runtime. See
+  // memorybank/OmniFrame/Debug/Fix-Bulk-Action-This-Binding.md
   const bulkUpdateMutation = useMutation({
-    mutationFn: UserManagementService.bulkUpdateUsers,
+    mutationFn: (data: BulkActionData) =>
+      UserManagementService.bulkUpdateUsers(data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['users'] })
       queryClient.invalidateQueries({ queryKey: QUERY_KEYS.userStats })
@@ -460,3 +468,5 @@ export function useUserManagement() {
     isUpdatingPermissions: updateUserPermissionsMutation.isPending,
   }
 }
+
+// Created and developed by Jai Singh

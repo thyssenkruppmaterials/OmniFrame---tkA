@@ -1,3 +1,4 @@
+// Created and developed by Jai Singh
 import * as React from 'react'
 import { cn } from '@/lib/utils'
 
@@ -20,3 +21,5 @@ function Textarea({
 }
 
 export { Textarea }
+
+// Created and developed by Jai Singh

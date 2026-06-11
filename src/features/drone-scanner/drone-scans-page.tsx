@@ -1,3 +1,4 @@
+// Created and developed by Jai Singh
 /**
  * Drone Scans Page
  *
@@ -285,3 +286,5 @@ export default function DroneScannerPage() {
     </div>
   )
 }
+
+// Created and developed by Jai Singh

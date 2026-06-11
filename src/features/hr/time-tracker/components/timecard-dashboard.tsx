@@ -1,3 +1,4 @@
+// Created and developed by Jai Singh
 /**
  * Timecard Dashboard Component
  * Real-time metrics and attendance data from Supabase.
@@ -310,3 +311,5 @@ function TimecardDashboard() {
 }
 
 export default TimecardDashboard
+
+// Created and developed by Jai Singh

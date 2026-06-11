@@ -1,3 +1,4 @@
+// Created and developed by Jai Singh
 import { useEffect } from 'react'
 import { format } from 'date-fns'
 import { IconCheck, IconLogout, IconLogin } from '@tabler/icons-react'
@@ -97,3 +98,5 @@ export default function ClockConfirmation({
     </div>
   )
 }
+
+// Created and developed by Jai Singh

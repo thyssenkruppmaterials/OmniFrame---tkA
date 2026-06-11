@@ -1,3 +1,4 @@
+// Created and developed by Jai Singh
 /**
  * Typed utility interfaces for Supabase RPC responses.
  * Eliminates repeated `any` in auth/security modules.
@@ -60,3 +61,5 @@ export interface UserProfileRow {
   created_at?: string | null
   updated_at?: string | null
 }
+
+// Created and developed by Jai Singh

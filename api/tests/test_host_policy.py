@@ -1,3 +1,4 @@
+# Created and developed by Jai Singh
 """
 Host policy regression tests for TrustedHostMiddleware.
 
@@ -46,3 +47,5 @@ async def test_unknown_host_rejected_in_non_debug(app, monkeypatch):
         response = await ac.get("/health")
         # testserver is explicitly allowed in test mode
         assert response.status_code == 200
+
+# Created and developed by Jai Singh

@@ -1,3 +1,4 @@
+// Created and developed by Jai Singh
 'use client'
 
 import * as React from 'react'
@@ -80,3 +81,5 @@ const ShippingLabel: React.FC<ShippingLabelProps> = ({
 }
 
 export { ShippingLabel }
+
+// Created and developed by Jai Singh

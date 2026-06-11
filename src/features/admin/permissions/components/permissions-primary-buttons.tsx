@@ -1,3 +1,4 @@
+// Created and developed by Jai Singh
 import { PlusCircle, Upload, Download, Shield } from 'lucide-react'
 import { logger } from '@/lib/utils/logger'
 import { Button } from '@/components/ui/button'
@@ -71,3 +72,5 @@ export function PermissionsPrimaryButtons() {
     </div>
   )
 }
+
+// Created and developed by Jai Singh

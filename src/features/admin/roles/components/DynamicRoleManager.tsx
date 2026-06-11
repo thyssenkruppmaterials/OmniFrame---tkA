@@ -1,3 +1,4 @@
+// Created and developed by Jai Singh
 import { useState, useEffect } from 'react'
 import {
   Shield,
@@ -466,3 +467,5 @@ export function DynamicRoleManager({
     </PermissionGuard>
   )
 }
+
+// Created and developed by Jai Singh

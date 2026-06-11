@@ -1,3 +1,4 @@
+// Created and developed by Jai Singh
 import { Separator } from '@/components/ui/separator'
 
 interface ContentSectionProps {
@@ -24,3 +25,5 @@ export default function ContentSection({
     </div>
   )
 }
+
+// Created and developed by Jai Singh

@@ -1,3 +1,4 @@
+// Created and developed by Jai Singh
 /**
  * Version Checker Service - Enterprise Deployment Detection
  *
@@ -51,6 +52,50 @@ const MIN_BACKOFF_MS = 5_000
 const MAX_BACKOFF_MS = 300_000 // 5 minutes
 const BUILD_INFO_PATH = '/build-info.json'
 
+/**
+ * Number of consecutive `fetch()` failures before the poller self-disables
+ * for the rest of the session. Tuned to absorb transient blips (one or two
+ * lost requests on a flaky LTE link) while shutting down quickly when the
+ * failure mode is structural — most commonly a corporate Secure Web Gateway
+ * (Zscaler / Symantec WSS) intercepting the redirect and stripping CORS
+ * headers, which the browser surfaces as `TypeError: Failed to fetch` on
+ * every poll. See `Debug/Fix-Version-Checker-Corporate-Proxy-Noise.md` for
+ * the warehouse-RF incident that motivated this gate.
+ */
+const FAILURE_SUPPRESSION_THRESHOLD = 3
+
+/**
+ * Route patterns where `VersionChecker` MUST NOT poll. RF terminals and
+ * timeclock kiosks are dedicated devices on which IT controls the refresh
+ * cadence (manual reboot / IT-pushed reload), so per-device polling adds
+ * no benefit, and it's exactly these devices that sit on the warehouse
+ * Zscaler-protected network where the polls get intercepted and flood the
+ * console.
+ *
+ * Deliberately NARROWER than `PRESENCE_KIOSK_ROUTE_PATTERNS`:
+ *
+ * - `/^\/rf-/`                           — included (warehouse RF handhelds)
+ * - `/^\/timeclock(app)?(\/|$)/`         — included (back-of-house kiosks)
+ * - `/^\/customer-portal(\/|$)/`         — DELIBERATELY EXCLUDED. Customer
+ *   portal pages are public-internet, customer-facing, and the refresh
+ *   cadence matters for users picking up new builds. Presence opts out
+ *   because a 1:N "who's online" channel is not useful there; auto-version
+ *   pickup IS useful.
+ *
+ * Co-located with `version-checker.ts` rather than `presence/constants.ts`
+ * because the patterns are different (customer-portal exclusion) and
+ * pulling a presence import into the version subsystem would create
+ * cross-domain coupling for a 3-line constant.
+ */
+export const VERSION_CHECK_KIOSK_ROUTE_PATTERNS: readonly RegExp[] = [
+  /^\/rf-/,
+  /^\/timeclock(app)?(\/|$)/,
+] as const
+
+export function isVersionCheckKioskRoute(pathname: string): boolean {
+  return VERSION_CHECK_KIOSK_ROUTE_PATTERNS.some((re) => re.test(pathname))
+}
+
 // ---------------------------------------------------------------------------
 // Service
 // ---------------------------------------------------------------------------
@@ -68,6 +113,24 @@ export class VersionChecker {
   private consecutiveErrors = 0
   private isPollingActive = false
   private isChecking = false
+
+  /**
+   * Counts consecutive `fetchBuildInfo()` failures since the last success.
+   * Resets to 0 in `checkNow()` after a 200 OK with a valid payload. Used
+   * by `handleFetchError()` to gate the log-level ladder + the
+   * self-suppression trip below.
+   */
+  private _consecutiveFailures = 0
+
+  /**
+   * One-shot latch. Once set to `true` (when `_consecutiveFailures` crosses
+   * `FAILURE_SUPPRESSION_THRESHOLD`), the poller stops scheduling itself
+   * for the rest of the page session. The auto-updater simply stops
+   * receiving `VERSION_UPDATE_EVENT`s; manual page refresh remains the
+   * recovery path. Only `start()` clears this — and `start()` no-ops
+   * when already active, so a refresh is required in practice.
+   */
+  private _suppressedAfterFailures = false
 
   // Bound handlers for cleanup
   private boundVisibilityHandler: () => void
@@ -101,6 +164,21 @@ export class VersionChecker {
     if (this.isPollingActive) return
     if (!this.shouldRun()) {
       logger.log('[VersionChecker] Skipping: dev mode or native platform')
+      return
+    }
+
+    // Kiosk-route opt-out: warehouse RF terminals and timeclock kiosks live
+    // on Zscaler-protected networks where /build-info.json polls trigger a
+    // CORS-blocked redirect every ~5 min and flood the device console. IT
+    // owns the refresh cadence on these devices anyway — see
+    // Debug/Fix-Version-Checker-Corporate-Proxy-Noise.md.
+    if (
+      typeof window !== 'undefined' &&
+      isVersionCheckKioskRoute(window.location.pathname)
+    ) {
+      logger.info(
+        '[VersionChecker] Skipped on kiosk/RF route — manual refresh controls cadence'
+      )
       return
     }
 
@@ -144,9 +222,12 @@ export class VersionChecker {
       const buildInfo = await this.fetchBuildInfo()
       if (!buildInfo) return this._isUpdateAvailable
 
-      // Reset error backoff on success
+      // Reset error backoff + failure counters on success.
+      // Self-healing for transient blips: one good fetch clears the slate
+      // so a flaky LTE link doesn't permanently disable the poller.
       this.consecutiveErrors = 0
       this.currentBackoff = 0
+      this._consecutiveFailures = 0
 
       this._latestBuildInfo = buildInfo
 
@@ -250,19 +331,60 @@ export class VersionChecker {
 
   private handleFetchError(error: unknown): void {
     this.consecutiveErrors++
+    this._consecutiveFailures++
     this.currentBackoff = Math.min(
       MIN_BACKOFF_MS * Math.pow(2, this.consecutiveErrors - 1),
       MAX_BACKOFF_MS
     )
 
-    if (this.consecutiveErrors <= 3) {
+    // Log-level ladder. The dominant failure mode in production is a
+    // corporate Secure Web Gateway (Zscaler / Symantec WSS) intercepting
+    // /build-info.json with a CORS-blocked redirect. We can't read the
+    // response so we can't distinguish proxy-block from generic network
+    // failure — but we DO see N consecutive same-shape errors, which the
+    // ladder + suppression latch handle without console-flooding.
+    //
+    //   1st failure  → warn   (one visible signal that the check is degraded)
+    //   2nd / 3rd    → debug  (suppressed in prod by logger minLevel='warn')
+    //   ≥ threshold  → info ONCE, then stop the polling timer entirely
+    if (this._consecutiveFailures === 1) {
       logger.warn(
-        `[VersionChecker] Fetch error (attempt ${this.consecutiveErrors}), ` +
+        `[VersionChecker] Fetch error (attempt ${this._consecutiveFailures}), ` +
           `backing off ${this.currentBackoff}ms:`,
         error
       )
+    } else if (this._consecutiveFailures < FAILURE_SUPPRESSION_THRESHOLD) {
+      logger.debug(
+        `[VersionChecker] Fetch error (attempt ${this._consecutiveFailures}), ` +
+          `backing off ${this.currentBackoff}ms:`,
+        error
+      )
+    } else if (
+      this._consecutiveFailures >= FAILURE_SUPPRESSION_THRESHOLD &&
+      !this._suppressedAfterFailures
+    ) {
+      // Trip the latch ONCE. Subsequent failures (if any slipped through
+      // before the timer cancelled) won't re-log.
+      this._suppressedAfterFailures = true
+      logger.info(
+        '[VersionChecker] Disabling auto-poll — repeated fetch failures ' +
+          '(likely corporate proxy or offline). Manual refresh will pick up new builds.'
+      )
+
+      // Cancel the next scheduled poll and tear down listeners. Polling
+      // is idempotently disabled until the page is refreshed.
+      this.isPollingActive = false
+      this.clearScheduledPoll()
+      try {
+        document.removeEventListener(
+          'visibilitychange',
+          this.boundVisibilityHandler
+        )
+        window.removeEventListener('online', this.boundOnlineHandler)
+      } catch {
+        // SSR / non-browser: nothing to remove. Fall through.
+      }
     }
-    // After 3 errors, go silent to avoid log spam
   }
 
   private scheduleNextPoll(): void {
@@ -311,3 +433,5 @@ export class VersionChecker {
 
 // Export singleton accessor
 export const versionChecker = VersionChecker.getInstance()
+
+// Created and developed by Jai Singh

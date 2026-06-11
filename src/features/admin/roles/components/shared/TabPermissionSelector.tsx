@@ -1,3 +1,4 @@
+// Created and developed by Jai Singh
 import { useState, useEffect, useMemo, useCallback } from 'react'
 import {
   ChevronDown,
@@ -425,3 +426,5 @@ export function TabPermissionSelector({
     </div>
   )
 }
+
+// Created and developed by Jai Singh

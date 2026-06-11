@@ -1,3 +1,4 @@
+// Created and developed by Jai Singh
 const SkipToMain = () => {
   return (
     <a
@@ -10,3 +11,5 @@ const SkipToMain = () => {
 }
 
 export default SkipToMain
+
+// Created and developed by Jai Singh

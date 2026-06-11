@@ -1,3 +1,4 @@
+// Created and developed by Jai Singh
 import { cn } from '@/lib/utils'
 
 interface DeviceHealthBadgeProps {
@@ -45,3 +46,5 @@ export function DeviceHealthBadge({
     </span>
   )
 }
+
+// Created and developed by Jai Singh

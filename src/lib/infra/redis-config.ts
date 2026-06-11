@@ -1,3 +1,4 @@
+// Created and developed by Jai Singh
 import { logger } from '@/lib/utils/logger'
 
 export interface RedisConnectionConfig {
@@ -70,3 +71,5 @@ export function getRedisConfig(): RedisConnectionConfig {
     family: 4,
   }
 }
+
+// Created and developed by Jai Singh

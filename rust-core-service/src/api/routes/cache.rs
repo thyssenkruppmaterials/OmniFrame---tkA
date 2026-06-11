@@ -1,3 +1,4 @@
+// Created and developed by Jai Singh
 //! Cache API endpoints
 
 use axum::{
@@ -136,3 +137,5 @@ pub async fn batch_get(
 
     Ok(Json(BatchGetResponse { results }))
 }
+
+// Created and developed by Jai Singh

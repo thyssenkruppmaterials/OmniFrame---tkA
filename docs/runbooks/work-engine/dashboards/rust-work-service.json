@@ -1,0 +1,496 @@
+{
+  "annotations": {
+    "list": [
+      {
+        "builtIn": 1,
+        "datasource": { "type": "grafana", "uid": "-- Grafana --" },
+        "enable": true,
+        "hide": true,
+        "iconColor": "rgba(0, 211, 255, 1)",
+        "name": "Annotations & Alerts",
+        "type": "dashboard"
+      }
+    ]
+  },
+  "description": "rust-work-service Phase 2 telemetry dashboard. Source of truth: docs/runbooks/work-engine/dashboards/rust-work-service.json. Pairs with the alert rules in alerts/rust-work-service-alerts.yml and the runbooks in docs/runbooks/work-engine/.",
+  "editable": true,
+  "fiscalYearStartMonth": 0,
+  "graphTooltip": 0,
+  "id": null,
+  "links": [
+    {
+      "title": "Runbook — WS Lagged Events",
+      "type": "link",
+      "url": "https://github.com/onebox-ai/OneBoxFullStack/blob/main/docs/runbooks/work-engine/ws-lagged-events.md"
+    },
+    {
+      "title": "Runbook — WS Auth Failure (org_mismatch)",
+      "type": "link",
+      "url": "https://github.com/onebox-ai/OneBoxFullStack/blob/main/docs/runbooks/work-engine/auth-failure-org-mismatch.md"
+    },
+    {
+      "title": "Runbook — Service Health Failing",
+      "type": "link",
+      "url": "https://github.com/onebox-ai/OneBoxFullStack/blob/main/docs/runbooks/work-engine/service-health-failing.md"
+    },
+    {
+      "title": "Runbook — Idempotency Replay Drift",
+      "type": "link",
+      "url": "https://github.com/onebox-ai/OneBoxFullStack/blob/main/docs/runbooks/work-engine/idempotency-replay-drift.md"
+    },
+    {
+      "title": "Availability SLO ADR",
+      "type": "link",
+      "url": "https://github.com/onebox-ai/OneBoxFullStack/blob/main/memorybank/OmniFrame/Decisions/ADR-Rust-Work-Service-Availability-SLO.md"
+    }
+  ],
+  "liveNow": false,
+  "panels": [
+    {
+      "title": "Service Up",
+      "type": "stat",
+      "id": 1,
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "h": 4, "w": 4, "x": 0, "y": 0 },
+      "options": {
+        "colorMode": "background",
+        "graphMode": "none",
+        "justifyMode": "auto",
+        "orientation": "horizontal",
+        "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false },
+        "textMode": "auto"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "mappings": [
+            { "options": { "0": { "text": "DOWN", "color": "red" } }, "type": "value" },
+            { "options": { "1": { "text": "UP", "color": "green" } }, "type": "value" }
+          ],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "red", "value": null },
+              { "color": "green", "value": 1 }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "expr": "up{job=\"rust-work-service\"}",
+          "legendFormat": "{{instance}}",
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "title": "WebSocket Subscribers (per org)",
+      "type": "timeseries",
+      "id": 2,
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "description": "Currently-connected WS clients, bucketed by 4-hex org_hash (cardinality-bounded). Sourced from the WsSubscriberGuard inc/dec on connect/disconnect.",
+      "gridPos": { "h": 8, "w": 12, "x": 4, "y": 0 },
+      "targets": [
+        {
+          "expr": "sum by (org_hash) (work_websocket_subscribers)",
+          "legendFormat": "{{org_hash}}",
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "palette-classic" },
+          "custom": { "drawStyle": "line", "lineInterpolation": "linear", "fillOpacity": 10 },
+          "unit": "none"
+        }
+      }
+    },
+    {
+      "title": "Broadcast Channel Saturation (% headroom)",
+      "type": "timeseries",
+      "id": 3,
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "description": "Phase 2 (2026-05-06) leading indicator. work_ws_broadcast_buffer_pct sampled on every rx.recv() in the WS send loop. 100 = healthy, 0 = at the cliff (next event will trip the Lagged counter). Pairs with `Lagged Events Rate`.",
+      "gridPos": { "h": 8, "w": 8, "x": 16, "y": 0 },
+      "targets": [
+        {
+          "expr": "min by (org_hash) (work_ws_broadcast_buffer_pct)",
+          "legendFormat": "min {{org_hash}}",
+          "refId": "A"
+        },
+        {
+          "expr": "avg by (org_hash) (work_ws_broadcast_buffer_pct)",
+          "legendFormat": "avg {{org_hash}}",
+          "refId": "B"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "min": 0,
+          "max": 100,
+          "unit": "percent",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "red", "value": null },
+              { "color": "yellow", "value": 25 },
+              { "color": "green", "value": 50 }
+            ]
+          },
+          "custom": { "drawStyle": "line", "lineInterpolation": "linear", "fillOpacity": 10 }
+        }
+      }
+    },
+    {
+      "title": "WS Lagged Events (cumulative)",
+      "type": "timeseries",
+      "id": 4,
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "description": "After-the-fact drop count from broadcast::RecvError::Lagged. Cumulative counter; non-zero ⇒ a slow consumer overran the buffer.",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 8 },
+      "targets": [
+        {
+          "expr": "work_ws_lagged_events_total",
+          "legendFormat": "{{org_hash}}",
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "events",
+          "custom": { "drawStyle": "line", "lineInterpolation": "stepAfter", "fillOpacity": 10 }
+        }
+      }
+    },
+    {
+      "title": "WS Lagged Events Rate (5m)",
+      "type": "timeseries",
+      "id": 5,
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "description": "Rate of Lagged ticks. Powers the WorkWsLaggedEventsSustained alert. Any non-zero rate sustained for 5min pages.",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 8 },
+      "targets": [
+        {
+          "expr": "sum by (org_hash) (rate(work_ws_lagged_events_total[5m]))",
+          "legendFormat": "{{org_hash}}",
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "events/sec",
+          "custom": { "drawStyle": "line", "lineInterpolation": "linear", "fillOpacity": 10 }
+        }
+      }
+    },
+    {
+      "title": "Listener Event Rate (per *_listener.rs)",
+      "type": "timeseries",
+      "id": 6,
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "description": "Per-listener event-emission rate. The closest proxy currently exposed for sap_agents / sap_jobs / sap_import_runs / cycle_count / lx03 / notifications is the WS message-out counter labelled by message_type. Phase 4 (rf_putaway) lands a sibling listener.",
+      "gridPos": { "h": 8, "w": 24, "x": 0, "y": 16 },
+      "targets": [
+        {
+          "expr": "sum by (message_type) (rate(work_websocket_messages_total{direction=\"out\"}[5m]))",
+          "legendFormat": "{{message_type}}",
+          "refId": "A"
+        },
+        {
+          "expr": "sum (rate(work_notifications_total[5m]))",
+          "legendFormat": "notifications (sum)",
+          "refId": "B"
+        },
+        {
+          "expr": "sum (rate(work_dispatch_broadcast_total[5m]))",
+          "legendFormat": "dispatch broadcasts",
+          "refId": "C"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "events/sec",
+          "custom": { "drawStyle": "line", "lineInterpolation": "linear", "fillOpacity": 5 }
+        }
+      }
+    },
+    {
+      "title": "HTTP Requests by Status",
+      "type": "timeseries",
+      "id": 7,
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "description": "Per-status-class HTTP request rate from work_http_requests_total. Backs the WorkServiceHealthFailing alert (5xx > 1% sustained 5min).",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 24 },
+      "targets": [
+        {
+          "expr": "sum by (status) (rate(work_http_requests_total[5m]))",
+          "legendFormat": "{{status}}",
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "reqps",
+          "custom": { "drawStyle": "line", "lineInterpolation": "linear", "fillOpacity": 10, "stacking": { "mode": "normal" } }
+        }
+      }
+    },
+    {
+      "title": "5xx Rate (% of total)",
+      "type": "timeseries",
+      "id": 8,
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "description": "Mirrors the WorkServiceHealthFailing alert query. Threshold band at 1% (the alert level).",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 24 },
+      "targets": [
+        {
+          "expr": "sum(rate(work_http_requests_total{status=~\"5..\"}[5m])) / clamp_min(sum(rate(work_http_requests_total[5m])), 1)",
+          "legendFormat": "5xx ratio",
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percentunit",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "yellow", "value": 0.005 },
+              { "color": "red", "value": 0.01 }
+            ]
+          },
+          "custom": { "drawStyle": "line", "lineInterpolation": "linear", "fillOpacity": 10, "thresholdsStyle": { "mode": "line+area" } }
+        }
+      }
+    },
+    {
+      "title": "Claim Latency (p50 / p95 / p99)",
+      "type": "timeseries",
+      "id": 9,
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "description": "Per-route claim path latency from work_claim_duration_seconds. Histograms expose _bucket; we use histogram_quantile across the 5m window. Sibling panels for /push and /complete are stacked below.",
+      "gridPos": { "h": 8, "w": 8, "x": 0, "y": 32 },
+      "targets": [
+        {
+          "expr": "histogram_quantile(0.5, sum by (le) (rate(work_claim_duration_seconds_bucket[5m])))",
+          "legendFormat": "p50",
+          "refId": "A"
+        },
+        {
+          "expr": "histogram_quantile(0.95, sum by (le) (rate(work_claim_duration_seconds_bucket[5m])))",
+          "legendFormat": "p95",
+          "refId": "B"
+        },
+        {
+          "expr": "histogram_quantile(0.99, sum by (le) (rate(work_claim_duration_seconds_bucket[5m])))",
+          "legendFormat": "p99",
+          "refId": "C"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s",
+          "custom": { "drawStyle": "line", "lineInterpolation": "linear", "fillOpacity": 5 }
+        }
+      }
+    },
+    {
+      "title": "Push Latency (p50 / p95 / p99)",
+      "type": "timeseries",
+      "id": 10,
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "h": 8, "w": 8, "x": 8, "y": 32 },
+      "targets": [
+        {
+          "expr": "histogram_quantile(0.5, sum by (le) (rate(work_push_duration_seconds_bucket[5m])))",
+          "legendFormat": "p50",
+          "refId": "A"
+        },
+        {
+          "expr": "histogram_quantile(0.95, sum by (le) (rate(work_push_duration_seconds_bucket[5m])))",
+          "legendFormat": "p95",
+          "refId": "B"
+        },
+        {
+          "expr": "histogram_quantile(0.99, sum by (le) (rate(work_push_duration_seconds_bucket[5m])))",
+          "legendFormat": "p99",
+          "refId": "C"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s",
+          "custom": { "drawStyle": "line", "lineInterpolation": "linear", "fillOpacity": 5 }
+        }
+      }
+    },
+    {
+      "title": "Complete Latency (p50 / p95 / p99)",
+      "type": "timeseries",
+      "id": 11,
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "h": 8, "w": 8, "x": 16, "y": 32 },
+      "targets": [
+        {
+          "expr": "histogram_quantile(0.5, sum by (le) (rate(work_complete_duration_seconds_bucket[5m])))",
+          "legendFormat": "p50",
+          "refId": "A"
+        },
+        {
+          "expr": "histogram_quantile(0.95, sum by (le) (rate(work_complete_duration_seconds_bucket[5m])))",
+          "legendFormat": "p95",
+          "refId": "B"
+        },
+        {
+          "expr": "histogram_quantile(0.99, sum by (le) (rate(work_complete_duration_seconds_bucket[5m])))",
+          "legendFormat": "p99",
+          "refId": "C"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s",
+          "custom": { "drawStyle": "line", "lineInterpolation": "linear", "fillOpacity": 5 }
+        }
+      }
+    },
+    {
+      "title": "WebSocket Auth Failures",
+      "type": "timeseries",
+      "id": 12,
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "description": "work_ws_auth_failure_total bucketed by reason. The org_mismatch series is the WorkWsAuthFailureOrgMismatch alert source — should normally be flat-zero.",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 40 },
+      "targets": [
+        {
+          "expr": "sum by (reason) (rate(work_ws_auth_failure_total[5m]))",
+          "legendFormat": "{{reason}}",
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "events/sec",
+          "custom": { "drawStyle": "line", "lineInterpolation": "linear", "fillOpacity": 10 }
+        }
+      }
+    },
+    {
+      "title": "Idempotency Replay Health",
+      "type": "timeseries",
+      "id": 13,
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "description": "work_idempotency_hits_total — replay-hit rate per route. Powers the WorkIdempotencyReplayDrift alert. The cleanup counter (work_idempotency_cleanup_total) is the sweeper liveness signal.",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 40 },
+      "targets": [
+        {
+          "expr": "sum by (route) (rate(work_idempotency_hits_total[10m]))",
+          "legendFormat": "replay {{route}}",
+          "refId": "A"
+        },
+        {
+          "expr": "rate(work_idempotency_cleanup_total[10m])",
+          "legendFormat": "sweeper rate",
+          "refId": "B"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "events/sec",
+          "custom": { "drawStyle": "line", "lineInterpolation": "linear", "fillOpacity": 10 }
+        }
+      }
+    },
+    {
+      "title": "Presence + Entity Focus",
+      "type": "timeseries",
+      "id": 14,
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "description": "Server-side presence (Option 2) and Tier 2 #1 entity-focus active counts. Both are sampled every 30s by their respective evictors after running an eviction pass, so the gauge naturally trails truth by one window.",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 48 },
+      "targets": [
+        {
+          "expr": "sum by (org_hash) (work_presence_active_users)",
+          "legendFormat": "presence {{org_hash}}",
+          "refId": "A"
+        },
+        {
+          "expr": "sum by (org_hash) (work_entity_focus_active)",
+          "legendFormat": "focus {{org_hash}}",
+          "refId": "B"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "users",
+          "custom": { "drawStyle": "line", "lineInterpolation": "linear", "fillOpacity": 5 }
+        }
+      }
+    },
+    {
+      "title": "Redis + DB Errors (Subsystem Health)",
+      "type": "timeseries",
+      "id": 15,
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "description": "Redis errors observed by the presence + entity-focus subsystems, plus push-failure totals bucketed by reason. Useful for distinguishing 'Redis is down' from 'rust-work-service has a regression'.",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 48 },
+      "targets": [
+        {
+          "expr": "rate(work_presence_redis_errors_total[5m])",
+          "legendFormat": "presence redis",
+          "refId": "A"
+        },
+        {
+          "expr": "rate(work_entity_focus_redis_errors_total[5m])",
+          "legendFormat": "entity_focus redis",
+          "refId": "B"
+        },
+        {
+          "expr": "sum by (reason) (rate(work_push_failure_total[5m]))",
+          "legendFormat": "push fail {{reason}}",
+          "refId": "C"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "events/sec",
+          "custom": { "drawStyle": "line", "lineInterpolation": "linear", "fillOpacity": 10 }
+        }
+      }
+    }
+  ],
+  "refresh": "30s",
+  "schemaVersion": 39,
+  "style": "dark",
+  "tags": ["work-engine", "rust-work-service", "phase-2"],
+  "templating": {
+    "list": [
+      {
+        "current": { "selected": false, "text": "All", "value": "$__all" },
+        "datasource": { "type": "prometheus", "uid": "prometheus" },
+        "definition": "label_values(work_websocket_subscribers, org_hash)",
+        "hide": 0,
+        "includeAll": true,
+        "label": "Org Hash",
+        "multi": true,
+        "name": "org_hash",
+        "options": [],
+        "query": { "query": "label_values(work_websocket_subscribers, org_hash)", "refId": "StandardVariableQuery" },
+        "refresh": 1,
+        "regex": "",
+        "skipUrlSync": false,
+        "sort": 1,
+        "type": "query"
+      }
+    ]
+  },
+  "time": { "from": "now-3h", "to": "now" },
+  "timepicker": {},
+  "timezone": "",
+  "title": "rust-work-service",
+  "uid": "rust-work-service",
+  "version": 1,
+  "weekStart": ""
+}

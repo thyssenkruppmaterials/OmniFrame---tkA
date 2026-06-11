@@ -1,3 +1,4 @@
+# Created and developed by Jai Singh
 """
 SAP RFC Outbound Workflow CLI Script (MANUAL OPERATION -- NOT A PYTEST TEST)
 ============================================================================
@@ -18,9 +19,9 @@ import sys
 import argparse
 
 # Set SDK path before importing pyrfc
-SDK_PATH = os.getenv('SAPNWRFC_HOME', '')
-if SDK_PATH:
-    os.environ['PATH'] = os.path.join(SDK_PATH, 'lib') + ';' + os.environ.get('PATH', '')
+SDK_PATH = r"C:\Users\str8s\Downloads\ed612114-724b-476f-9414-ba1f12bd34cc\nwrfcsdk\nwrfcsdk\nwrfcsdk\win-nwrfc750P_6-70002755\nwrfcsdk"
+os.environ['SAPNWRFC_HOME'] = SDK_PATH
+os.environ['PATH'] = os.path.join(SDK_PATH, 'lib') + ';' + os.environ.get('PATH', '')
 
 try:
     from pyrfc import Connection, RFCError
@@ -50,7 +51,7 @@ def test_connection(conn):
     """Test basic SAP connection."""
     print("\n📡 Testing SAP Connection...")
     try:
-        result = conn.call('STFC_CONNECTION', REQUTEXT='OmniFrame Test')
+        result = conn.call('STFC_CONNECTION', REQUTEXT='OneBox AI Test')
         print(f"   ✅ Connection successful!")
         print(f"   Echo: {result.get('ECHOTEXT', '')}")
         print(f"   Response: {result.get('RESPTEXT', '')[:50]}...")
@@ -141,7 +142,7 @@ def main():
     SAP_CONFIG['passwd'] = password
     
     print("=" * 60)
-    print("SAP RFC Outbound Workflow Test - OmniFrame")
+    print("SAP RFC Outbound Workflow Test - OneBox AI")
     print("=" * 60)
     print(f"\nConnecting to: {SAP_CONFIG['ashost']}")
     print(f"System: {SAP_CONFIG['sysnr']}, Client: {SAP_CONFIG['client']}")
@@ -184,3 +185,5 @@ def main():
 
 if __name__ == '__main__':
     sys.exit(main())
+
+# Created and developed by Jai Singh

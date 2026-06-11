@@ -1,3 +1,4 @@
+// Created and developed by Jai Singh
 /**
  * Hook for managing camera list data
  *
@@ -663,3 +664,5 @@ export function useCameras({
     toggleFavorite,
   }
 }
+
+// Created and developed by Jai Singh

@@ -1,3 +1,4 @@
+// Created and developed by Jai Singh
 /**
  * Unified Cycle Count Hook
  * Consolidates cycle count workflow logic for both pull and push modes
@@ -18,6 +19,7 @@ import {
   workServiceWs,
   type ConnectionState,
 } from '@/lib/work-service/websocket'
+import { PUSHED_WORK_QUERY_KEY } from './use-pushed-work'
 import { QUEUE_STATS_QUERY_KEY, WORK_QUEUE_QUERY_KEY } from './use-work-queue'
 
 // ============================================
@@ -25,7 +27,8 @@ import { QUEUE_STATS_QUERY_KEY, WORK_QUEUE_QUERY_KEY } from './use-work-queue'
 // ============================================
 
 /**
- * Draft data structure for auto-save
+ * Draft data structure for auto-save.
+ * Persists the full workflow position so a refresh/reopen restores exactly where the operator left off.
  */
 export interface DraftData {
   taskId: string
@@ -34,6 +37,21 @@ export interface DraftData {
   step: number
   startedAt: number
   lastUpdated: number
+  locationVerified?: boolean
+  scannedLocation?: string
+  emptyLocationState?: {
+    isEmpty: boolean | null
+    foundPartNumber: string
+    foundQuantity: number
+  }
+  // Extras pipeline state — lets operators resume mid-extras without
+  // repeating captures. Results themselves live on the task row's
+  // `workflow_result` JSONB; these just remember the UI position.
+  subStep?: 'pre_extras' | 'post_extras' | null
+  preCountIndex?: number
+  postCountIndex?: number
+  // Supervisor sign-off state is intentionally NOT persisted — PINs
+  // should never touch localStorage.
 }
 
 /**
@@ -70,6 +88,7 @@ export interface UseUnifiedCycleCountReturn {
 
   // Loading states
   isLoading: boolean
+  isInitialized: boolean
   isClaiming: boolean
   isCompleting: boolean
   isStarting: boolean
@@ -80,6 +99,7 @@ export interface UseUnifiedCycleCountReturn {
   startTask: (taskId: string) => Promise<void>
   completeTask: (countedQuantity: number, notes?: string) => Promise<void>
   releaseTask: () => Promise<void>
+  skipTask: (reason?: string) => Promise<void>
   acknowledgeTask: (taskId: string) => Promise<void>
   setCurrentTask: (task: CycleCountTask | null) => void
 
@@ -142,6 +162,7 @@ export function useUnifiedCycleCount(
   const [currentTask, setCurrentTask] = useState<CycleCountTask | null>(null)
   const [pushedTasks, setPushedTasks] = useState<CycleCountTask[]>([])
   const [isLoading, setIsLoading] = useState(false)
+  const [isInitialized, setIsInitialized] = useState(false)
   const [error, setError] = useState<Error | null>(null)
   const [isConnected, setIsConnected] = useState(false)
   const [connectionState, setConnectionState] =
@@ -164,6 +185,48 @@ export function useUnifiedCycleCount(
       logger.error(`[useUnifiedCycleCount] ${context}:`, err.message)
       setError(err)
       onError?.(err)
+
+      // Zone-exclusivity errors (migrations 225/226/227) deserve tailored
+      // toasts. There are two distinct variants:
+      //   ZONE_LOCKED   — someone else is actively counting this zone.
+      //   ZONE_ASSIGNED — this zone is admin-assigned to a different user.
+      if (err.message && err.message.includes('ZONE_ASSIGNED')) {
+        const zoneMatch = /Zone\s+"([^"]+)"/i.exec(err.message)
+        const ownerMatch = /assigned to\s+([^.]+?)\./i.exec(err.message)
+        const zone = zoneMatch?.[1] ?? 'this zone'
+        const owner = ownerMatch?.[1]?.trim() ?? 'another counter'
+        toast.error(`Zone ${zone} is assigned`, {
+          description: `This zone is dedicated to ${owner}. Try a different zone — the queue will route you to your available work.`,
+          duration: 6000,
+        })
+        return
+      }
+      if (err.message && err.message.includes('ZONE_LOCKED')) {
+        const zoneMatch = /Zone\s+"([^"]+)"/i.exec(err.message)
+        const zone = zoneMatch?.[1] ?? 'this zone'
+        const reserved =
+          /reserved for/i.test(err.message) ||
+          /state=reserved/i.test(err.message)
+        if (reserved) {
+          const ownerMatch = /reserved for\s+([^(.]+?)(?:\s*\(|\.)/i.exec(
+            err.message
+          )
+          const owner = ownerMatch?.[1]?.trim() ?? 'another counter'
+          toast.error(`Zone ${zone} is reserved`, {
+            description: `Held for ${owner} until they return or an admin clears it. Try a different zone — the queue will route you automatically.`,
+            duration: 6000,
+          })
+        } else {
+          const ownerMatch = /counted by\s+([^.]+?)\./i.exec(err.message)
+          const owner = ownerMatch?.[1]?.trim() ?? 'another counter'
+          toast.error(`Zone ${zone} is busy`, {
+            description: `${owner} is counting there. Try another zone — the queue will route you automatically.`,
+            duration: 6000,
+          })
+        }
+        return
+      }
+
       toast.error(`${context}: ${err.message}`)
     },
     [onError]
@@ -228,6 +291,17 @@ export function useUnifiedCycleCount(
             step: data.step ?? existingDraft?.step ?? 1,
             startedAt: existingDraft?.startedAt ?? Date.now(),
             lastUpdated: Date.now(),
+            locationVerified:
+              data.locationVerified ?? existingDraft?.locationVerified,
+            scannedLocation:
+              data.scannedLocation ?? existingDraft?.scannedLocation,
+            emptyLocationState:
+              data.emptyLocationState ?? existingDraft?.emptyLocationState,
+            subStep: data.subStep ?? existingDraft?.subStep ?? null,
+            preCountIndex:
+              data.preCountIndex ?? existingDraft?.preCountIndex ?? 0,
+            postCountIndex:
+              data.postCountIndex ?? existingDraft?.postCountIndex ?? 0,
           }
 
           localStorage.setItem(key, JSON.stringify(draft))
@@ -264,14 +338,19 @@ export function useUnifiedCycleCount(
   // Mutations
   // ============================================
 
-  // Claim next task
+  // Claim next task. The Rust route signals "queue is empty for this
+  // worker right now" by resolving with `{ success: false, task: null }`
+  // (see `workServiceClient.claimNext`). That is NOT an error — we render
+  // the "Pull Next Count" landing UI instead of toasting. Only genuine
+  // failures (HTTP 4xx/5xx, network) reach `onError`.
   const claimMutation = useMutation({
     mutationFn: async () => {
       setIsLoading(true)
       return workServiceClient.claimNext()
     },
-    onSuccess: (task) => {
+    onSuccess: (response) => {
       setIsLoading(false)
+      const task = response?.task ?? null
       if (task) {
         setCurrentTask(task)
         setTaskStartTime(Date.now())
@@ -279,7 +358,14 @@ export function useUnifiedCycleCount(
           description: `${task.material_number} at ${task.location}`,
         })
       } else {
-        toast.info('No tasks available')
+        // Empty-queue is a normal product state: the parent component
+        // already renders a "Pull Next Count" landing when
+        // `currentTask === null`. Don't surface a toast on every retry —
+        // it'd flood the operator's screen on a quiet shift. Logging
+        // stays at debug so a verbose build can still see the cadence.
+        logger.debug(
+          '[useUnifiedCycleCount] claim returned no task (queue idle)'
+        )
       }
       queryClient.invalidateQueries({ queryKey: [WORK_QUEUE_QUERY_KEY] })
       queryClient.invalidateQueries({ queryKey: [QUEUE_STATS_QUERY_KEY] })
@@ -313,6 +399,8 @@ export function useUnifiedCycleCount(
       setTaskStartTime(null)
       queryClient.invalidateQueries({ queryKey: [WORK_QUEUE_QUERY_KEY] })
       queryClient.invalidateQueries({ queryKey: [QUEUE_STATS_QUERY_KEY] })
+      // Pushed-work badge can change when a pushed task completes.
+      queryClient.invalidateQueries({ queryKey: [PUSHED_WORK_QUERY_KEY] })
     },
     onError: (err: Error) => {
       handleError(err, 'Failed to complete task')
@@ -329,9 +417,27 @@ export function useUnifiedCycleCount(
       setTaskStartTime(null)
       queryClient.invalidateQueries({ queryKey: [WORK_QUEUE_QUERY_KEY] })
       queryClient.invalidateQueries({ queryKey: [QUEUE_STATS_QUERY_KEY] })
+      queryClient.invalidateQueries({ queryKey: [PUSHED_WORK_QUERY_KEY] })
     },
     onError: (err: Error) => {
       handleError(err, 'Failed to release task')
+    },
+  })
+
+  // Skip/defer task
+  const skipMutation = useMutation({
+    mutationFn: ({ taskId, reason }: { taskId: string; reason?: string }) =>
+      workServiceClient.skipTask(taskId, reason),
+    onSuccess: () => {
+      toast.info('Count skipped — it will come back after your other counts')
+      clearDraft()
+      setCurrentTask(null)
+      setTaskStartTime(null)
+      queryClient.invalidateQueries({ queryKey: [WORK_QUEUE_QUERY_KEY] })
+      queryClient.invalidateQueries({ queryKey: [QUEUE_STATS_QUERY_KEY] })
+    },
+    onError: (err: Error) => {
+      handleError(err, 'Failed to skip task')
     },
   })
 
@@ -357,6 +463,7 @@ export function useUnifiedCycleCount(
   const { mutateAsync: startMutateAsync } = startMutation
   const { mutateAsync: completeMutateAsync } = completeMutation
   const { mutateAsync: releaseMutateAsync } = releaseMutation
+  const { mutateAsync: skipMutateAsync } = skipMutation
   const { mutateAsync: acknowledgeMutateAsync } = acknowledgeMutation
 
   const claimNext = useCallback(async () => {
@@ -398,6 +505,58 @@ export function useUnifiedCycleCount(
     await releaseMutateAsync(currentTask.id)
   }, [currentTask, releaseMutateAsync, handleError])
 
+  const skipTask = useCallback(
+    async (reason?: string) => {
+      if (!currentTask) {
+        handleError(new Error('No active task to skip'), 'skipTask')
+        return
+      }
+      await skipMutateAsync({ taskId: currentTask.id, reason })
+      if (mode === 'pull') {
+        // Auto-claim is best-effort. Migration 252 fix: surface the
+        // outcome to the operator instead of leaving them wondering.
+        //
+        // The empty-queue branch is now signalled by a resolved
+        // `{ success: false, task: null }` rather than a throw (see the
+        // 2026-05-07 noise fix in `workServiceClient.claimNext`), so we
+        // detect both: a thrown error (zone collision, server error)
+        // AND a resolved-but-empty response (no eligible next-up).
+        try {
+          const response = await claimMutateAsync()
+          const claimedTask = response?.task ?? null
+          if (!claimedTask) {
+            toast.info('Skipped. No more counts available right now.', {
+              description: 'Tap Pull Next to try again.',
+              duration: 6000,
+            })
+          }
+        } catch (err) {
+          logger.warn(
+            '[useUnifiedCycleCount] auto-claim after skip failed:',
+            err
+          )
+          const msg = err instanceof Error ? err.message : ''
+          if (/ZONE_LOCKED|ZONE_ASSIGNED/i.test(msg)) {
+            toast.warning(
+              'Skipped. Next-up count is in a zone reserved for someone else.',
+              {
+                description:
+                  'Tap Pull Next when you finish your current zone, or ask a supervisor to release the reservation.',
+                duration: 8000,
+              }
+            )
+          } else {
+            toast.info('Skipped. No more counts available right now.', {
+              description: 'Tap Pull Next to try again.',
+              duration: 6000,
+            })
+          }
+        }
+      }
+    },
+    [currentTask, skipMutateAsync, handleError, mode, claimMutateAsync]
+  )
+
   const acknowledgeTask = useCallback(
     async (taskId: string) => {
       await acknowledgeMutateAsync(taskId)
@@ -411,54 +570,42 @@ export function useUnifiedCycleCount(
 
   const handleWsEvent = useCallback(
     (event: WsEvent) => {
-      // Handle pushed work events for current user
-      if (
-        event.type === 'PushedWork' &&
-        event.user_id === userId &&
-        mode === 'push'
-      ) {
+      // Accept PushedWork regardless of current mode so auto-detection can switch to push
+      if (event.type === 'PushedWork' && event.user_id === userId) {
         logger.log('[useUnifiedCycleCount] Received pushed work:', event)
 
-        // Create task object for the pushed work
-        const pushedTask: CycleCountTask = {
-          id: event.task_id!,
-          count_number: event.count_number || '',
-          material_number: event.material || '',
-          material_description: null,
-          location: event.location || '',
-          warehouse: null,
-          system_quantity: 0,
-          counted_quantity: null,
-          unit_of_measure: 'EA',
-          priority:
-            (event.priority as 'critical' | 'hot' | 'normal' | 'low') ||
-            'normal',
-          status: 'pending',
-          count_type: null,
-          assigned_to: userId || null,
-          assigned_at: new Date().toISOString(),
-          push_mode: 'push',
-          pushed_by: null,
-          pushed_at: new Date().toISOString(),
-          push_acknowledged: false,
-          organization_id: organizationId || '',
-        }
+        const taskId = event.task_id
+        if (!taskId) return
 
-        // Add to pushed tasks
-        setPushedTasks((prev) => {
-          // Prevent duplicates
-          if (prev.some((t) => t.id === pushedTask.id)) return prev
-          return [...prev, pushedTask]
-        })
-
-        // Notify via callback
-        onTaskReceived?.(pushedTask)
-
-        // Show toast notification
-        toast.info(`New work assigned: ${event.material}`, {
-          description: `Location: ${event.location} | Priority: ${event.priority}`,
-          duration: 10000,
-        })
+        workServiceClient
+          .getTask(taskId)
+          .then((fullTask) => {
+            setPushedTasks((prev) => {
+              if (prev.some((t) => t.id === fullTask.id)) return prev
+              return [...prev, fullTask]
+            })
+            onTaskReceived?.(fullTask)
+            queryClient.invalidateQueries({
+              queryKey: [PUSHED_WORK_QUERY_KEY],
+            })
+            toast.info(`New work assigned: ${event.material}`, {
+              description: `Location: ${event.location} | Priority: ${event.priority}`,
+              duration: 10000,
+            })
+          })
+          .catch((err) => {
+            logger.error(
+              '[useUnifiedCycleCount] Failed to fetch pushed task:',
+              err
+            )
+            // Surface to the operator so they don't silently miss work
+            // that was just pushed to them.
+            toast.warning('Pushed work received but details failed to load', {
+              description:
+                'The notification arrived but task details could not be fetched. Refresh to try again.',
+              duration: 8000,
+            })
+          })
       }
 
       // Handle task status changes
@@ -467,13 +614,12 @@ export function useUnifiedCycleCount(
         event.task_id === currentTask?.id
       ) {
         logger.log('[useUnifiedCycleCount] Task status changed:', event)
-        // Update current task status
         setCurrentTask((prev) =>
           prev ? { ...prev, status: event.new_status || prev.status } : null
         )
       }
     },
-    [userId, organizationId, mode, currentTask?.id, onTaskReceived]
+    [userId, organizationId, currentTask?.id, onTaskReceived, queryClient]
   )
 
   // ============================================
@@ -503,39 +649,80 @@ export function useUnifiedCycleCount(
   }, [organizationId, enableRealtime, handleWsEvent])
 
   // ============================================
+  // Initial fetch for pre-existing push assignments
+  // ============================================
+
+  useEffect(() => {
+    if (!userId || !organizationId) return
+    workServiceClient
+      .getQueue()
+      .then((queue) => {
+        const myPushed = queue.filter(
+          (t) =>
+            t.push_mode === 'push' &&
+            t.assigned_to === userId &&
+            !t.push_acknowledged
+        )
+        if (myPushed.length > 0) {
+          setPushedTasks((prev) => {
+            const existing = new Set(prev.map((t) => t.id))
+            const newTasks = myPushed.filter((t) => !existing.has(t.id))
+            return newTasks.length > 0 ? [...prev, ...newTasks] : prev
+          })
+          logger.log(
+            `[useUnifiedCycleCount] Found ${myPushed.length} pre-existing push assignments`
+          )
+        }
+      })
+      .catch(() => {
+        logger.warn(
+          '[useUnifiedCycleCount] Could not fetch queue for push assignments'
+        )
+      })
+  }, [userId, organizationId])
+
+  // ============================================
   // Auto-claim on mount (pull mode)
   // ============================================
 
   useEffect(() => {
     if (mode === 'pull' && autoClaimOnMount && userId && !currentTask) {
+      const ACTIVE_STATUSES = ['pending', 'in_progress', 'recount']
+
+      const finalize = () => setIsInitialized(true)
+
       // Check for existing draft first
       const draft = loadDraft()
       if (draft && draft.taskId) {
-        // Try to fetch the task from the draft
         workServiceClient
           .getTask(draft.taskId)
           .then((task) => {
-            if (task && task.assigned_to === userId) {
+            if (
+              task &&
+              task.assigned_to === userId &&
+              ACTIVE_STATUSES.includes(task.status)
+            ) {
               setCurrentTask(task)
               setHasDraft(true)
               setTaskStartTime(draft.startedAt)
               toast.info('Resumed in-progress count', {
                 description: `${task.material_number} at ${task.location}`,
               })
+              finalize()
             } else {
-              // Draft is stale, clear it and claim new
               clearDraft()
-              claimMutation.mutate()
+              claimMutation.mutate(undefined, { onSettled: finalize })
             }
           })
           .catch(() => {
-            // Task no longer available, clear draft and claim new
             clearDraft()
-            claimMutation.mutate()
+            claimMutation.mutate(undefined, { onSettled: finalize })
           })
       } else {
-        claimMutation.mutate()
+        claimMutation.mutate(undefined, { onSettled: finalize })
       }
+    } else {
+      setIsInitialized(true)
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps -- Intentionally minimal deps: only runs on mount/mode change, not on every state update
   }, [mode, autoClaimOnMount, userId])
@@ -622,6 +809,7 @@ export function useUnifiedCycleCount(
 
     // Loading states
     isLoading,
+    isInitialized,
     isClaiming: claimMutation.isPending,
     isCompleting: completeMutation.isPending,
     isStarting: startMutation.isPending,
@@ -632,6 +820,7 @@ export function useUnifiedCycleCount(
     startTask,
     completeTask,
     releaseTask,
+    skipTask,
     acknowledgeTask,
     setCurrentTask,
 
@@ -685,3 +874,5 @@ export function clearAllUnifiedDrafts(): void {
     logger.error('[useUnifiedCycleCount] Failed to clear all drafts:', err)
   }
 }
+
+// Created and developed by Jai Singh

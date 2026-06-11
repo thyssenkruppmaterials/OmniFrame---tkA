@@ -1,3 +1,4 @@
+// Created and developed by Jai Singh
 import React from 'react'
 import { AlertTriangle, CheckCircle, Clock, Package, X } from 'lucide-react'
 import type { RFCycleCountOperation } from '@/lib/supabase/rf-cycle-count.service'
@@ -189,3 +190,5 @@ export default CountResumePrompt
 function cn(...inputs: any[]) {
   return inputs.filter(Boolean).join(' ')
 }
+
+// Created and developed by Jai Singh

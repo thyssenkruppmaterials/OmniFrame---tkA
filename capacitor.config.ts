@@ -1,7 +1,8 @@
+// Created and developed by Jai Singh
 import type { CapacitorConfig } from '@capacitor/cli';
 
 const config: CapacitorConfig = {
-  appId: 'com.omniframe.rf',
+  appId: 'com.onebox.rf',
   appName: 'OmniFrame RF',
   webDir: 'dist',
   server: {
@@ -12,3 +13,5 @@ const config: CapacitorConfig = {
 };
 
 export default config;
+
+// Created and developed by Jai Singh

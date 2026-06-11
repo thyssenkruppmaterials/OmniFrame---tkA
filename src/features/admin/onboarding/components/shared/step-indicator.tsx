@@ -1,3 +1,4 @@
+// Created and developed by Jai Singh
 /**
  * Step Indicator Components
  * Modern vertical sidebar design inspired by Stripe checkout
@@ -381,3 +382,5 @@ export const StepIndicator = VerticalStepIndicator
 export const StepIndicatorCompact = MobileStepHeader
 
 export default VerticalStepIndicator
+
+// Created and developed by Jai Singh

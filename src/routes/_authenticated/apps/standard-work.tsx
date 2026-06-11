@@ -1,3 +1,4 @@
+// Created and developed by Jai Singh
 /**
  * Standard Work Page
  * Enterprise-grade standard work management with modern tab navigation
@@ -114,4 +115,5 @@ export const Route = createFileRoute('/_authenticated/apps/standard-work')({
   beforeLoad: createStandardProtectedRoute('STANDARD_WORK'),
   component: StandardWork,
 })
-// Developer and Creator: Jai Singh
+
+// Created and developed by Jai Singh

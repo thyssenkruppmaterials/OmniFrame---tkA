@@ -1,3 +1,4 @@
+// Created and developed by Jai Singh
 import { Link, useMatches } from '@tanstack/react-router'
 import { Home } from 'lucide-react'
 import {
@@ -27,6 +28,7 @@ const routeLabels: Record<string, string> = {
   '/apps/smartsheet-integrations': 'Smartsheet',
   '/apps/shift-productivity': 'Shift Productivity',
   '/apps/standard-work': 'Standard Work',
+  '/apps/production-boards': 'Production Boards',
   '/apps/my-productivity': 'My Productivity',
   '/apps/data-manager': 'Data Manager',
   '/apps/tka-data-manager': 'TKA Data Manager',
@@ -167,3 +169,5 @@ export function AppBreadcrumbs() {
     </Breadcrumb>
   )
 }
+
+// Created and developed by Jai Singh

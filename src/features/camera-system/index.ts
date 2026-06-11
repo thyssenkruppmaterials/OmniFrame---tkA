@@ -1,3 +1,4 @@
+// Created and developed by Jai Singh
 /**
  * Camera System Feature
  *
@@ -60,3 +61,5 @@ export type {
   CameraStreamState,
   RecordingFilter,
 } from './types/camera.types'
+
+// Created and developed by Jai Singh

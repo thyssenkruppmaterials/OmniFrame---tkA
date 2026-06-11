@@ -1,3 +1,4 @@
+// Created and developed by Jai Singh
 use axum::{
     extract::State,
     http::StatusCode,
@@ -280,3 +281,5 @@ pub async fn report_device_health(
 
     Ok(Json(serde_json::json!({"status": "ok"})))
 }
+
+// Created and developed by Jai Singh

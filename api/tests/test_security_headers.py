@@ -1,5 +1,6 @@
+# Created and developed by Jai Singh
 """
-Security header tests for OmniFrame backend.
+Security header tests for OneBox AI backend.
 
 Validates that the security middleware injects expected headers into responses.
 """
@@ -72,3 +73,5 @@ class TestSecurityHeaders:
             data = response.json()
             security = data.get("security_systems", {})
             assert security.get("audit_service") == "configured"
+
+# Created and developed by Jai Singh

@@ -1,3 +1,4 @@
+// Created and developed by Jai Singh
 import { useEffect, useState } from 'react'
 import {
   ColumnDef,
@@ -142,3 +143,5 @@ export function RolesTable({ columns, data, isLoading }: DataTableProps) {
     </div>
   )
 }
+
+// Created and developed by Jai Singh

@@ -1,3 +1,4 @@
+// Created and developed by Jai Singh
 /**
  * Enterprise RBAC Integration Tests
  * Comprehensive testing for OmniFrame RBAC system optimizations
@@ -1004,3 +1005,5 @@ PERFORMANCE TARGETS VERIFIED:
 - Recovery time: <5 seconds from failures ✅
 
 */
+
+// Created and developed by Jai Singh

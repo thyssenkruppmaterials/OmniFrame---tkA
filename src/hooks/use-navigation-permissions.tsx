@@ -1,3 +1,4 @@
+// Created and developed by Jai Singh
 import { useState, useEffect } from 'react'
 import { singletonAuthManager } from '@/lib/auth/singleton-auth-manager'
 import { useUnifiedAuth } from '@/lib/auth/unified-auth-provider'
@@ -148,3 +149,5 @@ export function useNavigationPermissions(): UseNavigationPermissionsReturn {
     refreshPermissions,
   }
 }
+
+// Created and developed by Jai Singh

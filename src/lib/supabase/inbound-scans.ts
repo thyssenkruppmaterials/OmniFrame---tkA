@@ -1,3 +1,4 @@
+// Created and developed by Jai Singh
 import { logger } from '@/lib/utils/logger'
 import { supabase } from './client'
 import { Database } from './types'
@@ -439,3 +440,5 @@ export class InboundScanService {
 }
 
 export type { InboundScan, InboundScanInsert, InboundScanUpdate }
+
+// Created and developed by Jai Singh

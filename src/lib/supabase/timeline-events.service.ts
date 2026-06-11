@@ -1,3 +1,4 @@
+// Created and developed by Jai Singh
 /**
  * Timeline Events Service
  * Service for managing timeline events (meetings, planned downtime, etc.)
@@ -1109,4 +1110,5 @@ export default {
   doesTimeOverlapWithEvent,
   getOverlappingEvents,
 }
-// Developer and Creator: Jai Singh
+
+// Created and developed by Jai Singh

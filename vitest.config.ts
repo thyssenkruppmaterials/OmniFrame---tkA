@@ -1,3 +1,4 @@
+// Created and developed by Jai Singh
 import path from 'path'
 import { defineConfig } from 'vitest/config'
 
@@ -16,3 +17,5 @@ export default defineConfig({
     include: ['src/**/*.{test,spec}.{ts,tsx}'],
   },
 })
+
+// Created and developed by Jai Singh

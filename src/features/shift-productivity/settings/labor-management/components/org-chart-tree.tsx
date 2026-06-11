@@ -1,3 +1,4 @@
+// Created and developed by Jai Singh
 /**
  * Organizational Chart Tree Component
  * Displays hierarchical organizational structure with proper parent-child relationships
@@ -328,3 +329,5 @@ export function OrgChartTree({ data }: OrgChartTreeProps) {
     </div>
   )
 }
+
+// Created and developed by Jai Singh

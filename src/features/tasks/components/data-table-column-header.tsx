@@ -1,3 +1,4 @@
+// Created and developed by Jai Singh
 import {
   ArrowDownIcon,
   ArrowUpIcon,
@@ -74,3 +75,5 @@ export function DataTableColumnHeader<TData, TValue>({
     </div>
   )
 }
+
+// Created and developed by Jai Singh

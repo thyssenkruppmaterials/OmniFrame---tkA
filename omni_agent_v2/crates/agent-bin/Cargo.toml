@@ -1,0 +1,20 @@
+[package]
+name = "agent-bin"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[[bin]]
+name = "agent"
+path = "src/main.rs"
+
+[dependencies]
+agent-types = { path = "../agent-types" }
+agent-core = { path = "../agent-core" }
+agent-rpc = { path = "../agent-rpc" }
+tokio = { workspace = true }
+anyhow = { workspace = true }
+tracing = { workspace = true }
+tracing-subscriber = { workspace = true }
+clap = { workspace = true }
+dirs = { workspace = true }

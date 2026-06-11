@@ -1,10 +1,11 @@
+// Created and developed by Jai Singh
 /**
  * Nefab PFC Trace API Service
  *
  * Frontend service for kit cart tracking integration.
  * Communicates with FastAPI backend endpoints.
  *
- * @author Jai Singh
+ * @author OmniFrame Team
  * @date December 17, 2025
  * @version 1.0.0
  */
@@ -324,4 +325,5 @@ export const getKitCartItemTypes = (): NefabItemType[] => {
     KIT_CART_ITEM_TYPE_IDS.includes(type.Id)
   )
 }
-// Developer and Creator: Jai Singh
+
+// Created and developed by Jai Singh

@@ -1,3 +1,4 @@
+// Created and developed by Jai Singh
 /**
  * Employee Onboarding Context
  * Created: December 22, 2025
@@ -1031,3 +1032,5 @@ export function useOnboarding(): ExtendedOnboardingContextValue {
 }
 
 export default OnboardingProvider
+
+// Created and developed by Jai Singh

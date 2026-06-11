@@ -1,3 +1,4 @@
+// Created and developed by Jai Singh
 /**
  * Customer Portal Types
  *
@@ -46,3 +47,5 @@ export interface TicketStats {
   resolvedToday: number
   avgResponseTime: string
 }
+
+// Created and developed by Jai Singh

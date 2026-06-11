@@ -1,3 +1,4 @@
+// Created and developed by Jai Singh
 import { type Column } from '@tanstack/react-table'
 import { ArrowDown, ArrowUp, ArrowUpDown, EyeOff } from 'lucide-react'
 import { cn } from '@/lib/utils'
@@ -65,3 +66,5 @@ export function DataTableColumnHeader<TData, TValue>({
     </div>
   )
 }
+
+// Created and developed by Jai Singh

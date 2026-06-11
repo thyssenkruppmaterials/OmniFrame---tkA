@@ -1,3 +1,4 @@
+// Created and developed by Jai Singh
 /**
  * Employee Printouts Component
  * Created: December 27, 2025
@@ -284,7 +285,7 @@ export function EmployeePrintouts({
         <body>
           <div class="header">
             <div class="logo-section">
-              <img src="/images/favicon.svg" alt="OmniFrame Logo" />
+              <img src="/images/OneBoxLogoX.png" alt="OmniFrame Logo" />
               <span class="company-name">OmniFrame</span>
             </div>
             <div class="doc-title">Employee Shift Details</div>
@@ -620,7 +621,7 @@ export function EmployeePrintouts({
               <!-- Center Content -->
               <div class="card-center">
                 <div class="card-header">
-                  <img src="/images/favicon.svg" alt="OmniFrame" />
+                  <img src="/images/OneBoxLogoX.png" alt="OmniFrame" />
                   <span class="company-text">OmniFrame</span>
                 </div>
                 
@@ -748,3 +749,5 @@ export function EmployeePrintouts({
 }
 
 export default EmployeePrintouts
+
+// Created and developed by Jai Singh

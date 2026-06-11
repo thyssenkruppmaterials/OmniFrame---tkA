@@ -1,3 +1,4 @@
+// Created and developed by Jai Singh
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
 import { DistributedPermissionCache } from '@/lib/cache/distributed-permission-cache'
 import { EncryptedSessionStorage } from '@/lib/security/encrypted-storage'
@@ -42,9 +43,9 @@ describe('Critical Security Validation Suite', () => {
       await EncryptedSessionStorage.storeSession(testSession)
 
       // Tamper with stored data
-      const stored = localStorage.getItem('omniframe_secure_session')
+      const stored = localStorage.getItem('onebox_secure_session')
       if (stored) {
-        localStorage.setItem('omniframe_secure_session', stored + 'tampered')
+        localStorage.setItem('onebox_secure_session', stored + 'tampered')
       }
 
       const retrieved = await EncryptedSessionStorage.retrieveSession()
@@ -362,7 +363,7 @@ describe('Critical Security Validation Suite', () => {
 
     it('should handle malformed session data gracefully', async () => {
       // Store invalid JSON
-      localStorage.setItem('omniframe_secure_session', 'invalid-base64')
+      localStorage.setItem('onebox_secure_session', 'invalid-base64')
 
       const result = await EncryptedSessionStorage.retrieveSession()
       expect(result).toBeNull()
@@ -433,3 +434,5 @@ describe('Critical Security Validation Suite', () => {
     })
   })
 })
+
+// Created and developed by Jai Singh

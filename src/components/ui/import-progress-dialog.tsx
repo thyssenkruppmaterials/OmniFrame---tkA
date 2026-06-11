@@ -1,3 +1,4 @@
+// Created and developed by Jai Singh
 import React from 'react'
 import { AlertCircle, CheckCircle2, Loader2 } from 'lucide-react'
 import type { ImportProgress } from '@/lib/supabase/delivery-status.service'
@@ -266,3 +267,5 @@ export const ImportProgressDialog = React.memo(
 )
 
 ImportProgressDialog.displayName = 'ImportProgressDialog'
+
+// Created and developed by Jai Singh

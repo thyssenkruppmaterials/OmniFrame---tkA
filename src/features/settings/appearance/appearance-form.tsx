@@ -1,3 +1,4 @@
+// Created and developed by Jai Singh
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { useBlocker } from '@tanstack/react-router'
 import { fonts } from '@/config/fonts'
@@ -724,3 +725,5 @@ function SectionCard({
     </Card>
   )
 }
+
+// Created and developed by Jai Singh

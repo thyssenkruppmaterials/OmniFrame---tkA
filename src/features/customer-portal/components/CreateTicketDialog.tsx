@@ -1,3 +1,4 @@
+// Created and developed by Jai Singh
 /**
  * Create Ticket Dialog Component
  *
@@ -245,3 +246,5 @@ export function CreateTicketDialog({
     </Dialog>
   )
 }
+
+// Created and developed by Jai Singh

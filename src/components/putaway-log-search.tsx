@@ -1,3 +1,4 @@
+// Created and developed by Jai Singh
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { format, toZonedTime } from 'date-fns-tz'
 import { AnimatePresence, motion } from 'framer-motion'
@@ -15,6 +16,7 @@ import {
   Loader2,
   MoreHorizontal,
   Package,
+  RefreshCw,
   Search,
   Settings,
   Target,
@@ -27,6 +29,7 @@ import type { PutawayOperationsWithUser } from '@/lib/supabase/putaway-log.servi
 import { cn } from '@/lib/utils'
 import { logger } from '@/lib/utils/logger'
 import { usePutawayOperations } from '@/hooks/use-putaway-operations'
+import { useStuckPutawayConfirms } from '@/hooks/use-stuck-putaway-confirms'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
@@ -2366,6 +2369,28 @@ const PutawayLogSearch: React.FC<PutawayLogSearchProps> = React.memo(
       isUsingRust,
     } = usePutawayOperations({ enableRealtime: shouldEnableRealtime })
 
+    // Stuck-pending-confirms detector — sources from already-loaded `data`
+    // so we don't issue a second DB query. Drives the warning indicator
+    // inside the "Pending Confirms" card and the admin-only force-
+    // backfill button. See migration 289 + rust-work-service v0.1.35.
+    const isAdminUser =
+      profile?.role === 'admin' || profile?.role === 'superadmin'
+    const stuckConfirms = useStuckPutawayConfirms({
+      data,
+      isAdmin: Boolean(isAdminUser),
+    })
+    // Destructure into stable primitives so the `StatisticsCards`
+    // useMemo's dep array can track exactly the fields the JSX reads,
+    // without the @tanstack/query/no-unstable-deps + react-hooks/
+    // exhaustive-deps rules tripping over the wrapper object's identity.
+    const stuckSeverity = stuckConfirms.severity
+    const stuckCount = stuckConfirms.count
+    const stuckOldestMin = stuckConfirms.oldestAgeMinutes
+    const stuckIsStuck = stuckConfirms.isStuck
+    const stuckCanForce = stuckConfirms.canForce
+    const stuckIsForcing = stuckConfirms.isForcing
+    const stuckForceBackfill = stuckConfirms.forceBackfill
+
     // Sort and paginate data
     const sortedData = useMemo(() => {
       const processedData = [...filteredData]
@@ -2444,6 +2469,9 @@ const PutawayLogSearch: React.FC<PutawayLogSearchProps> = React.memo(
             const now = new Date()
             updateData.confirmed_by = profile?.id || null
             updateData.confirmed_at = now.toISOString()
+            // Tag this as a user-driven manual confirmation so the UI
+            // can distinguish it from agent-driven ones.
+            updateData.confirmed_source = 'manual'
 
             logger.log(
               '🕐 Putaway Confirmation: User confirmation stored in database:',
@@ -2675,6 +2703,50 @@ const PutawayLogSearch: React.FC<PutawayLogSearchProps> = React.memo(
             </div>
           )
         }
+        // Check if this confirmation was performed by the OmniAgent —
+        // either browser-side (`agent_trigger`, the v1.4.0 path through
+        // `useAgentTriggerRuntime`) or agent-side (`agent_trigger_direct`,
+        // the v1.6.4 path through `_HARDCODED_TRIGGERS` + the agent's
+        // own Realtime subscription on `rf_putaway_operations`). Show a
+        // distinctive badge so warehouse leads can tell at-a-glance which
+        // TOs were confirmed by automation vs by a human.
+        //
+        // v1.6.6 — when migration 251 has landed, the agent-side path
+        // also writes `confirmed_by_label = 'Omni Agent'` (and
+        // `confirmed_by_agent_id` for fleet filtering). We prefer the
+        // label when present so a future relabel doesn't require a UI
+        // ship; otherwise we fall back to the literal "OmniAgent" string.
+        else if (
+          item.to_status === 'TO Confirmed' &&
+          ((item as Record<string, unknown>).confirmed_source ===
+            'agent_trigger' ||
+            (item as Record<string, unknown>).confirmed_source ===
+              'agent_trigger_direct')
+        ) {
+          const rawLabel = (item as Record<string, unknown>).confirmed_by_label
+          const agentLabel =
+            typeof rawLabel === 'string' && rawLabel.trim().length > 0
+              ? rawLabel
+              : 'OmniAgent'
+          return (
+            <div className='space-y-1'>
+              <div className='flex items-center gap-1.5 font-medium text-cyan-600 dark:text-cyan-400'>
+                <img
+                  src='/images/omniagent-robot.png'
+                  alt={agentLabel}
+                  className='h-4 w-4 shrink-0'
+                  draggable={false}
+                />
+                {agentLabel}
+              </div>
+              {item.confirmed_at && (
+                <div className='text-muted-foreground text-xs'>
+                  {formatDateTimeEST(item.confirmed_at)}
+                </div>
+              )}
+            </div>
+          )
+        }
         // Check if operation is TO Confirmed and has confirmed_by data
         else if (item.to_status === 'TO Confirmed' && item.confirmed_by_user) {
           return (
@@ -2885,20 +2957,75 @@ const PutawayLogSearch: React.FC<PutawayLogSearchProps> = React.memo(
             </CardContent>
           </Card>
 
-          <Card>
+          <Card
+            className={cn(
+              stuckSeverity === 'error' &&
+                'border-destructive/60 ring-destructive/20 ring-1',
+              stuckSeverity === 'warn' &&
+                'border-amber-500/60 ring-1 ring-amber-500/20'
+            )}
+          >
             <CardHeader className='flex flex-row items-center justify-between space-y-0 pb-2'>
               <CardTitle className='text-sm font-medium'>
                 Pending Confirms
               </CardTitle>
-              <Package className='text-muted-foreground h-4 w-4' />
+              {stuckSeverity === 'error' ? (
+                <AlertTriangle className='text-destructive h-4 w-4' />
+              ) : stuckSeverity === 'warn' ? (
+                <AlertTriangle className='h-4 w-4 text-amber-500' />
+              ) : (
+                <Package className='text-muted-foreground h-4 w-4' />
+              )}
             </CardHeader>
             <CardContent>
               <div className='text-2xl font-bold'>
                 {statistics?.pendingConfirms || 0}
               </div>
-              <p className='text-muted-foreground text-xs'>
-                TOs awaiting confirmation
-              </p>
+              {/* Stuck-confirms hint when present, otherwise the
+                  default "TOs awaiting confirmation" caption. The
+                  pg_cron backfill (migration 289) drains these every
+                  5 minutes; admins can force-drain on demand below. */}
+              {stuckIsStuck ? (
+                <p
+                  className={cn(
+                    'text-xs',
+                    stuckSeverity === 'error'
+                      ? 'text-destructive'
+                      : 'text-amber-600 dark:text-amber-500'
+                  )}
+                >
+                  {stuckCount} stuck (oldest {stuckOldestMin} min) —
+                  auto-recovery runs every 5 min
+                </p>
+              ) : (
+                <p className='text-muted-foreground text-xs'>
+                  TOs awaiting confirmation
+                </p>
+              )}
+              {stuckCanForce && stuckIsStuck ? (
+                <Button
+                  variant='outline'
+                  size='sm'
+                  className='mt-2 h-7 px-2 text-xs'
+                  disabled={stuckIsForcing}
+                  onClick={() => {
+                    void stuckForceBackfill()
+                  }}
+                  title='Run the putaway-confirm backfill now (admin)'
+                >
+                  {stuckIsForcing ? (
+                    <>
+                      <Loader2 className='mr-1 h-3 w-3 animate-spin' />
+                      Draining…
+                    </>
+                  ) : (
+                    <>
+                      <RefreshCw className='mr-1 h-3 w-3' />
+                      Force backfill now
+                    </>
+                  )}
+                </Button>
+              ) : null}
             </CardContent>
           </Card>
 
@@ -2935,7 +3062,16 @@ const PutawayLogSearch: React.FC<PutawayLogSearchProps> = React.memo(
           </Card>
         </div>
       ),
-      [statistics]
+      [
+        statistics,
+        stuckSeverity,
+        stuckCount,
+        stuckOldestMin,
+        stuckIsStuck,
+        stuckCanForce,
+        stuckIsForcing,
+        stuckForceBackfill,
+      ]
     )
 
     return (
@@ -3245,3 +3381,5 @@ const PutawayLogSearch: React.FC<PutawayLogSearchProps> = React.memo(
 PutawayLogSearch.displayName = 'PutawayLogSearch'
 
 export default PutawayLogSearch
+
+// Created and developed by Jai Singh

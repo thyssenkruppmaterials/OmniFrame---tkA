@@ -1,9 +1,10 @@
+// Created and developed by Jai Singh
 import { useEffect } from 'react'
 import { z } from 'zod'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { useShiftProductivitySettings } from '@/hooks/use-shift-productivity-settings'
-import { Button } from '@/components/ui/button'
+import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import {
   Card,
   CardContent,
@@ -22,8 +23,13 @@ import {
 } from '@/components/ui/form'
 import { Input } from '@/components/ui/input'
 import { Skeleton } from '@/components/ui/skeleton'
-import { Switch } from '@/components/ui/switch'
 import ContentSection from '../components/content-section'
+import {
+  SettingsErrorState,
+  SettingsSaveBar,
+  SettingsStatusBadge,
+  SettingsToggleRow,
+} from '../components/settings-primitives'
 
 const kpiSettingsSchema = z.object({
   enableKPITracking: z.boolean().default(true),
@@ -38,11 +44,18 @@ const kpiSettingsSchema = z.object({
 type KPISettingsValues = z.infer<typeof kpiSettingsSchema>
 
 export function KPISettings() {
-  const { isLoading, kpiFormValues, updateKPISettings, isUpdatingKPI } =
-    useShiftProductivitySettings()
+  const {
+    isLoading,
+    kpiFormValues,
+    updateKPISettings,
+    isUpdatingKPI,
+    error,
+    refetch,
+    organizationId,
+  } = useShiftProductivitySettings()
 
   const form = useForm<KPISettingsValues>({
-    resolver: zodResolver(kpiSettingsSchema),
+    resolver: zodResolver(kpiSettingsSchema) as never,
     defaultValues: kpiFormValues,
   })
 
@@ -55,6 +68,8 @@ export function KPISettings() {
   function onSubmit(data: KPISettingsValues) {
     updateKPISettings(data)
   }
+
+  const kpiEnabled = form.watch('enableKPITracking')
 
   if (isLoading) {
     return (
@@ -71,30 +86,59 @@ export function KPISettings() {
     )
   }
 
+  if (error || !organizationId) {
+    return (
+      <ContentSection
+        title='Performance Standards'
+        desc='Define KPI thresholds and align them with labor standards.'
+      >
+        <SettingsErrorState
+          title={
+            !organizationId
+              ? 'Organization required'
+              : 'Unable to load settings'
+          }
+          description={
+            !organizationId
+              ? 'KPI settings require an organization before they can be saved.'
+              : error instanceof Error
+                ? error.message
+                : 'KPI settings failed to load.'
+          }
+          onRetry={organizationId ? () => void refetch() : undefined}
+        />
+      </ContentSection>
+    )
+  }
+
   return (
     <ContentSection
-      title='KPI Thresholds'
-      desc='Define performance targets and thresholds for productivity tracking.'
+      title='Performance Standards'
+      desc='Define KPI thresholds and align them with labor standards.'
     >
       <Form {...form}>
-        <form onSubmit={form.handleSubmit(onSubmit)} className='space-y-8'>
+        <form onSubmit={form.handleSubmit(onSubmit)} className='space-y-6'>
+          <Alert>
+            <AlertTitle>Two target systems work together</AlertTitle>
+            <AlertDescription>
+              KPI thresholds define organization-level goals and dashboard
+              context. Labor standards remain the per-position and per-area
+              source for efficiency calculations.
+            </AlertDescription>
+          </Alert>
+
           <FormField
             control={form.control}
             name='enableKPITracking'
             render={({ field }) => (
-              <FormItem className='flex flex-row items-center justify-between rounded-lg border p-4'>
-                <div className='space-y-0.5'>
-                  <FormLabel className='text-base'>
-                    Enable KPI Tracking
-                  </FormLabel>
-                  <FormDescription>
-                    Track performance against defined KPIs and targets.
-                  </FormDescription>
-                </div>
+              <FormItem>
                 <FormControl>
-                  <Switch
+                  <SettingsToggleRow
+                    title='Enable KPI Tracking'
+                    description='Show KPI context and target thresholds in Shift Productivity settings and dashboards.'
                     checked={field.value}
                     onCheckedChange={field.onChange}
+                    badge={<SettingsStatusBadge status='partial' />}
                   />
                 </FormControl>
               </FormItem>
@@ -116,7 +160,7 @@ export function KPISettings() {
                   <FormItem>
                     <FormLabel>Target Scans Per Hour</FormLabel>
                     <FormControl>
-                      <Input type='number' {...field} />
+                      <Input type='number' disabled={!kpiEnabled} {...field} />
                     </FormControl>
                     <FormDescription>
                       Expected number of inbound scans per hour per worker.
@@ -133,7 +177,7 @@ export function KPISettings() {
                   <FormItem>
                     <FormLabel>Target Putaways Per Hour</FormLabel>
                     <FormControl>
-                      <Input type='number' {...field} />
+                      <Input type='number' disabled={!kpiEnabled} {...field} />
                     </FormControl>
                     <FormDescription>
                       Expected number of putaway operations per hour per worker.
@@ -150,7 +194,7 @@ export function KPISettings() {
                   <FormItem>
                     <FormLabel>Target Picks Per Hour</FormLabel>
                     <FormControl>
-                      <Input type='number' {...field} />
+                      <Input type='number' disabled={!kpiEnabled} {...field} />
                     </FormControl>
                     <FormDescription>
                       Expected number of pick operations per hour per worker.
@@ -167,7 +211,7 @@ export function KPISettings() {
                   <FormItem>
                     <FormLabel>Target Cycle Counts Per Hour</FormLabel>
                     <FormControl>
-                      <Input type='number' {...field} />
+                      <Input type='number' disabled={!kpiEnabled} {...field} />
                     </FormControl>
                     <FormDescription>
                       Expected number of cycle counts completed per hour per
@@ -195,7 +239,7 @@ export function KPISettings() {
                   <FormItem>
                     <FormLabel>Quality Threshold (%)</FormLabel>
                     <FormControl>
-                      <Input type='number' {...field} />
+                      <Input type='number' disabled={!kpiEnabled} {...field} />
                     </FormControl>
                     <FormDescription>
                       Minimum quality score expected for overall operations
@@ -213,7 +257,7 @@ export function KPISettings() {
                   <FormItem>
                     <FormLabel>Accuracy Threshold (%)</FormLabel>
                     <FormControl>
-                      <Input type='number' {...field} />
+                      <Input type='number' disabled={!kpiEnabled} {...field} />
                     </FormControl>
                     <FormDescription>
                       Minimum accuracy expected for data entry and scanning
@@ -226,11 +270,16 @@ export function KPISettings() {
             </CardContent>
           </Card>
 
-          <Button type='submit' disabled={isUpdatingKPI}>
-            {isUpdatingKPI ? 'Saving...' : 'Save KPI Settings'}
-          </Button>
+          <SettingsSaveBar
+            isDirty={form.formState.isDirty}
+            isSaving={isUpdatingKPI}
+            submitLabel='Save standards settings'
+            savingLabel='Saving standards settings...'
+          />
         </form>
       </Form>
     </ContentSection>
   )
 }
+
+// Created and developed by Jai Singh

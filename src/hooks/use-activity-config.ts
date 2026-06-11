@@ -1,3 +1,4 @@
+// Created and developed by Jai Singh
 /**
  * useActivityConfig Hook
  * Provides dynamic activity configuration from database for timeline visualization
@@ -78,11 +79,42 @@ const DEFAULT_COLORS: Record<
     text: 'text-white',
     label: 'Counting',
   },
+  cart_stow: {
+    bg: 'bg-pink-500',
+    bgHover: 'hover:bg-pink-400',
+    text: 'text-white',
+    label: 'Cart Stow',
+  },
+  customer_response: {
+    bg: 'bg-blue-500',
+    bgHover: 'hover:bg-blue-400',
+    text: 'text-white',
+    label: 'Customer Response',
+  },
+  // Kit workflow stages — migration 310 (Productivity-Wiring-Kit-Workflow-Stages)
   kit_picking: {
     bg: 'bg-lime-500',
     bgHover: 'hover:bg-lime-400',
     text: 'text-white',
     label: 'Kit Picking',
+  },
+  kit_building: {
+    bg: 'bg-teal-500',
+    bgHover: 'hover:bg-teal-400',
+    text: 'text-white',
+    label: 'Kit Building',
+  },
+  kit_inspection: {
+    bg: 'bg-fuchsia-500',
+    bgHover: 'hover:bg-fuchsia-400',
+    text: 'text-white',
+    label: 'Kit Inspection',
+  },
+  kit_dock_staging: {
+    bg: 'bg-sky-500',
+    bgHover: 'hover:bg-sky-400',
+    text: 'text-white',
+    label: 'Dock Staging',
   },
   idle: {
     bg: 'bg-gray-200 dark:bg-gray-700',
@@ -225,6 +257,26 @@ export function useActivityConfig(): UseActivityConfigReturn {
     fetchConfigs()
   }, [fetchConfigs])
 
+  useEffect(() => {
+    const handleConfigUpdated = (event: Event) => {
+      const detail = (event as CustomEvent<{ organizationId?: string }>).detail
+      if (!detail?.organizationId || detail.organizationId === organizationId) {
+        void fetchConfigs()
+      }
+    }
+
+    window.addEventListener(
+      'shift-productivity:activity-config-updated',
+      handleConfigUpdated
+    )
+    return () => {
+      window.removeEventListener(
+        'shift-productivity:activity-config-updated',
+        handleConfigUpdated
+      )
+    }
+  }, [fetchConfigs, organizationId])
+
   // Build a map from activity type to colors for quick lookup
   const colorConfigMap = useMemo(() => {
     const map = new Map<
@@ -309,6 +361,7 @@ export function useActivityConfig(): UseActivityConfigReturn {
     if (types.length === 0) {
       return [
         'inbound_scan',
+        'cart_stow',
         'putaway',
         'picking',
         'pack',
@@ -316,6 +369,10 @@ export function useActivityConfig(): UseActivityConfigReturn {
         'final_pack',
         'putback',
         'cycle_count',
+        'kit_picking',
+        'kit_building',
+        'kit_inspection',
+        'kit_dock_staging',
       ]
     }
 
@@ -331,6 +388,7 @@ export function useActivityConfig(): UseActivityConfigReturn {
     if (types.length === 0) {
       return [
         'inbound_scan',
+        'cart_stow',
         'putaway',
         'picking',
         'pack',
@@ -338,6 +396,10 @@ export function useActivityConfig(): UseActivityConfigReturn {
         'final_pack',
         'putback',
         'cycle_count',
+        'kit_picking',
+        'kit_building',
+        'kit_inspection',
+        'kit_dock_staging',
       ]
     }
 
@@ -382,3 +444,5 @@ export const DEFAULT_ACTIVITY_COLOR_MAP: Record<string, string> =
   Object.fromEntries(
     Object.entries(DEFAULT_COLORS).map(([type, colors]) => [type, colors.bg])
   )
+
+// Created and developed by Jai Singh

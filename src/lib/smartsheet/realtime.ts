@@ -1,3 +1,4 @@
+// Created and developed by Jai Singh
 /**
  * Real-time update functionality for tickets
  * Implements polling-based updates with webhook event support
@@ -239,3 +240,5 @@ export function useTicketStatusMonitor(
     },
   })
 }
+
+// Created and developed by Jai Singh

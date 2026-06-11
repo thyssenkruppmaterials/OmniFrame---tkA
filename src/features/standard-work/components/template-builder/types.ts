@@ -1,3 +1,4 @@
+// Created and developed by Jai Singh
 /**
  * Template Builder Types
  */
@@ -11,6 +12,8 @@ export type ItemType =
   | 'multi_select'
   | 'date'
   | 'time'
+  | 'photo'
+  | 'signature'
 
 export interface DragItem {
   id: string
@@ -44,13 +47,13 @@ export const ITEM_TYPE_CONFIG: Record<
 > = {
   checkbox: {
     label: 'Checkbox',
-    description: 'Yes/No completion item',
+    description: 'Yes / No completion item',
     icon: 'Check',
     defaultTitle: 'New Checkbox Item',
   },
   text: {
     label: 'Text Input',
-    description: 'Free text response',
+    description: 'Free-text response',
     icon: 'Type',
     defaultTitle: 'New Text Item',
   },
@@ -84,4 +87,33 @@ export const ITEM_TYPE_CONFIG: Record<
     icon: 'Clock',
     defaultTitle: 'New Time Item',
   },
+  photo: {
+    label: 'Photo',
+    description: 'Capture or upload an image',
+    icon: 'Camera',
+    defaultTitle: 'New Photo Item',
+  },
+  signature: {
+    label: 'Signature',
+    description: 'Capture an inline signature',
+    icon: 'PenTool',
+    defaultTitle: 'New Signature Item',
+  },
 }
+
+/** Convenience: item types that store their value as a JSON array string. */
+export const ARRAY_VALUE_ITEM_TYPES: ItemType[] = ['multi_select']
+
+/** Convenience: item types whose response lives in `file_url` rather than `response_value`. */
+export const FILE_VALUE_ITEM_TYPES: ItemType[] = ['photo', 'signature']
+
+/** Stable section ID generator -- avoids collisions when two sections slug
+ * to the same string (e.g. "Pre-Op" and "Pre Op"). */
+export function generateSectionId(): string {
+  if (typeof crypto !== 'undefined' && 'randomUUID' in crypto) {
+    return `section-${crypto.randomUUID()}`
+  }
+  return `section-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`
+}
+
+// Created and developed by Jai Singh

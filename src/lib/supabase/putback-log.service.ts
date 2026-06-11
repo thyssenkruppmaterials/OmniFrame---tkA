@@ -1,3 +1,4 @@
+// Created and developed by Jai Singh
 /**
  * Putback Log Service - October 20, 2025
  *
@@ -427,4 +428,5 @@ export class PutbackLogService {
 
 // Export singleton instance
 export const putbackLogService = PutbackLogService.getInstance()
-// Developer and Creator: Jai Singh
+
+// Created and developed by Jai Singh

@@ -1,3 +1,4 @@
+# Created and developed by Jai Singh
 """
 FastAPI application settings and configuration.
 Integrates with existing Supabase infrastructure.
@@ -15,6 +16,20 @@ def _get_supabase_url() -> str:
         os.environ.get("SUPABASE_URL") or 
         os.environ.get("VITE_SUPABASE_URL") or 
         ""
+    )
+
+
+def _get_supabase_read_url() -> str:
+    """Get optional Supabase read-replica URL (load-balanced endpoint).
+    Falls back to the primary URL when no read replica is configured so that
+    `db.read_client` always returns a working client. The load-balanced URL
+    (e.g. ``https://<ref>-all.supabase.co``) routes writes to primary and
+    reads to replicas transparently."""
+    return (
+        os.environ.get("API_SUPABASE_READ_URL")
+        or os.environ.get("SUPABASE_READ_URL")
+        or os.environ.get("VITE_SUPABASE_READ_URL")
+        or _get_supabase_url()
     )
 
 
@@ -61,7 +76,7 @@ class Settings(BaseSettings):
     )
     
     # Application
-    app_name: str = "OmniFrame Logistics API"
+    app_name: str = "OneBox AI Logistics API"
     app_version: str = "1.0.0"
     debug: bool = False
     
@@ -77,12 +92,18 @@ class Settings(BaseSettings):
     # Supabase Configuration (matches existing frontend)
     # Supports API_SUPABASE_URL, SUPABASE_URL, or VITE_SUPABASE_URL
     supabase_url: str = _get_supabase_url()
+    # Optional read-replica routing URL (load-balanced endpoint). Falls back to
+    # supabase_url when not configured. See `api/config/database.py::SupabaseConnection.read_client`.
+    supabase_read_url: str = _get_supabase_read_url()
     supabase_anon_key: str = _get_supabase_anon_key()
     supabase_service_role_key: Optional[str] = _get_supabase_service_role_key()
     
     # Database
     database_url: Optional[str] = None  # Optional direct PostgreSQL connection
     
+    # Frontend URL (used for Supabase auth email redirect links)
+    frontend_url: str = os.environ.get("FRONTEND_URL") or os.environ.get("VITE_APP_URL") or "http://localhost:5173"
+
     # Authentication
     # NOTE: JWT validation and session caching are handled by Rust Core Service
     # These settings are kept for fallback mode only
@@ -118,7 +139,14 @@ class Settings(BaseSettings):
     # Rust Core Service Configuration
     # The Rust service provides secure JWT validation with JWKS-based RS256 verification
     # Default to Railway production service URL for development convenience
-    rust_core_url: str = os.getenv("RUST_CORE_URL", "https://your-rust-core-service.up.railway.app")
+    rust_core_url: str = os.getenv("RUST_CORE_URL", "https://rust-core-service-production.up.railway.app")
+    # OPTIONAL — Railway internal hostname (e.g.
+    # `http://rust-core-service.railway.internal:8010`). When set, this is
+    # preferred over `rust_core_url` to avoid the public edge proxy + TLS
+    # handshake hop on every call. See api/main.py lifespan for the boot
+    # rationale (3/4 uvicorn workers were timing out their cold-start
+    # health probe against the public URL in parallel).
+    rust_core_private_url: str = os.getenv("RUST_CORE_PRIVATE_URL", "")
     rust_core_timeout: float = float(os.getenv("RUST_CORE_TIMEOUT", "10.0"))  # Increased for network latency
     rust_core_enabled: bool = os.getenv("RUST_CORE_ENABLED", "true").lower() == "true"
     rust_core_retry_attempts: int = int(os.getenv("RUST_CORE_RETRY_ATTEMPTS", "3"))
@@ -135,6 +163,12 @@ class Settings(BaseSettings):
     
     # Logging
     log_level: str = "INFO"
+
+    # Railway Monitoring (server-only -- token never exposed to the frontend)
+    railway_api_token: str = os.getenv("RAILWAY_API_TOKEN", "")
+    railway_project_id: str = os.getenv("RAILWAY_PROJECT_ID", "fac8472c-199b-41ec-8806-a869ee96e783")
+    railway_environment_name: str = os.getenv("RAILWAY_ENVIRONMENT_NAME", "production")
+    railway_api_url: str = "https://backboard.railway.com/graphql/v2"
 
     def validate_required_settings(self) -> list[str]:
         """Validate that required settings are configured. Returns list of missing settings."""
@@ -161,7 +195,7 @@ class Settings(BaseSettings):
                 "http://127.0.0.1:3000",
             ]
         origins = [
-            "https://omniframe.example.com",
+            "https://onebox-ai-logistics-production.up.railway.app",
         ]
         extra = os.environ.get("CORS_EXTRA_ORIGINS", "")
         if extra:
@@ -171,5 +205,4 @@ class Settings(BaseSettings):
 # Global settings instance
 settings = Settings()
 
-# Developer and Creator: Jai Singh
-
+# Created and developed by Jai Singh

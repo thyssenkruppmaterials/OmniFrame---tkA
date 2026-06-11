@@ -1,3 +1,4 @@
+// Created and developed by Jai Singh
 import type { KnipConfig } from 'knip';
 
 const config: KnipConfig = {
@@ -62,3 +63,5 @@ const config: KnipConfig = {
 };
 
 export default config;
+
+// Created and developed by Jai Singh

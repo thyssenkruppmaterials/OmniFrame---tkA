@@ -1,3 +1,4 @@
+// Created and developed by Jai Singh
 /**
  * Area Options Service
  * Manages configurable area types and departments per organization
@@ -331,4 +332,5 @@ class AreaOptionsService {
 }
 
 export const areaOptionsService = AreaOptionsService.getInstance()
-// Developer and Creator: Jai Singh
+
+// Created and developed by Jai Singh

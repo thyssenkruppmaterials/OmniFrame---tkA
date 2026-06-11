@@ -1,31 +1,34 @@
-import type { QueryData } from '@supabase/supabase-js'
+// Created and developed by Jai Singh
 import { RUST_CORE_ENABLED } from '@/lib/rust-core'
 import { rustPutawayLogService } from '@/lib/rust-core/putaway-log.service'
 import { logger } from '@/lib/utils/logger'
 import { getTodayEST } from '@/lib/utils/timezone'
-import { supabase } from './client'
+import { supabase, supabaseRead } from './client'
 import type { Tables } from './database.types'
+import {
+  attachUserProfiles,
+  type UserProfileSummary,
+} from './enrich-with-user-profiles'
 
 // Define the table row type for putaway operations
 export type PutawayOperationData = Tables<'rf_putaway_operations'>
 
-// Define the query for fetching putaway operations with user profile joins
-// eslint-disable-next-line @typescript-eslint/no-unused-vars
-const putawayOperationsQuery = supabase.from('rf_putaway_operations').select(`
-    *,
-    confirmed_by_user:user_profiles!confirmed_by(
-      id,
-      full_name,
-      email
-    ),
-    mca_processed_by_user:user_profiles!mca_processed_by(
-      id,
-      full_name,
-      email
-    )
-  `)
+// Shape of a single putaway-log row as it flows through the UI: the raw
+// table row PLUS the two user-profile summaries the dashboard renders.
+//
+// Previously this type was inferred from a PostgREST embed (`QueryData<…>`)
+// that produced a nested LATERAL join — a measured 2.1s per call against
+// `pg_stat_statements` (mean across 625k calls, ~367 hours of cumulative
+// DB time). We now fetch the rows planar-only and stitch the profiles
+// client-side via `attachUserProfiles`. The runtime shape is identical
+// so the row-renderer (`src/components/putaway-log-search.tsx`) keeps
+// working as-is.
+export type PutawayOperationRow = PutawayOperationData & {
+  confirmed_by_user?: UserProfileSummary | null
+  mca_processed_by_user?: UserProfileSummary | null
+}
 
-export type PutawayOperationsWithUser = QueryData<typeof putawayOperationsQuery>
+export type PutawayOperationsWithUser = PutawayOperationRow[]
 
 // Statistics interface for putaway operations
 export interface PutawayLogStatistics {
@@ -88,11 +91,12 @@ export class PutawayLogService {
 
     try {
       logger.log(
-        '🚀 Fetching ALL putaway operations using CONTROLLED SEQUENTIAL chunking to prevent timeouts...'
+        '🚀 Fetching ALL putaway operations using two-query pattern (no LATERAL embeds)...'
       )
 
-      // First, get total count
-      const { count, error: countError } = await supabase
+      // Read-side queries go through the load-balanced read client
+      // (`supabaseRead`) per Patterns/Supabase-Read-Replica-Routing.md.
+      const { count, error: countError } = await supabaseRead
         .from('rf_putaway_operations')
         .select('*', { count: 'exact', head: true })
 
@@ -108,10 +112,9 @@ export class PutawayLogService {
 
       logger.log(`📊 Total records to fetch: ${count}`)
 
-      // Calculate chunks needed (1000 records per chunk)
       const chunkSize = 1000
       const totalChunks = Math.ceil(count / chunkSize)
-      const allRecords: PutawayOperationsWithUser = []
+      const allRecords: PutawayOperationRow[] = []
       const concurrentLimit = 5 // Max 5 parallel requests to prevent timeouts
       const delayBetweenBatches = 100 // 100ms delay between batches
 
@@ -119,38 +122,26 @@ export class PutawayLogService {
         `🔢 Fetching ${totalChunks} chunks of ${chunkSize} records each with controlled concurrency...`
       )
 
-      // Process chunks in batches to prevent overwhelming the database
+      // Phase 1 — fetch rows WITHOUT any user_profiles embed. This was
+      // the >2s LATERAL-join query in pg_stat_statements; planar select
+      // is a fast index range scan instead.
       for (let i = 0; i < totalChunks; i += concurrentLimit) {
-        const batchPromises = []
+        const batchPromises: Array<Promise<PutawayOperationRow[]>> = []
         const batchEnd = Math.min(i + concurrentLimit, totalChunks)
 
         for (let j = i; j < batchEnd; j++) {
           const from = j * chunkSize
           const to = from + chunkSize - 1
 
-          const promise = supabase
-            .from('rf_putaway_operations')
-            .select(
-              `
-              *,
-              confirmed_by_user:user_profiles!confirmed_by(
-                id,
-                full_name,
-                email
-              ),
-              mca_processed_by_user:user_profiles!mca_processed_by(
-                id,
-                full_name,
-                email
-              )
-            `
-            )
-            .order('created_at', { ascending: false })
-            .range(from, to)
-            .then(({ data, error }) => {
-              if (error) throw error
-              return data || []
-            })
+          const promise = (async (): Promise<PutawayOperationRow[]> => {
+            const { data, error } = await supabaseRead
+              .from('rf_putaway_operations')
+              .select('*')
+              .order('created_at', { ascending: false })
+              .range(from, to)
+            if (error) throw error
+            return (data ?? []) as PutawayOperationRow[]
+          })()
 
           batchPromises.push(promise)
         }
@@ -165,7 +156,6 @@ export class PutawayLogService {
             `✅ Fetched batch ${Math.floor(i / concurrentLimit) + 1}: ${allRecords.length}/${count} records`
           )
 
-          // Add delay between batches to prevent rate limiting
           if (batchEnd < totalChunks) {
             await new Promise((resolve) =>
               setTimeout(resolve, delayBetweenBatches)
@@ -179,6 +169,14 @@ export class PutawayLogService {
           return { data: allRecords, error }
         }
       }
+
+      // Phase 2 — attach user profiles via a single IN-list lookup. With
+      // ~50–200 distinct operators across 47k rows this is one cheap
+      // primary-key scan vs N LATERALs.
+      await attachUserProfiles(allRecords, [
+        ['confirmed_by', 'confirmed_by_user'],
+        ['mca_processed_by', 'mca_processed_by_user'],
+      ])
 
       // Re-sort all records by created_at descending to ensure correct order after parallel fetching
       // This is critical because parallel requests may return results in different orders
@@ -217,30 +215,17 @@ export class PutawayLogService {
         `🔍 Searching putaway operations for: "${searchTerm}" (no limit - entire database)`
       )
 
-      // Fetch all matching records without limit using chunking
-      const allRecords: PutawayOperationsWithUser = []
+      // Two-query pattern, same as fetchPutawayOperations: planar SELECT
+      // (no LATERAL embed) then a single user_profiles IN-list lookup.
+      const allRecords: PutawayOperationRow[] = []
       let offset = 0
       const batchSize = 1000
       let hasMore = true
 
       while (hasMore) {
-        const { data, error } = await supabase
+        const { data, error } = await supabaseRead
           .from('rf_putaway_operations')
-          .select(
-            `
-            *,
-            confirmed_by_user:user_profiles!confirmed_by(
-              id,
-              full_name,
-              email
-            ),
-            mca_processed_by_user:user_profiles!mca_processed_by(
-              id,
-              full_name,
-              email
-            )
-          `
-          )
+          .select('*')
           .or(
             `material_number.ilike.%${searchTerm}%,to_number.ilike.%${searchTerm}%,to_location.ilike.%${searchTerm}%,shelf_location.ilike.%${searchTerm}%,putaway_driver.ilike.%${searchTerm}%,warehouse.ilike.%${searchTerm}%,to_status.ilike.%${searchTerm}%,mca_reason.ilike.%${searchTerm}%`
           )
@@ -253,7 +238,7 @@ export class PutawayLogService {
         }
 
         if (data && data.length > 0) {
-          allRecords.push(...data)
+          allRecords.push(...(data as PutawayOperationRow[]))
           hasMore = data.length === batchSize
           offset += batchSize
           logger.log(
@@ -263,6 +248,11 @@ export class PutawayLogService {
           hasMore = false
         }
       }
+
+      await attachUserProfiles(allRecords, [
+        ['confirmed_by', 'confirmed_by_user'],
+        ['mca_processed_by', 'mca_processed_by_user'],
+      ])
 
       // Re-sort all records by created_at descending to ensure correct date order
       allRecords.sort((a, b) => {
@@ -329,15 +319,15 @@ export class PutawayLogService {
 
       logger.log(`📅 Putaway Log Statistics: Using EST date - Today: ${today}`)
 
-      // Get total count (entire database)
-      const { count: totalCount } = await supabase
+      // Get total count (entire database) — read replica is fine for stats
+      const { count: totalCount } = await supabaseRead
         .from('rf_putaway_operations')
         .select('*', { count: 'exact', head: true })
 
       // Get today's putaways by fetching all and filtering client-side
       // This is less efficient but works correctly with timezone conversion
       // Note: In production, the RPC function should be used instead
-      const { data: allPutaways } = await supabase
+      const { data: allPutaways } = await supabaseRead
         .from('rf_putaway_operations')
         .select('created_at')
 
@@ -366,7 +356,7 @@ export class PutawayLogService {
 
       // Get PENDING MCA workflow count (only from Jan 14, 2026 onwards)
       // Only count MCA operations that haven't been processed yet (excludes MCA Confirmed and MCA Processed)
-      const { count: mcaCount } = await supabase
+      const { count: mcaCount } = await supabaseRead
         .from('rf_putaway_operations')
         .select('*', { count: 'exact', head: true })
         .eq('is_mca_workflow', true)
@@ -374,7 +364,7 @@ export class PutawayLogService {
         .gte('created_at', '2026-01-14T00:00:00.000Z')
 
       // Get completed count
-      const { count: completedCount } = await supabase
+      const { count: completedCount } = await supabaseRead
         .from('rf_putaway_operations')
         .select('*', { count: 'exact', head: true })
         .eq('to_status', 'Completed')
@@ -382,7 +372,7 @@ export class PutawayLogService {
       // Get pending confirms count (TOs awaiting TO Confirmation in SAP, from Jan 1, 2026 onwards)
       // 'Completed' status = putaway done on RF but TO not yet confirmed in SAP (IS pending)
       // Date filter excludes stale historical data from before TO confirmation workflow
-      const { count: pendingConfirmsCount } = await supabase
+      const { count: pendingConfirmsCount } = await supabaseRead
         .from('rf_putaway_operations')
         .select('*', { count: 'exact', head: true })
         .not(
@@ -394,13 +384,13 @@ export class PutawayLogService {
         .gte('created_at', '2026-01-01T00:00:00.000Z')
 
       // Get unique materials (selective field query)
-      const { data: materialData } = await supabase
+      const { data: materialData } = await supabaseRead
         .from('rf_putaway_operations')
         .select('material_number')
         .not('material_number', 'is', null)
 
       // Get all drivers and created_at for calculations
-      const { data: driverData } = await supabase
+      const { data: driverData } = await supabaseRead
         .from('rf_putaway_operations')
         .select('putaway_driver, created_at')
         .not('putaway_driver', 'is', null)
@@ -435,12 +425,12 @@ export class PutawayLogService {
         : 0
 
       // Get status data for breakdown
-      const { data: statusData } = await supabase
+      const { data: statusData } = await supabaseRead
         .from('rf_putaway_operations')
         .select('to_status')
 
       // Get warehouse data for distribution
-      const { data: warehouseData } = await supabase
+      const { data: warehouseData } = await supabaseRead
         .from('rf_putaway_operations')
         .select('warehouse')
 
@@ -923,4 +913,5 @@ export class PutawayLogService {
 
 // Export singleton instance
 export const putawayLogService = PutawayLogService.getInstance()
-// Developer and Creator: Jai Singh
+
+// Created and developed by Jai Singh

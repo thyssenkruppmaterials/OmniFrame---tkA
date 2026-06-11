@@ -1,3 +1,4 @@
+// Created and developed by Jai Singh
 import React, {
   createContext,
   useContext,
@@ -251,3 +252,5 @@ export function useSessionManagementContext() {
   }
   return context
 }
+
+// Created and developed by Jai Singh

@@ -1,3 +1,4 @@
+// Created and developed by Jai Singh
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 
 vi.mock('@/lib/utils/logger', () => ({
@@ -12,10 +13,10 @@ describe('Supabase client env guard', () => {
   beforeEach(() => {
     vi.resetModules()
     if (typeof window !== 'undefined') {
-      delete (window as any).__OMNIFRAME_SUPABASE_CLIENT__
-      delete (window as any).__OMNIFRAME_SUPABASE_ADMIN__
-      delete (window as any).__OMNIFRAME_CLIENT_INIT__
-      delete (window as any).__OMNIFRAME_SERVICE_KEY_WARNED__
+      delete (window as any).__ONEBOX_SUPABASE_CLIENT__
+      delete (window as any).__ONEBOX_SUPABASE_ADMIN__
+      delete (window as any).__ONEBOX_CLIENT_INIT__
+      delete (window as any).__ONEBOX_SERVICE_KEY_WARNED__
     }
   })
 
@@ -50,3 +51,5 @@ describe('Supabase client env guard', () => {
     )
   })
 })
+
+// Created and developed by Jai Singh

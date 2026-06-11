@@ -1,3 +1,4 @@
+// Created and developed by Jai Singh
 /**
  * Time Picker Component
  * Shadcn-styled time picker using Select components
@@ -246,3 +247,5 @@ export const TimeInput = React.forwardRef<HTMLInputElement, TimeInputProps>(
 TimeInput.displayName = 'TimeInput'
 
 export default TimePicker
+
+// Created and developed by Jai Singh

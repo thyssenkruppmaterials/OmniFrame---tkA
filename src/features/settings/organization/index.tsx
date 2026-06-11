@@ -1,3 +1,4 @@
+// Created and developed by Jai Singh
 import ContentSection from '../components/content-section'
 import { OrganizationForm } from './organization-form'
 
@@ -11,3 +12,5 @@ export default function OrganizationSettings() {
     </ContentSection>
   )
 }
+
+// Created and developed by Jai Singh

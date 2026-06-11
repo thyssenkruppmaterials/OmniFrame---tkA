@@ -1,3 +1,4 @@
+// Created and developed by Jai Singh
 import { createContext, useContext, useState, ReactNode } from 'react'
 import type {
   UserManagementContextType,
@@ -105,3 +106,5 @@ export function useUserManagementContext() {
   }
   return context
 }
+
+// Created and developed by Jai Singh

@@ -1,3 +1,4 @@
+// Created and developed by Jai Singh
 import { useEffect } from 'react'
 import { useRouter } from '@tanstack/react-router'
 import { useUnifiedAuth } from '@/stores/unifiedAuthStore'
@@ -35,3 +36,5 @@ export function useRouteTracker() {
     return unsubscribe
   }, [router, setLastVisitedPath])
 }
+
+// Created and developed by Jai Singh

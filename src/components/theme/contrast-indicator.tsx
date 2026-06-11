@@ -1,3 +1,4 @@
+// Created and developed by Jai Singh
 import { Check, AlertTriangle, X } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import {
@@ -89,3 +90,5 @@ export function ContrastIndicator({
     </TooltipProvider>
   )
 }
+
+// Created and developed by Jai Singh

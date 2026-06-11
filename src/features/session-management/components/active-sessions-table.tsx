@@ -1,3 +1,4 @@
+// Created and developed by Jai Singh
 import { useState } from 'react'
 import { formatDistanceToNow } from 'date-fns'
 import { ColumnDef } from '@tanstack/react-table'
@@ -286,3 +287,5 @@ export function ActiveSessionsTable({
     </>
   )
 }
+
+// Created and developed by Jai Singh

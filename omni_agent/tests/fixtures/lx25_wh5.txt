@@ -1,0 +1,13 @@
+05/10/2026			Inventory Status - List with Totals
+
+Warehouse number			WH5	Indianapolis Plt 5 Stores
+
+	Typ	Storage type name
+	Summary				Absolute	Proportio	WhN	Typ
+
+	110	TKA LGE ENG FIXED BIN
+	Total number of bins				  6,133	 100.00%	WH5	110
+	Inv. executed during selection peri				  4,302	  70.15%	WH5	110
+	Inventory active				    458	   7.47%	WH5	110
+	Inventory planned				      0	   0.00%	WH5	110
+	No inventory executed				  1,831	  29.85%	WH5	110

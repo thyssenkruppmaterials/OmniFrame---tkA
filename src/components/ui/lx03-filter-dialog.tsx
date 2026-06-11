@@ -1,3 +1,4 @@
+// Created and developed by Jai Singh
 'use client'
 
 import { useState } from 'react'
@@ -5,17 +6,17 @@ import { X, Filter as FilterIcon } from 'lucide-react'
 import type { LX03Data } from '@/lib/supabase/lx03-data.service'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { MultiSelect } from '@/components/ui/multi-select'
+import {
+  ResponsiveDialog,
+  ResponsiveDialogBody,
+  ResponsiveDialogDescription,
+  ResponsiveDialogFooter,
+  ResponsiveDialogHeader,
+  ResponsiveDialogTitle,
+} from '@/components/ui/responsive-dialog'
 import {
   Select,
   SelectContent,
@@ -136,201 +137,201 @@ export function LX03FilterDialog({
   }).length
 
   return (
-    <Dialog open={isOpen} onOpenChange={onOpenChange}>
-      <DialogContent className='max-h-[85vh] w-[95vw] max-w-[1400px] min-w-[1200px] overflow-y-auto'>
-        <DialogHeader>
-          <DialogTitle className='flex items-center gap-2'>
-            <FilterIcon className='h-5 w-5' />
-            Filter LX03 Data
-          </DialogTitle>
-          <DialogDescription>
-            Apply filters to narrow down your LX03 data results. You can filter
-            by multiple criteria simultaneously across all available columns.
-          </DialogDescription>
-        </DialogHeader>
+    <ResponsiveDialog open={isOpen} onOpenChange={onOpenChange} size='xl'>
+      <ResponsiveDialogHeader>
+        <ResponsiveDialogTitle className='flex items-center gap-2'>
+          <FilterIcon className='h-5 w-5' />
+          Filter LX03 Data
+        </ResponsiveDialogTitle>
+        <ResponsiveDialogDescription>
+          Apply filters to narrow down your LX03 data results. You can filter by
+          multiple criteria simultaneously across all available columns.
+        </ResponsiveDialogDescription>
+      </ResponsiveDialogHeader>
 
-        <div className='space-y-8 py-6'>
-          {/* Active Filters Summary */}
-          {activeFilterCount > 0 && (
-            <div className='rounded-lg border border-blue-200 bg-blue-50 p-4 dark:border-blue-800 dark:bg-blue-950'>
-              <div className='mb-2 flex items-center justify-between'>
-                <Label className='text-sm font-medium text-blue-900 dark:text-blue-100'>
-                  Active Filters ({activeFilterCount})
-                </Label>
-                <Button
-                  variant='outline'
-                  size='sm'
-                  onClick={handleClearAll}
-                  className='h-7 text-xs'
-                >
-                  <X className='mr-1 h-3 w-3' />
-                  Clear All
-                </Button>
-              </div>
-              <div className='flex flex-wrap gap-2'>
-                {Object.entries(filterConfig).map(([key, value]) => {
-                  const field = FILTER_FIELDS.find((f) => f.key === key)
-                  let isEmpty = false
-                  let displayValue = ''
-
-                  if (Array.isArray(value)) {
-                    isEmpty = value.length === 0
-                    displayValue =
-                      value.length > 1
-                        ? `${value.length} selected`
-                        : value[0] || ''
-                  } else {
-                    isEmpty = !value || !value.trim()
-                    displayValue = value || ''
-                  }
-
-                  if (isEmpty) return null
-
-                  return (
-                    <Badge key={key} variant='secondary' className='text-xs'>
-                      {field?.label || key}: {displayValue}
-                      <button
-                        onClick={() => {
-                          const clearValue =
-                            field?.type === 'multi-select' ? [] : ''
-                          onFilterChange(key, clearValue)
-                          setLocalFilterConfig((prev) => ({
-                            ...prev,
-                            [key]: clearValue,
-                          }))
-                        }}
-                        className='hover:text-destructive ml-1'
-                      >
-                        <X className='h-3 w-3' />
-                      </button>
-                    </Badge>
-                  )
-                })}
-              </div>
+      <ResponsiveDialogBody className='space-y-8'>
+        {/* Active Filters Summary */}
+        {activeFilterCount > 0 && (
+          <div className='rounded-lg border border-blue-200 bg-blue-50 p-4 dark:border-blue-800 dark:bg-blue-950'>
+            <div className='mb-2 flex items-center justify-between'>
+              <Label className='text-sm font-medium text-blue-900 dark:text-blue-100'>
+                Active Filters ({activeFilterCount})
+              </Label>
+              <Button
+                variant='outline'
+                size='sm'
+                onClick={handleClearAll}
+                className='h-7 text-xs'
+              >
+                <X className='mr-1 h-3 w-3' />
+                Clear All
+              </Button>
             </div>
-          )}
+            <div className='flex flex-wrap gap-2'>
+              {Object.entries(filterConfig).map(([key, value]) => {
+                const field = FILTER_FIELDS.find((f) => f.key === key)
+                let isEmpty = false
+                let displayValue = ''
 
-          {/* Filter Fields */}
-          <div className='grid grid-cols-1 gap-6 md:grid-cols-2 lg:grid-cols-3'>
-            {FILTER_FIELDS.map((field) => {
-              const uniqueValues =
-                field.type === 'select' || field.type === 'multi-select'
-                  ? getUniqueValues(field.key)
-                  : []
-
-              return (
-                <div key={field.key} className='space-y-3'>
-                  <Label
-                    htmlFor={field.key}
-                    className='block text-sm font-medium'
-                  >
-                    {field.label}
-                  </Label>
-
-                  {field.type === 'text' ? (
-                    <div className='min-h-[40px]'>
-                      <Input
-                        id={field.key}
-                        placeholder={`Filter by ${field.label.toLowerCase()}...`}
-                        value={(localFilterConfig[field.key] as string) || ''}
-                        onChange={(e) =>
-                          handleLocalFilterChange(field.key, e.target.value)
-                        }
-                        className='h-10 w-full'
-                      />
-                    </div>
-                  ) : field.type === 'number' ? (
-                    <div className='min-h-[40px]'>
-                      <Input
-                        id={field.key}
-                        type='number'
-                        placeholder={`Filter by ${field.label.toLowerCase()}...`}
-                        value={(localFilterConfig[field.key] as string) || ''}
-                        onChange={(e) =>
-                          handleLocalFilterChange(field.key, e.target.value)
-                        }
-                        className='h-10 w-full'
-                      />
-                    </div>
-                  ) : field.type === 'multi-select' ? (
-                    <div className='min-h-[40px]'>
-                      <MultiSelect
-                        options={uniqueValues.map((value) => ({
-                          label: value,
-                          value,
-                        }))}
-                        selected={
-                          Array.isArray(localFilterConfig[field.key])
-                            ? (localFilterConfig[field.key] as string[])
-                            : []
-                        }
-                        onSelectionChange={(selected) =>
-                          handleLocalFilterChange(field.key, selected)
-                        }
-                        placeholder={`Select ${field.label.toLowerCase()}...`}
-                        maxItems={2}
-                      />
-                    </div>
-                  ) : (
-                    <div className='min-h-[40px]'>
-                      <Select
-                        value={
-                          (localFilterConfig[field.key] as string) || '__all__'
-                        }
-                        onValueChange={(value) =>
-                          handleLocalFilterChange(field.key, value)
-                        }
-                      >
-                        <SelectTrigger className='h-10 w-full'>
-                          <SelectValue
-                            placeholder={`Select ${field.label.toLowerCase()}...`}
-                          />
-                        </SelectTrigger>
-                        <SelectContent
-                          className='z-50 max-h-[200px] overflow-y-auto'
-                          position='popper'
-                          sideOffset={4}
-                        >
-                          <SelectItem value='__all__'>
-                            All {field.label}
-                          </SelectItem>
-                          {uniqueValues.map((value) => (
-                            <SelectItem key={value} value={value}>
-                              {value}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    </div>
-                  )}
-                </div>
-              )
-            })}
-          </div>
-        </div>
-
-        <DialogFooter>
-          <Button variant='outline' onClick={() => onOpenChange(false)}>
-            Cancel
-          </Button>
-          <Button onClick={handleApplyFilters}>
-            Apply Filters
-            {Object.values(localFilterConfig).filter((v) => {
-              if (Array.isArray(v)) return v.length > 0
-              return v && (typeof v === 'string' ? v.trim() : false)
-            }).length > 0 && (
-              <Badge variant='secondary' className='ml-2 px-1.5 py-0.5 text-xs'>
-                {
-                  Object.values(localFilterConfig).filter((v) => {
-                    if (Array.isArray(v)) return v.length > 0
-                    return v && (typeof v === 'string' ? v.trim() : false)
-                  }).length
+                if (Array.isArray(value)) {
+                  isEmpty = value.length === 0
+                  displayValue =
+                    value.length > 1
+                      ? `${value.length} selected`
+                      : value[0] || ''
+                } else {
+                  isEmpty = !value || !value.trim()
+                  displayValue = value || ''
                 }
-              </Badge>
-            )}
-          </Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
+
+                if (isEmpty) return null
+
+                return (
+                  <Badge key={key} variant='secondary' className='text-xs'>
+                    {field?.label || key}: {displayValue}
+                    <button
+                      onClick={() => {
+                        const clearValue =
+                          field?.type === 'multi-select' ? [] : ''
+                        onFilterChange(key, clearValue)
+                        setLocalFilterConfig((prev) => ({
+                          ...prev,
+                          [key]: clearValue,
+                        }))
+                      }}
+                      className='hover:text-destructive ml-1'
+                    >
+                      <X className='h-3 w-3' />
+                    </button>
+                  </Badge>
+                )
+              })}
+            </div>
+          </div>
+        )}
+
+        {/* Filter Fields */}
+        <div className='grid grid-cols-1 gap-6 md:grid-cols-2 lg:grid-cols-3'>
+          {FILTER_FIELDS.map((field) => {
+            const uniqueValues =
+              field.type === 'select' || field.type === 'multi-select'
+                ? getUniqueValues(field.key)
+                : []
+
+            return (
+              <div key={field.key} className='space-y-3'>
+                <Label
+                  htmlFor={field.key}
+                  className='block text-sm font-medium'
+                >
+                  {field.label}
+                </Label>
+
+                {field.type === 'text' ? (
+                  <div className='min-h-[40px]'>
+                    <Input
+                      id={field.key}
+                      placeholder={`Filter by ${field.label.toLowerCase()}...`}
+                      value={(localFilterConfig[field.key] as string) || ''}
+                      onChange={(e) =>
+                        handleLocalFilterChange(field.key, e.target.value)
+                      }
+                      className='h-10 w-full'
+                    />
+                  </div>
+                ) : field.type === 'number' ? (
+                  <div className='min-h-[40px]'>
+                    <Input
+                      id={field.key}
+                      type='number'
+                      placeholder={`Filter by ${field.label.toLowerCase()}...`}
+                      value={(localFilterConfig[field.key] as string) || ''}
+                      onChange={(e) =>
+                        handleLocalFilterChange(field.key, e.target.value)
+                      }
+                      className='h-10 w-full'
+                    />
+                  </div>
+                ) : field.type === 'multi-select' ? (
+                  <div className='min-h-[40px]'>
+                    <MultiSelect
+                      options={uniqueValues.map((value) => ({
+                        label: value,
+                        value,
+                      }))}
+                      selected={
+                        Array.isArray(localFilterConfig[field.key])
+                          ? (localFilterConfig[field.key] as string[])
+                          : []
+                      }
+                      onSelectionChange={(selected) =>
+                        handleLocalFilterChange(field.key, selected)
+                      }
+                      placeholder={`Select ${field.label.toLowerCase()}...`}
+                      maxItems={2}
+                    />
+                  </div>
+                ) : (
+                  <div className='min-h-[40px]'>
+                    <Select
+                      value={
+                        (localFilterConfig[field.key] as string) || '__all__'
+                      }
+                      onValueChange={(value) =>
+                        handleLocalFilterChange(field.key, value)
+                      }
+                    >
+                      <SelectTrigger className='h-10 w-full'>
+                        <SelectValue
+                          placeholder={`Select ${field.label.toLowerCase()}...`}
+                        />
+                      </SelectTrigger>
+                      <SelectContent
+                        className='z-50 max-h-[200px] overflow-y-auto'
+                        position='popper'
+                        sideOffset={4}
+                      >
+                        <SelectItem value='__all__'>
+                          All {field.label}
+                        </SelectItem>
+                        {uniqueValues.map((value) => (
+                          <SelectItem key={value} value={value}>
+                            {value}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                )}
+              </div>
+            )
+          })}
+        </div>
+      </ResponsiveDialogBody>
+
+      <ResponsiveDialogFooter>
+        <Button variant='outline' onClick={() => onOpenChange(false)}>
+          Cancel
+        </Button>
+        <Button onClick={handleApplyFilters}>
+          Apply Filters
+          {Object.values(localFilterConfig).filter((v) => {
+            if (Array.isArray(v)) return v.length > 0
+            return v && (typeof v === 'string' ? v.trim() : false)
+          }).length > 0 && (
+            <Badge variant='secondary' className='ml-2 px-1.5 py-0.5 text-xs'>
+              {
+                Object.values(localFilterConfig).filter((v) => {
+                  if (Array.isArray(v)) return v.length > 0
+                  return v && (typeof v === 'string' ? v.trim() : false)
+                }).length
+              }
+            </Badge>
+          )}
+        </Button>
+      </ResponsiveDialogFooter>
+    </ResponsiveDialog>
   )
 }
+
+// Created and developed by Jai Singh

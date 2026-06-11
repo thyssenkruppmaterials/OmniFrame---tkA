@@ -1,3 +1,4 @@
+// Created and developed by Jai Singh
 /**
  * Auth Redirect Utilities
  *
@@ -50,3 +51,5 @@ export function buildSignInRedirect(returnPath: string) {
     },
   }
 }
+
+// Created and developed by Jai Singh

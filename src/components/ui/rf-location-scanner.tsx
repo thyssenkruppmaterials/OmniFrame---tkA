@@ -1,12 +1,6 @@
+// Created and developed by Jai Singh
 import React, { useEffect, useRef, useState } from 'react'
-import {
-  ChevronLeft,
-  Loader2,
-  MapPin,
-  Package,
-  RotateCcw,
-  Search,
-} from 'lucide-react'
+import { Loader2, MapPin, Package, RotateCcw, Search } from 'lucide-react'
 import { toast } from 'sonner'
 import {
   locationQueryService,
@@ -15,9 +9,10 @@ import {
 import { logger } from '@/lib/utils/logger'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { Card, CardContent, CardHeader } from '@/components/ui/card'
 import { Label } from '@/components/ui/label'
 import { ScannerInput } from '@/components/ui/scanner-input'
+import { RFScreenHeader } from '@/features/rf-interface/_shell'
 
 interface RFLocationScannerProps {
   onBack?: () => void
@@ -132,22 +127,13 @@ const RFLocationScanner: React.FC<RFLocationScannerProps> = ({ onBack }) => {
     <div className='mx-auto flex w-full max-w-md flex-1 flex-col space-y-3 p-2'>
       {/* Search Form */}
       <Card className='w-full'>
-        <CardHeader className='relative pb-2 text-center'>
-          {onBack && (
-            <Button
-              variant='ghost'
-              size='sm'
-              onClick={onBack}
-              className='absolute top-2 left-2'
-            >
-              <ChevronLeft className='h-4 w-4' />
-              Back
-            </Button>
-          )}
-          <CardTitle className='flex flex-col items-center gap-2 text-sm'>
-            <MapPin className='h-8 w-8' />
-            Location Scanner
-          </CardTitle>
+        <CardHeader className='pb-2'>
+          <RFScreenHeader
+            title='Locations'
+            subtitle='Scan location'
+            onBack={onBack}
+            right={<MapPin className='text-muted-foreground h-4 w-4' />}
+          />
         </CardHeader>
         <CardContent>
           <div className='space-y-3'>
@@ -429,3 +415,5 @@ const RFLocationScanner: React.FC<RFLocationScannerProps> = ({ onBack }) => {
 }
 
 export default RFLocationScanner
+
+// Created and developed by Jai Singh

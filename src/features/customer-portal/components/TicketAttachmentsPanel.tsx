@@ -1,3 +1,4 @@
+// Created and developed by Jai Singh
 /**
  * Ticket Attachments Panel Component
  *
@@ -413,3 +414,5 @@ export function TicketAttachmentsPanel({
     </div>
   )
 }
+
+// Created and developed by Jai Singh

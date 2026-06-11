@@ -1,9 +1,10 @@
+// Created and developed by Jai Singh
 // eslint-disable-next-line @typescript-eslint/ban-ts-comment
 // @ts-nocheck - Legacy hook with complex type requirements
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
-import { supabase } from '@/lib/supabase/client'
+import { getCurrentOrgId } from '@/lib/auth/unified-auth-provider'
 import {
   LX03DataService,
   type LX03Data,
@@ -12,6 +13,8 @@ import {
   type ImportProgressCallback,
 } from '@/lib/supabase/lx03-data.service'
 import { logger } from '@/lib/utils/logger'
+import type { WsEvent, WsEventHandler } from '@/lib/work-service'
+import { workServiceWs } from '@/lib/work-service/websocket'
 
 interface UseLX03DataOptions {
   enableRealtime?: boolean
@@ -71,46 +74,86 @@ export function useLX03Data({
     staleTime: 30000, // Statistics can be a bit more stale
   })
 
-  // Set up realtime subscription
+  // Set up realtime subscription.
+  //
+  // 2026-05-06 — Tier 1 deferred-channel migration. Replaces the
+  // unfiltered `supabase.channel('lx03-data-changes')` listener with
+  // a typed `WsEvent::Lx03DataChanged` push through
+  // `WorkServiceWebSocket`.
+  //
+  //   - DB:   migration 274 adds the NOTIFY trigger on rr_lx03_data.
+  //           `organization_id` is NULLABLE in the schema; the trigger
+  //           emits whatever the row carries.
+  //   - Rust: `lx03_listener` consumes `LISTEN lx03_data_changed`.
+  //           Rows with `organization_id IS NULL` broadcast as
+  //           "system-wide" events that reach every connected client
+  //           — preserving the pre-migration behaviour of the
+  //           unfiltered Supabase channel.
+  //   - FE:   THIS effect registers a single handler on the singleton
+  //           and DEFENDS-IN-DEPTH by ignoring events whose
+  //           `organization_id` doesn't match the user's org. (NULL-
+  //           org events are still treated as "global" and re-invalidate
+  //           the query — same as before.)
   useEffect(() => {
     if (!enableRealtime) return
+    const orgId = getCurrentOrgId()
+    if (!orgId) {
+      // No signed-in user / no org_id — skip the WS subscription.
+      // The TanStack Query `refetchInterval: 60000` keeps the table
+      // fresh on its own.
+      return
+    }
 
-    const channel = supabase
-      .channel('lx03-data-changes')
-      .on(
-        'postgres_changes',
-        {
-          event: '*',
-          schema: 'public',
-          table: 'rr_lx03_data',
-        },
-        (payload) => {
-          logger.log('LX03 data changed:', payload)
+    const handler: WsEventHandler = (event: WsEvent) => {
+      if (event.type !== 'Lx03DataChanged') return
+      // Belt-and-braces org check. Rows whose organization_id is null
+      // are treated as system-wide (same as the unfiltered channel
+      // pre-migration); rows with a non-matching org are dropped.
+      if (event.organization_id && event.organization_id !== orgId) return
+      logger.log('LX03 data changed (WS push):', event.row_id, event.op)
+      queryClient.invalidateQueries({ queryKey: ['lx03-data-rpc-final'] })
+      queryClient.invalidateQueries({
+        queryKey: ['lx03-statistics-rpc-final'],
+      })
+      switch (event.op) {
+        case 'INSERT':
+          toast.success('New LX03 record added')
+          break
+        case 'UPDATE':
+          toast.info('LX03 record updated')
+          break
+        case 'DELETE':
+          toast.info('LX03 record deleted')
+          break
+      }
+    }
 
-          // Invalidate and refetch data with new cache keys
-          queryClient.invalidateQueries({ queryKey: ['lx03-data-rpc-final'] })
-          queryClient.invalidateQueries({
-            queryKey: ['lx03-statistics-rpc-final'],
-          })
+    try {
+      workServiceWs.connect(orgId, handler)
+    } catch {
+      /* WS setup failure — fall back to safety-net polling only. */
+    }
 
-          // Show notification based on event type
-          switch (payload.eventType) {
-            case 'INSERT':
-              toast.success('New LX03 record added')
-              break
-            case 'UPDATE':
-              toast.info('LX03 record updated')
-              break
-            case 'DELETE':
-              toast.info('LX03 record deleted')
-              break
-          }
-        }
-      )
-      .subscribe()
+    // Safety-net poll: re-invalidate every 5 min if the WS isn't
+    // currently in `connected` state. The query's existing
+    // `refetchInterval: 60000` is the primary background refresh; this
+    // covers the case where the WS push gets dropped / lagged.
+    const SAFETY_NET_INTERVAL_MS = 5 * 60_000
+    const safetyNet = setInterval(() => {
+      if (workServiceWs.getConnectionState() === 'connected') return
+      queryClient.invalidateQueries({ queryKey: ['lx03-data-rpc-final'] })
+      queryClient.invalidateQueries({
+        queryKey: ['lx03-statistics-rpc-final'],
+      })
+    }, SAFETY_NET_INTERVAL_MS)
 
     return () => {
-      supabase.removeChannel(channel)
+      clearInterval(safetyNet)
+      try {
+        workServiceWs.removeHandler(handler)
+      } catch {
+        /* ignore */
+      }
     }
   }, [enableRealtime, queryClient])
 
@@ -283,3 +326,5 @@ export function useLX03Data({
     isUsingRust: lx03Service.isUsingRust(),
   }
 }
+
+// Created and developed by Jai Singh

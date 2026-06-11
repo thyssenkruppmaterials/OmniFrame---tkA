@@ -1,3 +1,4 @@
+// Created and developed by Jai Singh
 /**
  * PresenceAvatar - Avatar with overlaid presence status dot
  * Teams-style: avatar with colored dot in bottom-right corner
@@ -64,3 +65,5 @@ export function PresenceAvatar({
     </div>
   )
 }
+
+// Created and developed by Jai Singh

@@ -1,3 +1,4 @@
+// Created and developed by Jai Singh
 import { useState } from 'react'
 import { IconEye, IconKey, IconLock, IconShield } from '@tabler/icons-react'
 import { toast } from 'sonner'
@@ -387,3 +388,5 @@ export function SecuritySettings() {
     </div>
   )
 }
+
+// Created and developed by Jai Singh

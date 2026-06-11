@@ -1,3 +1,4 @@
+// Created and developed by Jai Singh
 import { LinkProps } from '@tanstack/react-router'
 
 interface User {
@@ -9,14 +10,14 @@ interface User {
 
 interface Team {
   name: string
-  logo: React.ElementType
+  logo: React.ComponentType<{ className?: string }>
   plan: string
 }
 
 interface BaseNavItem {
   title: string
   badge?: string
-  icon?: React.ElementType
+  icon?: React.ComponentType<React.SVGProps<SVGSVGElement>>
   requiredPermission?: {
     action: string
     resource: string
@@ -47,3 +48,5 @@ interface SidebarData {
 }
 
 export type { SidebarData, NavGroup, NavItem, NavCollapsible, NavLink }
+
+// Created and developed by Jai Singh

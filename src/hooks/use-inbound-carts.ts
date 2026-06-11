@@ -1,3 +1,4 @@
+// Created and developed by Jai Singh
 import { useEffect } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
@@ -245,3 +246,5 @@ export function useMarkCartFull() {
     onError: (err: Error) => toast.error(err.message),
   })
 }
+
+// Created and developed by Jai Singh

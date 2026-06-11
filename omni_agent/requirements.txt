@@ -1,0 +1,58 @@
+fastapi>=0.115
+uvicorn[standard]>=0.32
+pywin32>=306
+requests>=2.31
+pydantic>=2.0
+pyinstaller>=6.0
+# Phase D #12 (v1.5.0) — AES-256-GCM at-rest encryption for self-recordings.
+# Falls back to plaintext on disk with a console warning if the build can't
+# bundle this; see _encrypt_recording in agent.py.
+cryptography>=42.0
+# Phase D #16 — Agent-Direct Supabase Realtime subscription. The agent
+# subscribes to INSERTs on sap_agent_jobs over WebSocket so newly-queued
+# work is claimed sub-second instead of waiting on the 60s polling fallback.
+# Lightweight standalone (we don't need the full `supabase` package; REST
+# + JWT calls are still done via `requests`). Soft import in agent.py —
+# missing this dep transparently degrades to polling-only mode.
+#
+# v1.7.1 — pin floor to 2.29.0 (latest as of 2026-04-24). Older 2.x
+# releases (2.0.x – 2.4.x roughly) had a `_reconnect()` bug that
+# called `asyncio.wait([])` on an empty pending-tasks set after a
+# WebSocket drop, raising `ValueError: Set of Tasks/Futures is empty.`
+# The library didn't catch it, so the exception escaped the listen
+# task → asyncio default handler → multi-line `Task exception was
+# never retrieved` traceback per drop. After ~25min idle on a Citrix
+# VDA hibernate or corporate-proxy idle close, agents flooded stderr
+# with thousands of tracebacks per minute, drowning the heartbeat
+# thread (sap_agents.last_seen_at silently stalled) and the job
+# poller. The bug was refactored away around v2.5+ when the listen
+# task management moved into `_on_connect` and `_reconnect` stopped
+# calling `asyncio.wait()` at all. Pinning to 2.29.0 picks up the
+# fix; the v1.7.1 in-agent containment layers (asyncio loop
+# exception handler + circuit breaker + 5min auto-recovery) stay as
+# defense-in-depth so a future 2.x regression is bounded. NOT v3.x
+# (alpha as of 2026-04-09). See [[Debug/Fix-Realtime-Library-CrashLoop]]
+# + [[Patterns/Async-Library-Circuit-Breaker]].
+realtime>=2.29.0,<3.0
+# v1.9.0 (Phase 4 of rust-work-service integration plan, 2026-05-06) —
+# `omni_agent/work_service_ws.py` connects to `rust-work-service /ws`
+# using the websockets library directly. `realtime>=2.29.0` already
+# pins `websockets` transitively, so this entry is documentation more
+# than a NEW dependency: pinning explicitly here means a future
+# `realtime` upgrade that drops the websockets requirement won't break
+# the WS client. Keep the floor loose so the realtime + websockets
+# pins stay compatible. See
+# `memorybank/OmniFrame/Implementations/Implement-Rust-Work-Service-Phase4.md`.
+websockets>=11.0
+# v1.6.2 — Corporate SSL inspection (Netskope, Zscaler, etc.) installs a
+# private root CA into the OS trust store but PyInstaller-bundled Python
+# only trusts `certifi`. truststore monkey-patches `ssl.SSLContext` so
+# `requests` honors the Windows / macOS native trust store. Imported
+# (and `inject_into_ssl()`-ed) at the very top of agent.py BEFORE
+# `import requests`. Pure-Python; no extra data files for PyInstaller.
+truststore>=0.10
+# Master GUI (Phase B) — CustomTkinter supervisor shell; not bundled into Agent.exe today.
+customtkinter>=5.2.0
+psutil>=5.9
+pyyaml>=6.0
+httpx>=0.27

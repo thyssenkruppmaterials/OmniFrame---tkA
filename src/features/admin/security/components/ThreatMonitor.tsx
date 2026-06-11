@@ -1,3 +1,4 @@
+// Created and developed by Jai Singh
 import { useEffect, useState } from 'react'
 import {
   IconActivity,
@@ -244,3 +245,5 @@ export function ThreatMonitor() {
     </div>
   )
 }
+
+// Created and developed by Jai Singh

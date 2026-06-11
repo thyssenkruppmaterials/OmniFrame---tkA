@@ -1,3 +1,4 @@
+// Created and developed by Jai Singh
 'use client'
 
 import { useCallback, useRef } from 'react'
@@ -136,3 +137,5 @@ export function useAnimatedThemeTransition() {
 
   return { transitionTo }
 }
+
+// Created and developed by Jai Singh

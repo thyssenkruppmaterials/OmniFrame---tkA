@@ -1,3 +1,4 @@
+// Created and developed by Jai Singh
 /**
  * Streamlined RBAC Service
  * High-performance role-based access control with unified caching
@@ -434,7 +435,7 @@ export class RBACService {
               .from('user_permissions')
               .select(
                 `
-          permission:permissions(id, resource, action, description, is_active, is_critical, requires_2fa, risk_level, created_at, updated_at)
+          permission:permissions(id, resource, action, description, is_critical, requires_2fa, risk_level, created_at)
         `
               )
               .eq('user_id', userId)
@@ -701,16 +702,17 @@ export class RBACService {
     if (cached) return cached
 
     try {
+      // NOTE: `permissions.is_active` column does not exist in the live
+      // schema. Treat every row in the permissions table as active.
+      // See: memorybank/OmniFrame/Debug/Performance-Review-2026-05-19-Production-Slowness.md
       const { data, error } = await singletonAuthManager.executeRead(
-        async (client) =>
-          await client.from('permissions').select('*').eq('is_active', true)
+        async (client) => await client.from('permissions').select('*')
       )
 
       if (error) throw error
 
-      // Cache the result
       authCache.set(cacheKey, data, 15 * 60 * 1000, ['system', 'permissions'])
-      return data || []
+      return (data ?? []) as unknown as Permission[]
     } catch (error) {
       logger.error('Error fetching all permissions:', error)
       return []
@@ -1203,6 +1205,7 @@ export class RBACService {
     if (cached) return cached
 
     try {
+      // NOTE: `permissions.is_active` column does not exist in the live schema.
       const { data, error } = await singletonAuthManager.executeRead(
         async (client) =>
           await client
@@ -1210,7 +1213,6 @@ export class RBACService {
             .select('*')
             .eq('resource', resource)
             .eq('action', action)
-            .eq('is_active', true)
             .single()
       )
 
@@ -1910,3 +1912,5 @@ export type {
   UserPermission,
   RolePermission,
 } from './types'
+
+// Created and developed by Jai Singh

@@ -1,3 +1,4 @@
+// Created and developed by Jai Singh
 import { useState, useEffect } from 'react'
 import {
   IconTrendingUp,
@@ -583,3 +584,5 @@ export function SessionAnalytics() {
     </div>
   )
 }
+
+// Created and developed by Jai Singh

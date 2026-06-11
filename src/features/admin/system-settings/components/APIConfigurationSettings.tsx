@@ -1,3 +1,4 @@
+// Created and developed by Jai Singh
 import { useState } from 'react'
 import {
   IconApi,
@@ -599,3 +600,5 @@ export function APIConfigurationSettings() {
     </div>
   )
 }
+
+// Created and developed by Jai Singh

@@ -1,10 +1,11 @@
+// Created and developed by Jai Singh
 /**
  * Kit Cart Data Hook with Real-Time Polling
  *
  * Provides real-time kit cart data from Nefab PFC Trace API.
  * Implements polling with visibility awareness and error handling.
  *
- * @author Jai Singh
+ * @author OmniFrame Team
  * @date December 17, 2025
  * @version 1.0.0
  */
@@ -337,4 +338,5 @@ export function useKitCartData(
 // ==================== EXPORTED TYPES ====================
 
 export type { NefabItem, NefabItemType }
-// Developer and Creator: Jai Singh
+
+// Created and developed by Jai Singh

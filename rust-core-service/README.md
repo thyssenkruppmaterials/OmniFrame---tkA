@@ -1,6 +1,6 @@
-# OmniFrame Rust Core Service
+# OneBox AI Rust Core Service
 
-High-performance database optimization, JWT validation, and caching service for OmniFrame.
+High-performance database optimization, JWT validation, and caching service for OneBox AI.
 
 ## Features
 
@@ -195,4 +195,4 @@ if is_rust_core_enabled():
 
 ## License
 
-Proprietary - OmniFrame
+Proprietary - OneBox AI

@@ -1,3 +1,4 @@
+// Created and developed by Jai Singh
 import React, { useState, useMemo, useCallback, useRef, useEffect } from 'react'
 import {
   Upload,
@@ -947,3 +948,5 @@ const SQ01DataManager: React.FC<SQ01DataManagerProps> = React.memo(
 SQ01DataManager.displayName = 'SQ01DataManager'
 
 export default SQ01DataManager
+
+// Created and developed by Jai Singh

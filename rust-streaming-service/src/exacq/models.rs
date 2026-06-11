@@ -1,3 +1,4 @@
+// Created and developed by Jai Singh
 //! ExacqVision data models
 //!
 //! Data structures for cameras, devices, streams, and events.
@@ -396,3 +397,5 @@ mod tests {
         assert!(cmd.preset.is_none());
     }
 }
+
+// Created and developed by Jai Singh

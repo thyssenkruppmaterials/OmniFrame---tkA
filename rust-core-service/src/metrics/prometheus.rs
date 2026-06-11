@@ -1,3 +1,4 @@
+// Created and developed by Jai Singh
 //! Prometheus metrics exporter
 
 use metrics_exporter_prometheus::{Matcher, PrometheusBuilder, PrometheusHandle};
@@ -89,3 +90,5 @@ pub fn record_pool_metrics(total: u32, idle: u32, active: u32) {
     metrics::gauge!("db.pool.connections.idle").set(idle as f64);
     metrics::gauge!("db.pool.connections.active").set(active as f64);
 }
+
+// Created and developed by Jai Singh

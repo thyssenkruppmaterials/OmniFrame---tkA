@@ -1,3 +1,4 @@
+// Created and developed by Jai Singh
 /**
  * Date Picker Component
  * Modern date picker using shadcn/ui Calendar component
@@ -161,3 +162,5 @@ export function DatePickerWithInput({
     </div>
   )
 }
+
+// Created and developed by Jai Singh

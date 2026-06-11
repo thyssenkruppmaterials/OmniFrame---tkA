@@ -1,3 +1,4 @@
+// Created and developed by Jai Singh
 import React from 'react'
 import { cn } from '@/lib/utils'
 
@@ -40,3 +41,5 @@ export const PublicHeader = ({
 }
 
 PublicHeader.displayName = 'PublicHeader'
+
+// Created and developed by Jai Singh

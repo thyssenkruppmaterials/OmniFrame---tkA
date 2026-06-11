@@ -1,3 +1,4 @@
+# Created and developed by Jai Singh
 """User management endpoints (CRUD, status changes, password resets, onboarding)."""
 
 import logging
@@ -481,9 +482,13 @@ async def reset_user_password(
                     .execute()
 
                 if user_profile.data and user_profile.data.get("email"):
+                    redirect_to = f"{settings.frontend_url.rstrip('/')}/auth/reset-password"
                     regular_client = create_client(settings.supabase_url, settings.supabase_anon_key)
-                    regular_client.auth.reset_password_email(user_profile.data["email"])
-                    logger.info(f"Password reset email sent to {user_profile.data['email']}")
+                    regular_client.auth.reset_password_email(
+                        user_profile.data["email"],
+                        options={"redirect_to": redirect_to},
+                    )
+                    logger.info(f"Password reset email sent to {user_profile.data['email']} with redirect to {redirect_to}")
             except Exception as email_error:
                 logger.warning(f"Failed to send password reset email: {str(email_error)}")
 
@@ -870,4 +875,4 @@ async def get_onboarding_statistics(
         logger.error(f"Failed to get onboarding statistics: {str(e)}")
         raise sanitized_error(500, public_message="Failed to get statistics.", exc=e, context="get_onboarding_statistics")
 
-# Developer and Creator: Jai Singh
+# Created and developed by Jai Singh

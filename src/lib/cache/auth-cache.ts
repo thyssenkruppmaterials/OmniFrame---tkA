@@ -1,3 +1,4 @@
+// Created and developed by Jai Singh
 import { logger } from '@/lib/utils/logger'
 
 /**
@@ -447,3 +448,5 @@ export const authCache = AuthCache.getInstance()
 
 // Export types
 export type { CacheEntry, CacheConfig, CacheMetrics }
+
+// Created and developed by Jai Singh

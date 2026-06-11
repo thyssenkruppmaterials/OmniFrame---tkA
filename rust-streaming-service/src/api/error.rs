@@ -1,3 +1,4 @@
+// Created and developed by Jai Singh
 //! API error handling
 //!
 //! Centralized error types and response formatting.
@@ -189,3 +190,5 @@ mod tests {
         }
     }
 }
+
+// Created and developed by Jai Singh

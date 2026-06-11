@@ -1,3 +1,4 @@
+// Created and developed by Jai Singh
 /**
  * Optimized Permission Guard Component
  * High-performance permission-based rendering with memoization and caching
@@ -399,3 +400,5 @@ export function usePermissionStats() {
 
 // Export all components
 export default PermissionGuard
+
+// Created and developed by Jai Singh

@@ -1,7 +1,9 @@
+// Created and developed by Jai Singh
 import { createFileRoute } from '@tanstack/react-router'
 import SettingsNotifications from '@/features/settings/notifications'
 
 export const Route = createFileRoute('/_authenticated/settings/notifications')({
   component: SettingsNotifications,
 })
-// Developer and Creator: Jai Singh
+
+// Created and developed by Jai Singh

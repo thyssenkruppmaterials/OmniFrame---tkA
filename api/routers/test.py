@@ -1,3 +1,4 @@
+# Created and developed by Jai Singh
 """
 Test API endpoints for verifying authentication and basic functionality.
 """
@@ -88,4 +89,4 @@ async def get_simple_data(
             "explanation": "RLS policies are working correctly - they block unauthorized data access"
         }
 
-# Developer and Creator: Jai Singh
+# Created and developed by Jai Singh

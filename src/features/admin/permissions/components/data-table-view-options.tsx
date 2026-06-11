@@ -1,3 +1,4 @@
+// Created and developed by Jai Singh
 import { DropdownMenuTrigger } from '@radix-ui/react-dropdown-menu'
 import { MixerHorizontalIcon } from '@radix-ui/react-icons'
 import { Table } from '@tanstack/react-table'
@@ -54,3 +55,5 @@ export function DataTableViewOptions<TData>({
     </DropdownMenu>
   )
 }
+
+// Created and developed by Jai Singh

@@ -1,3 +1,4 @@
+// Created and developed by Jai Singh
 import { useRoles } from '../context/roles-context'
 import { EnhancedRoleWizard } from './enhanced-role-wizard'
 import { RoleDeleteDialog } from './role-delete-dialog'
@@ -94,3 +95,5 @@ export function RolesDialogs() {
     </>
   )
 }
+
+// Created and developed by Jai Singh

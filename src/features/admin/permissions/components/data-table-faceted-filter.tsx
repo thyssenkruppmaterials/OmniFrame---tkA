@@ -1,3 +1,4 @@
+// Created and developed by Jai Singh
 import * as React from 'react'
 import { CheckIcon, PlusCircledIcon } from '@radix-ui/react-icons'
 import { Column } from '@tanstack/react-table'
@@ -143,3 +144,5 @@ export function DataTableFacetedFilter<TData, TValue>({
     </Popover>
   )
 }
+
+// Created and developed by Jai Singh

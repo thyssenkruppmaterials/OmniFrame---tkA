@@ -1,3 +1,4 @@
+// Created and developed by Jai Singh
 /**
  * Position Options Hook
  * React Query hook for managing position types and levels
@@ -221,3 +222,5 @@ export function usePositionOptions() {
     seedDefaults: seedDefaultsMutation.mutateAsync,
   }
 }
+
+// Created and developed by Jai Singh

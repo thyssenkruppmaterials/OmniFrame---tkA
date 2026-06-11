@@ -1,3 +1,4 @@
+// Created and developed by Jai Singh
 /**
  * OmniFrame Rust Core Service Integration
  * Build trigger: 2026-01-11T20:10:00Z - Enable RUST_CORE for production
@@ -15,7 +16,7 @@
  *
  * // Initialize once at app startup
  * initRustCoreClient({
- *   baseUrl: import.meta.env.VITE_RUST_CORE_URL || 'https://your-rust-core-service.up.railway.app',
+ *   baseUrl: import.meta.env.VITE_RUST_CORE_URL || 'https://rust-core-service-production.up.railway.app',
  *   token: userSession?.access_token,
  * });
  *
@@ -114,4 +115,5 @@ export { RUST_CORE_ENABLED, RUST_CORE_URL } from './config'
 export function createRustCoreClient() {
   return initClient({ baseUrl: configUrl })
 }
-// Developer and Creator: Jai Singh
+
+// Created and developed by Jai Singh

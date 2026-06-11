@@ -1,3 +1,4 @@
+// Created and developed by Jai Singh
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
@@ -285,3 +286,5 @@ export function useMaterialMasterData({
     isUsingRust: materialMasterService.isUsingRust(),
   }
 }
+
+// Created and developed by Jai Singh

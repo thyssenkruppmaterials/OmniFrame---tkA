@@ -1,3 +1,4 @@
+// Created and developed by Jai Singh
 import { useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import {
@@ -257,3 +258,5 @@ function DetailField({ label, value }: { label: string; value: string }) {
     </div>
   )
 }
+
+// Created and developed by Jai Singh

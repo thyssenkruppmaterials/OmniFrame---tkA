@@ -1,3 +1,4 @@
+// Created and developed by Jai Singh
 /**
  * DJI Drone Plugin - Web Implementation
  *
@@ -288,3 +289,5 @@ export class DJIDroneWeb extends WebPlugin implements DJIDronePlugin {
     this.missionProgress = 0
   }
 }
+
+// Created and developed by Jai Singh

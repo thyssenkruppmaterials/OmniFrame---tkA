@@ -1,3 +1,4 @@
+// Created and developed by Jai Singh
 import { StrictMode } from 'react'
 import ReactDOM from 'react-dom/client'
 import { AxiosError } from 'axios'
@@ -12,6 +13,7 @@ import { toast } from 'sonner'
 import { redirectToSignIn } from '@/lib/auth/redirect-utils'
 import { singletonAuthManager } from '@/lib/auth/singleton-auth-manager'
 import { UnifiedAuthProvider } from '@/lib/auth/unified-auth-provider'
+import { initSentry } from '@/lib/observability/sentry'
 import { rfPWAManager } from '@/lib/pwa/rf-pwa-manager'
 import { timeclockPWAManager } from '@/lib/pwa/timeclock-pwa-manager'
 import { logger } from '@/lib/utils/logger'
@@ -109,6 +111,14 @@ const router = createRouter({
 })
 
 // ---------------------------------------------------------------------------
+// Item 15 — Sentry init shim. No-op when VITE_SENTRY_DSN is unset, so the
+// build stays clean in environments without observability wired. Must run
+// before React mounts so the WorkflowErrorBoundary's
+// `window.__OMNI_SENTRY_CAPTURE` lookup resolves on the first render.
+// ---------------------------------------------------------------------------
+initSentry()
+
+// ---------------------------------------------------------------------------
 // Initialize Auto-Update System (before React renders)
 // VersionChecker polls /build-info.json for new deployments.
 // AutoUpdater coordinates graceful reloads based on user activity.
@@ -202,4 +212,5 @@ root.render(
     </QueryClientProvider>
   </StrictMode>
 )
-// Developer and Creator: Jai Singh
+
+// Created and developed by Jai Singh

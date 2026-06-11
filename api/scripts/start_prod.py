@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
+# Created and developed by Jai Singh
 """
-Production startup script for OmniFrame Logistics FastAPI
+Production startup script for OneBox AI Logistics FastAPI
 """
 
 import subprocess
@@ -10,7 +11,7 @@ from pathlib import Path
 
 def main():
     """Start the FastAPI production server"""
-    print("🚀 Starting OmniFrame Logistics FastAPI Production Server...")
+    print("🚀 Starting OneBox AI Logistics FastAPI Production Server...")
     print("📊 Analytics API: http://localhost:8000/api/analytics")
     print("📈 Reports API: http://localhost:8000/api/reports")
     print("📚 Documentation: http://localhost:8000/docs")
@@ -44,3 +45,5 @@ def main():
 
 if __name__ == "__main__":
     main()
+
+# Created and developed by Jai Singh

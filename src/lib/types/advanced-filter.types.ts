@@ -1,3 +1,4 @@
+// Created and developed by Jai Singh
 /**
  * Advanced Filter Types for Delivery Status
  * Created: November 9, 2025
@@ -595,3 +596,5 @@ export function operatorRequiresTwoValues(operator: FilterOperator): boolean {
 export function operatorRequiresMultiValue(operator: FilterOperator): boolean {
   return ['in_list', 'not_in_list'].includes(operator)
 }
+
+// Created and developed by Jai Singh

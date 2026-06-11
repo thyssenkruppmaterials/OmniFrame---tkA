@@ -1,3 +1,4 @@
+// Created and developed by Jai Singh
 /**
  * Field Component
  * Accessible form field components following shadcn/ui Field pattern
@@ -209,3 +210,5 @@ export {
   FieldSet,
   FieldTitle,
 }
+
+// Created and developed by Jai Singh

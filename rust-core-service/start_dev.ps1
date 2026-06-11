@@ -1,7 +1,7 @@
-# OmniFrame Rust Core Service - Development Startup Script
+# OneBox AI Rust Core Service - Development Startup Script
 # Run this script to start the Rust core service locally
 
-Write-Host "🚀 Starting OmniFrame Rust Core Service..." -ForegroundColor Cyan
+Write-Host "🚀 Starting OneBox AI Rust Core Service..." -ForegroundColor Cyan
 
 # Set environment variables
 $env:DATABASE_URL = "postgres://postgres:<YOUR_DATABASE_PASSWORD>@db.<YOUR_SUPABASE_PROJECT_REF>.supabase.co:5432/postgres"

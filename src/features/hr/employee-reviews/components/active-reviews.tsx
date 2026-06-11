@@ -1,3 +1,4 @@
+// Created and developed by Jai Singh
 /**
  * Active Reviews Component
  * HR Employee Reviews - Active review management with filters, table, and detail dialog
@@ -651,3 +652,5 @@ function ActiveReviews() {
 }
 
 export default ActiveReviews
+
+// Created and developed by Jai Singh

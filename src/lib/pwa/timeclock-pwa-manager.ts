@@ -1,3 +1,4 @@
+// Created and developed by Jai Singh
 import { logger } from '@/lib/utils/logger'
 
 /**
@@ -77,7 +78,7 @@ export class TimeclockPWAManager {
     if (!head.querySelector('link[rel="apple-touch-icon"]')) {
       const touchIcon = document.createElement('link')
       touchIcon.rel = 'apple-touch-icon'
-      touchIcon.href = '/images/favicon.svg'
+      touchIcon.href = '/images/OneBoxLogoX.png'
       head.appendChild(touchIcon)
     }
 
@@ -155,4 +156,5 @@ export class TimeclockPWAManager {
 }
 
 export const timeclockPWAManager = TimeclockPWAManager.getInstance()
-// Developer and Creator: Jai Singh
+
+// Created and developed by Jai Singh

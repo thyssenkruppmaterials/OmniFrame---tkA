@@ -1,3 +1,4 @@
+// Created and developed by Jai Singh
 /**
  * Camera Feed Component
  *
@@ -241,3 +242,5 @@ export function CameraFeed({
     </div>
   )
 }
+
+// Created and developed by Jai Singh

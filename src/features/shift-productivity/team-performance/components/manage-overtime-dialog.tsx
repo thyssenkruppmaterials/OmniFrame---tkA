@@ -1,3 +1,4 @@
+// Created and developed by Jai Singh
 /**
  * Manage Overtime Dialog Component
  * Allows supervisors to manage overtime requests for associates
@@ -94,14 +95,7 @@ import {
   CardHeader,
   CardTitle,
 } from '@/components/ui/card'
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from '@/components/ui/dialog'
+import { DialogFooter } from '@/components/ui/dialog'
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -124,6 +118,13 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from '@/components/ui/popover'
+import {
+  ResponsiveDialog,
+  ResponsiveDialogBody,
+  ResponsiveDialogDescription,
+  ResponsiveDialogHeader,
+  ResponsiveDialogTitle,
+} from '@/components/ui/responsive-dialog'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import {
   Select,
@@ -341,7 +342,7 @@ export function ManageOvertimeDialog({
 
   // Form
   const form = useForm<OvertimeFormData>({
-    resolver: zodResolver(overtimeFormSchema),
+    resolver: zodResolver(overtimeFormSchema) as never,
     defaultValues: {
       request_date: selectedDate || new Date(),
       original_shift_end: '14:30',
@@ -811,19 +812,19 @@ export function ManageOvertimeDialog({
 
   return (
     <>
-      <Dialog open={open} onOpenChange={onOpenChange}>
-        <DialogContent className='flex max-h-[85vh] w-[95vw] max-w-[1200px] min-w-[900px] flex-col overflow-y-auto'>
-          <DialogHeader>
-            <DialogTitle className='flex items-center gap-2'>
-              <Clock className='h-5 w-5 text-orange-500' />
-              Manage Overtime
-            </DialogTitle>
-            <DialogDescription>
-              View, approve, and create overtime requests for{' '}
-              {selectedDate ? format(selectedDate, 'MMMM d, yyyy') : 'today'}.
-            </DialogDescription>
-          </DialogHeader>
+      <ResponsiveDialog open={open} onOpenChange={onOpenChange} size='lg'>
+        <ResponsiveDialogHeader>
+          <ResponsiveDialogTitle className='flex items-center gap-2'>
+            <Clock className='h-5 w-5 text-orange-500' />
+            Manage Overtime
+          </ResponsiveDialogTitle>
+          <ResponsiveDialogDescription>
+            View, approve, and create overtime requests for{' '}
+            {selectedDate ? format(selectedDate, 'MMMM d, yyyy') : 'today'}.
+          </ResponsiveDialogDescription>
+        </ResponsiveDialogHeader>
 
+        <ResponsiveDialogBody className='overflow-hidden'>
           {/* Issue 2.9: Reset form when switching away from create tab to prevent stale form data */}
           <Tabs
             value={activeTab}
@@ -2185,8 +2186,8 @@ export function ManageOvertimeDialog({
               )}
             </TabsContent>
           </Tabs>
-        </DialogContent>
-      </Dialog>
+        </ResponsiveDialogBody>
+      </ResponsiveDialog>
 
       {/* Delete Confirmation Dialog */}
       <AlertDialog
@@ -2257,3 +2258,5 @@ export function ManageOvertimeDialog({
 }
 
 export default ManageOvertimeDialog
+
+// Created and developed by Jai Singh

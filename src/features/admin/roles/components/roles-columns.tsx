@@ -1,3 +1,4 @@
+// Created and developed by Jai Singh
 import { ColumnDef } from '@tanstack/react-table'
 import { cn } from '@/lib/utils'
 import { Badge } from '@/components/ui/badge'
@@ -192,3 +193,5 @@ export const columns: ColumnDef<Role>[] = [
     cell: DataTableRowActions,
   },
 ]
+
+// Created and developed by Jai Singh

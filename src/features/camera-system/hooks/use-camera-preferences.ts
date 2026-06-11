@@ -1,3 +1,4 @@
+// Created and developed by Jai Singh
 /**
  * Hook for managing user camera preferences
  *
@@ -143,3 +144,5 @@ export function useCameraPreferences(): UseCameraPreferencesReturn {
     resetPreferences,
   }
 }
+
+// Created and developed by Jai Singh

@@ -1,3 +1,4 @@
+// Created and developed by Jai Singh
 //! Generic query execution endpoint
 
 use axum::{
@@ -197,3 +198,5 @@ fn resolve_org_scope(auth_user: &AuthenticatedUser) -> Option<Uuid> {
         auth_user.organization_id
     }
 }
+
+// Created and developed by Jai Singh

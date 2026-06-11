@@ -1,3 +1,4 @@
+// Created and developed by Jai Singh
 import { useState, useEffect } from 'react'
 import { Loader2, Menu, Eye, EyeOff } from 'lucide-react'
 import { toast } from 'sonner'
@@ -386,3 +387,5 @@ export function RoleNavigationDialog({
     </Dialog>
   )
 }
+
+// Created and developed by Jai Singh

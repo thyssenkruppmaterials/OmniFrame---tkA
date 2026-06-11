@@ -1,3 +1,4 @@
+// Created and developed by Jai Singh
 import {
   IconArrowDown,
   IconArrowRight,
@@ -69,3 +70,5 @@ export const priorities = [
     icon: IconArrowUp,
   },
 ]
+
+// Created and developed by Jai Singh

@@ -10,17 +10,17 @@
   "scope": "/timeclockapp/",
   "icons": [
     {
-      "src": "/images/favicon.svg",
+      "src": "/images/OneBoxLogoX.png",
       "sizes": "192x192",
       "type": "image/png"
     },
     {
-      "src": "/images/favicon.svg",
+      "src": "/images/OneBoxLogoX.png",
       "sizes": "512x512",
       "type": "image/png"
     },
     {
-      "src": "/images/favicon.svg",
+      "src": "/images/OneBoxLogoX.png",
       "sizes": "512x512",
       "type": "image/png",
       "purpose": "maskable"

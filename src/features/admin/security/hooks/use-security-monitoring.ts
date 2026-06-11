@@ -1,3 +1,4 @@
+// Created and developed by Jai Singh
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { logger } from '@/lib/utils/logger'
 import { SecurityService } from '../services/security.service'
@@ -318,3 +319,5 @@ export function useSecurityExport() {
     isExporting: exportData.isPending,
   }
 }
+
+// Created and developed by Jai Singh

@@ -1,3 +1,4 @@
+// Created and developed by Jai Singh
 import { useState, useEffect, useRef, useCallback } from 'react'
 import {
   IconLoader2,
@@ -350,3 +351,5 @@ export function PDFViewer({
     </div>
   )
 }
+
+// Created and developed by Jai Singh

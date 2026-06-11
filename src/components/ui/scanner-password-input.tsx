@@ -1,3 +1,4 @@
+// Created and developed by Jai Singh
 import * as React from 'react'
 import { IconEye, IconEyeOff } from '@tabler/icons-react'
 import { cn } from '@/lib/utils'
@@ -67,3 +68,5 @@ const ScannerPasswordInput = React.forwardRef<
 ScannerPasswordInput.displayName = 'ScannerPasswordInput'
 
 export { ScannerPasswordInput }
+
+// Created and developed by Jai Singh

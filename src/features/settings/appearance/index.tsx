@@ -1,3 +1,4 @@
+// Created and developed by Jai Singh
 import { AppearanceForm } from './appearance-form'
 
 export default function SettingsAppearance() {
@@ -11,9 +12,11 @@ export default function SettingsAppearance() {
         </p>
       </div>
       <div className='separator my-4 flex-none border-b' />
-      <div className='flex-1 overflow-y-auto pb-12 pr-2'>
+      <div className='flex-1 overflow-y-auto pr-2 pb-12'>
         <AppearanceForm />
       </div>
     </div>
   )
 }
+
+// Created and developed by Jai Singh

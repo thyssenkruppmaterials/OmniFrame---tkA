@@ -1,5 +1,7 @@
+// Created and developed by Jai Singh
 import { useState } from 'react'
 import {
+  IconActivity,
   IconApi,
   IconBell,
   IconClipboardList,
@@ -24,6 +26,7 @@ import { IntegrationSettings } from './components/IntegrationSettings'
 import { LoggingAuditingSettings } from './components/LoggingAuditingSettings'
 import { PerformanceSettings } from './components/PerformanceSettings'
 import { SecuritySettings } from './components/SecuritySettings'
+import { ServiceMonitoringSettings } from './components/ServiceMonitoringSettings'
 import { SystemMaintenanceSettings } from './components/SystemMaintenanceSettings'
 import { ToastNotificationSettingsEnhanced } from './components/ToastNotificationSettings-Enhanced'
 import { UserDefaultsSettings } from './components/UserDefaultsSettings'
@@ -38,6 +41,7 @@ const systemSettingsTabs = [
   { id: 'backup-recovery', label: 'Backup & Recovery' },
   { id: 'user-defaults', label: 'User Defaults' },
   { id: 'logging-auditing', label: 'Logging & Auditing' },
+  { id: 'service-monitoring', label: 'Service Monitoring' },
   { id: 'api-configuration', label: 'API Configuration' },
 ]
 
@@ -166,6 +170,19 @@ export function SystemSettingsPage() {
             <LoggingAuditingSettings />
           </div>
         )
+      case 'service-monitoring':
+        return (
+          <div className='space-y-4'>
+            <h3 className='flex items-center gap-2 text-xl font-semibold'>
+              <IconActivity size={20} />
+              Service Monitoring
+            </h3>
+            <p className='text-muted-foreground mb-6 text-sm'>
+              Live Railway service logs, deployment status, and error tracking.
+            </p>
+            <ServiceMonitoringSettings />
+          </div>
+        )
       case 'api-configuration':
         return (
           <div className='space-y-4'>
@@ -235,3 +252,5 @@ export function SystemSettingsPage() {
     </>
   )
 }
+
+// Created and developed by Jai Singh

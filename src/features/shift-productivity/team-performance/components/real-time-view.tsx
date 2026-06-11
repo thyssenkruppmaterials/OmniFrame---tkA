@@ -1,3 +1,4 @@
+// Created and developed by Jai Singh
 /**
  * Real-Time View Component
  * Current shift status with auto-refresh functionality
@@ -98,6 +99,7 @@ interface RealTimeViewProps {
   // Other props
   lastUpdated?: Date
   className?: string
+  timezone?: string
   // Export handler
   onExport?: () => void
 }
@@ -120,6 +122,7 @@ export function RealTimeView({
   canGoForward,
   lastUpdated,
   className,
+  timezone,
   onExport,
 }: RealTimeViewProps) {
   const [viewMode, setViewMode] = useState<
@@ -581,6 +584,7 @@ export function RealTimeView({
               maxHeight='calc(100vh - 280px)'
               timelineEvents={timelineEvents}
               approvedOvertime={approvedOvertime}
+              timezone={timezone}
             />
           </CardContent>
         </Card>
@@ -676,6 +680,7 @@ export function RealTimeView({
                     maxHeight='500px'
                     timelineEvents={timelineEvents}
                     approvedOvertime={approvedOvertime}
+                    timezone={timezone}
                   />
                 ) : (
                   <div className='py-8 text-center'>
@@ -718,6 +723,7 @@ export function RealTimeView({
                     maxHeight='500px'
                     timelineEvents={timelineEvents}
                     approvedOvertime={approvedOvertime}
+                    timezone={timezone}
                   />
                 ) : (
                   <div className='py-8 text-center'>
@@ -827,3 +833,5 @@ function RealTimeViewSkeleton() {
     </div>
   )
 }
+
+// Created and developed by Jai Singh

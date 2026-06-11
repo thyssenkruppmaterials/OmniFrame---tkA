@@ -1,3 +1,4 @@
+// Created and developed by Jai Singh
 /**
  * Ticket Chat Thread Component
  *
@@ -327,3 +328,5 @@ function getInitials(name: string): string {
   }
   return name.substring(0, 2).toUpperCase()
 }
+
+// Created and developed by Jai Singh

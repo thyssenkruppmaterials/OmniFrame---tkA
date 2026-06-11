@@ -1,3 +1,4 @@
+// Created and developed by Jai Singh
 import { useMemo } from 'react'
 import {
   Shield,
@@ -241,3 +242,5 @@ export function RoleSummaryCard({
     </Card>
   )
 }
+
+// Created and developed by Jai Singh

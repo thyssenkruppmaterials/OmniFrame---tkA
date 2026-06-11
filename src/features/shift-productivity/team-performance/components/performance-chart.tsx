@@ -1,3 +1,4 @@
+// Created and developed by Jai Singh
 /**
  * Performance Chart Component
  * Weekly/monthly trend visualization using Recharts
@@ -572,3 +573,5 @@ export function Sparkline({
     </div>
   )
 }
+
+// Created and developed by Jai Singh

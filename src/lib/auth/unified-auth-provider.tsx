@@ -1,3 +1,4 @@
+// Created and developed by Jai Singh
 /**
  * Unified Auth Provider - REDESIGNED
  *
@@ -11,7 +12,7 @@
  * ✅ Comprehensive error recovery (network failures + timeouts)
  * ✅ All existing functionality preserved (zero breaking changes)
  *
- * @author Jai Singh
+ * @author OmniFrame Team
  * @date 2025-01-21
  * @version 2.0.0 - Comprehensive Authentication Redesign
  */
@@ -294,7 +295,41 @@ export function useAuthState(): AuthState {
 }
 
 /**
+ * Session-scoped organization_id accessor — React hook variant.
+ *
+ * Returns the signed-in user's `user_profiles.organization_id`, or `null`
+ * if the user isn't authenticated / their profile hasn't hydrated yet.
+ * Reads directly from the auth-state-managed `profile` (populated on
+ * sign-in, cleared on sign-out), so callers avoid the per-call
+ * `user_profiles` lookup that used to run on every Realtime fan-out /
+ * job submit / fleet probe.
+ *
+ * Components that need org_id for Realtime filters or RLS-scoped queries
+ * should call this instead of re-querying `user_profiles`. When it
+ * returns `null`, callers should treat the feature as unavailable and
+ * bail out early (no channel subscription, no job insert, …).
+ */
+export function useOrgId(): string | null {
+  const { authState } = useUnifiedAuth()
+  return authState.profile?.organization_id ?? null
+}
+
+/**
+ * Session-scoped organization_id accessor — non-React variant.
+ *
+ * Same source of truth as `useOrgId`, but callable from module-scoped
+ * code (pollers, module-level helpers, non-React callback bodies).
+ * Returns whatever `singletonAuthManager` last observed on the session;
+ * auth state transitions keep this value current via the manager's
+ * own onAuthStateChange handler.
+ */
+export function getCurrentOrgId(): string | null {
+  return singletonAuthManager.getAuthState().profile?.organization_id ?? null
+}
+
+/**
  * Export singleton manager for direct access when needed
  */
 export { singletonAuthManager }
-// Developer and Creator: Jai Singh
+
+// Created and developed by Jai Singh

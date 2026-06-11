@@ -1,3 +1,4 @@
+// Created and developed by Jai Singh
 import { useState, useRef, useCallback, useEffect } from 'react'
 import { IconCamera, IconCameraOff, IconRefresh } from '@tabler/icons-react'
 import { logger } from '@/lib/utils/logger'
@@ -173,3 +174,5 @@ export default function CameraCapture({
     </div>
   )
 }
+
+// Created and developed by Jai Singh

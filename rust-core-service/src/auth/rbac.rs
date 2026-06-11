@@ -1,3 +1,4 @@
+// Created and developed by Jai Singh
 //! Role-Based Access Control (RBAC) service
 //!
 //! Provides permission checking with in-memory caching for high performance.
@@ -268,3 +269,5 @@ mod tests {
         assert!(service.has_permission(&perms, "admin:super_secret"));
     }
 }
+
+// Created and developed by Jai Singh

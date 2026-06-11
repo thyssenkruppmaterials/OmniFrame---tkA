@@ -1,3 +1,4 @@
+// Created and developed by Jai Singh
 /**
  * Review Settings Component
  * HR Employee Reviews - Configuration page for review cycles, reminders, rating scale, and acknowledgment
@@ -623,3 +624,5 @@ function ReviewSettings() {
 }
 
 export default ReviewSettings
+
+// Created and developed by Jai Singh

@@ -1,3 +1,4 @@
+// Created and developed by Jai Singh
 //! Authentication module for secure JWT validation
 //!
 //! This module provides:
@@ -35,3 +36,5 @@ pub use api_keys::{
     AllowedService,
     extract_key_parts,
 };
+
+// Created and developed by Jai Singh

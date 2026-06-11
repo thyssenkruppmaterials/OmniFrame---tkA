@@ -1,3 +1,4 @@
+// Created and developed by Jai Singh
 import {
   IconActivity,
   IconBox,
@@ -8,17 +9,14 @@ import {
   IconChecklist,
   IconClock,
   IconClipboardCheck,
-  IconDeviceDesktop,
+  IconCompass,
   IconDeviceMobile,
-  IconBriefcase,
   IconHelp,
   IconLayoutDashboard,
-  IconMessage,
   IconNotification,
   IconPackage,
   IconPackages,
   IconPalette,
-  IconPlane,
   IconPlugConnected,
   IconRefresh,
   IconSettings,
@@ -28,6 +26,7 @@ import {
   IconTable,
   IconTestPipe,
   IconTool,
+  IconTopologyStar3,
   IconTrendingUp,
   IconTruckDelivery,
   IconTruckLoading,
@@ -37,7 +36,7 @@ import {
   IconUsersGroup,
 } from '@tabler/icons-react'
 import { AudioWaveform, GalleryVerticalEnd } from 'lucide-react'
-import OmniFrameLogo from '@/components/ui/omniframe-logo'
+import OmniFrameLogo from '@/components/ui/onebox-logo'
 import { type SidebarData } from '../types'
 
 // Function to get sidebar data based on user authentication
@@ -96,7 +95,7 @@ export const getSidebarData = (
         plan: 'Enterprise',
       },
       {
-        name: 'OmniFrame',
+        name: 'j.AI',
         logo: AudioWaveform,
         plan: 'Startup',
       },
@@ -112,83 +111,6 @@ export const getSidebarData = (
             requiredPermission: {
               action: 'read',
               resource: 'dashboard',
-            },
-          },
-          {
-            title: 'Tasks',
-            url: '/tasks',
-            icon: IconChecklist,
-            requiredPermission: {
-              action: 'read',
-              resource: 'tasks',
-            },
-          },
-        ],
-      },
-      {
-        title: 'Business Applications',
-        items: [
-          {
-            title: 'Inventory',
-            url: '/business/inventory',
-            icon: IconPackage,
-            requiredPermission: {
-              action: 'view',
-              resource: 'business_inventory',
-            },
-          },
-          {
-            title: 'Logistics',
-            url: '/business/logistics',
-            icon: IconTruckDelivery,
-            requiredPermission: {
-              action: 'view',
-              resource: 'business_logistics',
-            },
-          },
-          {
-            title: 'Warehouse',
-            url: '/business/warehouse',
-            icon: IconBuilding,
-            requiredPermission: {
-              action: 'view',
-              resource: 'business_warehouse',
-            },
-          },
-          {
-            title: 'Supply Chain',
-            url: '/business/supply-chain',
-            icon: IconTruckLoading,
-            requiredPermission: {
-              action: 'view',
-              resource: 'business_supply_chain',
-            },
-          },
-          {
-            title: 'Engineering',
-            url: '/business/engineering',
-            icon: IconTool,
-            requiredPermission: {
-              action: 'view',
-              resource: 'business_engineering',
-            },
-          },
-          {
-            title: 'Transportation',
-            url: '/business/transportation',
-            icon: IconTruckDelivery,
-            requiredPermission: {
-              action: 'view',
-              resource: 'business_transportation',
-            },
-          },
-          {
-            title: 'Customer Service',
-            url: '/business/customer-service',
-            icon: IconUserCog,
-            requiredPermission: {
-              action: 'view',
-              resource: 'business_customer_service',
             },
           },
         ],
@@ -297,6 +219,15 @@ export const getSidebarData = (
                   resource: 'standard_work',
                 },
               },
+              {
+                title: 'Production Boards',
+                url: '/apps/production-boards',
+                icon: IconLayoutDashboard,
+                requiredPermission: {
+                  action: 'view',
+                  resource: 'shift_productivity',
+                },
+              },
             ],
           },
           {
@@ -330,48 +261,7 @@ export const getSidebarData = (
                   resource: 'facility_maintenance',
                 },
               },
-              {
-                title: 'IT Services',
-                url: '/facility/it-services',
-                icon: IconDeviceDesktop,
-                requiredPermission: {
-                  action: 'view',
-                  resource: 'facility_it_services',
-                },
-              },
-              {
-                title: 'Vendor Management',
-                url: '/facility/vendor-management',
-                icon: IconBriefcase,
-                requiredPermission: {
-                  action: 'view',
-                  resource: 'facility_vendor_management',
-                },
-              },
             ],
-          },
-        ],
-      },
-      {
-        title: 'Intelligence Hub',
-        items: [
-          {
-            title: 'A.I. Chat',
-            url: '/intelligence/ai-chat',
-            icon: IconMessage,
-            requiredPermission: {
-              action: 'view',
-              resource: 'intelligence_ai_chat',
-            },
-          },
-          {
-            title: 'Drone Control',
-            url: '/intelligence/drone-control',
-            icon: IconPlane,
-            requiredPermission: {
-              action: 'view',
-              resource: 'intelligence_drone_control',
-            },
           },
         ],
       },
@@ -527,6 +417,24 @@ export const getSidebarData = (
                   resource: 'system',
                 },
               },
+              {
+                title: 'Work Engine',
+                url: '/admin/work-engine',
+                icon: IconActivity,
+                requiredPermission: {
+                  action: 'manage',
+                  resource: 'work_queue',
+                },
+              },
+              {
+                title: 'Supply Chain Mapping',
+                url: '/admin/supply-chain-mapping',
+                icon: IconTopologyStar3,
+                requiredPermission: {
+                  action: 'manage',
+                  resource: 'system',
+                },
+              },
             ],
           },
           {
@@ -536,6 +444,15 @@ export const getSidebarData = (
             requiredPermission: {
               action: 'manage',
               resource: 'system',
+            },
+          },
+          {
+            title: 'OmniBelt',
+            url: '/admin/omnibelt',
+            icon: IconCompass,
+            requiredPermission: {
+              action: 'manage',
+              resource: 'omnibelt',
             },
           },
         ],
@@ -612,3 +529,5 @@ export const getSidebarData = (
 
 // For backward compatibility - dynamically generated with guest user defaults
 export const sidebarData: SidebarData = getSidebarData(null, null)
+
+// Created and developed by Jai Singh

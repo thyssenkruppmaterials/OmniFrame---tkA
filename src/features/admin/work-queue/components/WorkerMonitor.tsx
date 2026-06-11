@@ -1,3 +1,4 @@
+// Created and developed by Jai Singh
 /**
  * Worker Monitor Component
  * Real-time monitoring of worker status, task assignments, and performance
@@ -246,21 +247,21 @@ export function WorkerMonitor() {
       </div>
 
       {/* Controls */}
-      <div className='flex items-center justify-between'>
-        <div className='flex items-center space-x-2'>
-          <div className='relative'>
+      <div className='flex flex-wrap items-center justify-between gap-2'>
+        <div className='flex min-w-0 flex-1 flex-wrap items-center gap-2'>
+          <div className='relative min-w-0 flex-1 sm:max-w-xs'>
             <Search className='text-muted-foreground absolute top-1/2 left-3 h-4 w-4 -translate-y-1/2 transform' />
             <Input
               placeholder='Search workers...'
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
-              className='w-64 pl-9'
+              className='w-full pl-9'
             />
           </div>
           <select
             value={statusFilter}
             onChange={(e) => setStatusFilter(e.target.value)}
-            className='border-input bg-background h-9 rounded-md border px-3 text-sm'
+            className='border-input bg-background h-9 max-w-full min-w-0 rounded-md border px-3 text-sm'
           >
             <option value='all'>All Status</option>
             <option value='available'>Available</option>
@@ -325,3 +326,5 @@ export function WorkerMonitor() {
     </div>
   )
 }
+
+// Created and developed by Jai Singh

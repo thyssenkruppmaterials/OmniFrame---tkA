@@ -1,3 +1,4 @@
+// Created and developed by Jai Singh
 import { supabase } from '@/lib/supabase/client'
 import { logger } from '@/lib/utils/logger'
 
@@ -283,4 +284,5 @@ export async function getTimeAdjustmentNoteHistory(
     return { data: [], error: 'An unexpected error occurred' }
   }
 }
-// Developer and Creator: Jai Singh
+
+// Created and developed by Jai Singh

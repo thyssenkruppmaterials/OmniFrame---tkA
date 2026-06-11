@@ -1,3 +1,4 @@
+// Created and developed by Jai Singh
 /**
  * AppUpdateBanner - Non-Intrusive Update Notification
  *
@@ -81,3 +82,5 @@ export function AppUpdateBanner() {
     </div>
   )
 }
+
+// Created and developed by Jai Singh

@@ -1,3 +1,4 @@
+// Created and developed by Jai Singh
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 
 vi.mock('@/lib/supabase/client', () => ({
@@ -45,3 +46,5 @@ describe('Work Service Client', () => {
     expect(() => mod.setWorkServiceOrganization(null)).not.toThrow()
   })
 })
+
+// Created and developed by Jai Singh

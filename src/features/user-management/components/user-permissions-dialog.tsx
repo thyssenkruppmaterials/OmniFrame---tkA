@@ -1,3 +1,4 @@
+// Created and developed by Jai Singh
 import { useEffect, useState } from 'react'
 import { format } from 'date-fns'
 import {
@@ -472,3 +473,5 @@ export function UserPermissionsDialog({
     </Dialog>
   )
 }
+
+// Created and developed by Jai Singh

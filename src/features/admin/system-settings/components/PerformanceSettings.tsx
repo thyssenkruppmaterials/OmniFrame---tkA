@@ -1,3 +1,4 @@
+// Created and developed by Jai Singh
 import { useState } from 'react'
 import {
   IconBrain,
@@ -452,3 +453,5 @@ export function PerformanceSettings() {
     </div>
   )
 }
+
+// Created and developed by Jai Singh

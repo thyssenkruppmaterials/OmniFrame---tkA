@@ -1,3 +1,4 @@
+// Created and developed by Jai Singh
 /**
  * Add Position Dialog Component
  * Form modal for creating new organizational positions
@@ -92,7 +93,7 @@ export function AddPositionDialog({
   const [isSubmitting, setIsSubmitting] = useState(false)
 
   const form = useForm<PositionFormData>({
-    resolver: zodResolver(positionSchema),
+    resolver: zodResolver(positionSchema) as never,
     defaultValues: {
       position_code: '',
       position_title: '',
@@ -194,7 +195,7 @@ export function AddPositionDialog({
                 Basic Information
               </h4>
 
-              <div className='grid grid-cols-4 gap-6'>
+              <div className='grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-4'>
                 <FormField
                   control={form.control}
                   name='position_code'
@@ -262,7 +263,7 @@ export function AddPositionDialog({
                 />
               </div>
 
-              <div className='grid grid-cols-4 gap-6'>
+              <div className='grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-4'>
                 <FormField
                   control={form.control}
                   name='position_type'
@@ -474,7 +475,7 @@ export function AddPositionDialog({
                 />
               </div>
 
-              <div className='grid grid-cols-4 gap-6'>
+              <div className='grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-4'>
                 <FormField
                   control={form.control}
                   name='minimum_experience_years'
@@ -495,7 +496,7 @@ export function AddPositionDialog({
                   )}
                 />
 
-                <div className='col-span-3 grid grid-cols-2 gap-6'>
+                <div className='grid grid-cols-1 gap-6 sm:grid-cols-2 lg:col-span-3'>
                   <FormField
                     control={form.control}
                     name='is_supervisory'
@@ -540,3 +541,5 @@ export function AddPositionDialog({
     </Dialog>
   )
 }
+
+// Created and developed by Jai Singh

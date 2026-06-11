@@ -1,9 +1,10 @@
+# Created and developed by Jai Singh
 """
 Shift Productivity API endpoints.
 Provides backend API layer for shift productivity data, replacing direct Supabase calls from frontend.
 
 Created: January 28, 2026
-Author: Jai Singh
+Author: OneBox AI Team
 
 This router exposes the same RPC functions used by the frontend service but through
 authenticated API endpoints, ensuring consistent architecture and security.
@@ -876,4 +877,4 @@ async def get_departments(
             context="departments"
         )
 
-# Developer and Creator: Jai Singh
+# Created and developed by Jai Singh

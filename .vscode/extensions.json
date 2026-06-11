@@ -14,6 +14,8 @@
         "dbaeumer.vscode-eslint",
         "bradlc.vscode-tailwindcss",
         "ms-vscode.vscode-json",
+        // Claude Code Integration
+        "anthropic.claude-code",
         // Git and Version Control
         "ms-vscode.vscode-git-graph",
         "ms-vscode.vscode-gitlens",

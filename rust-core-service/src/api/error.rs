@@ -1,3 +1,4 @@
+// Created and developed by Jai Singh
 //! API error handling
 
 use axum::{
@@ -125,3 +126,5 @@ impl IntoResponse for ApiError {
 
 /// Result type for API handlers
 pub type ApiResult<T> = Result<T, ApiError>;
+
+// Created and developed by Jai Singh

@@ -1,3 +1,4 @@
+// Created and developed by Jai Singh
 /**
  * Queue Overview Component
  * Real-time dashboard showing queue status, metrics, and system health
@@ -31,7 +32,7 @@ interface MetricCardProps {
   title: string
   value: string | number
   subtitle?: string
-  icon: React.ElementType
+  icon: React.ComponentType<{ className?: string }>
   trend?: {
     value: number
     isPositive: boolean
@@ -446,3 +447,5 @@ export function QueueOverview() {
     </div>
   )
 }
+
+// Created and developed by Jai Singh

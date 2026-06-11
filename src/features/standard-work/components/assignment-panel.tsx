@@ -1,3 +1,4 @@
+// Created and developed by Jai Singh
 /**
  * Assignment Panel Component
  * Dialog for assigning standard work templates to users, positions, or working areas
@@ -133,8 +134,13 @@ export function AssignmentPanel({
         if (error) throw error
         setUserResults((data || []) as UserSearchResult[])
         setShowUserDropdown(true)
-      } catch {
+      } catch (err) {
+        // Surface a toast so users notice when search isn't returning a list
+        // because of a network or auth issue, not because no users matched.
         setUserResults([])
+        toast.error(
+          `User search failed: ${(err as Error)?.message ?? 'unknown error'}`
+        )
       } finally {
         setIsSearching(false)
       }
@@ -631,3 +637,5 @@ export function AssignmentPanel({
 }
 
 export default AssignmentPanel
+
+// Created and developed by Jai Singh

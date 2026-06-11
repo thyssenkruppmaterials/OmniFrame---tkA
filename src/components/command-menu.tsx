@@ -1,3 +1,4 @@
+// Created and developed by Jai Singh
 import React from 'react'
 import { useNavigate } from '@tanstack/react-router'
 import {
@@ -110,3 +111,5 @@ export function CommandMenu() {
     </CommandDialog>
   )
 }
+
+// Created and developed by Jai Singh

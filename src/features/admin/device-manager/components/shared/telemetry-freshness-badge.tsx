@@ -1,3 +1,4 @@
+// Created and developed by Jai Singh
 import { cn } from '@/lib/utils'
 
 interface TelemetryFreshnessBadgeProps {
@@ -50,3 +51,5 @@ export function TelemetryFreshnessBadge({
     </span>
   )
 }
+
+// Created and developed by Jai Singh

@@ -1,3 +1,4 @@
+// Created and developed by Jai Singh
 import { useState } from 'react'
 import { createFileRoute } from '@tanstack/react-router'
 import { TabMenu } from '@/components/ui/tab-menu'
@@ -86,4 +87,5 @@ function CustomerPortalLanding() {
 export const Route = createFileRoute('/customer-portal/')({
   component: CustomerPortalLanding,
 })
-// Developer and Creator: Jai Singh
+
+// Created and developed by Jai Singh

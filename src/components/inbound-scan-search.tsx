@@ -1,3 +1,4 @@
+// Created and developed by Jai Singh
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { format, toZonedTime } from 'date-fns-tz'
 import {
@@ -25,7 +26,10 @@ import {
   PRIORITY_LABELS,
   type HotPartAlert,
 } from '@/lib/supabase/hot-part-alert.service'
-import type { InboundScansWithUser } from '@/lib/supabase/inbound-scan.service'
+import type {
+  InboundScansWithUser,
+  InboundScanWithTransfer,
+} from '@/lib/supabase/inbound-scan.service'
 import { cn } from '@/lib/utils'
 import { logger } from '@/lib/utils/logger'
 import { useInboundScans } from '@/hooks/use-inbound-scans'
@@ -65,6 +69,7 @@ import {
   TableRow,
 } from '@/components/ui/table'
 import { Textarea } from '@/components/ui/textarea'
+import { DropOffAreaManagerDialog } from '@/components/inbound/drop-off-area-manager-dialog'
 
 // Rust-powered search input with rotating light beam border effect
 const RustPoweredSearchInput = React.forwardRef<
@@ -131,10 +136,14 @@ interface InboundScanSearchProps {
   enableRealtime?: boolean
 }
 
+type TransferVirtualKey = 'drop_off_area' | 'dropped_off_by' | 'accepted_by'
+
+type TableColumnKey = keyof InboundScansWithUser[0] | TransferVirtualKey
+
 interface TableColumn {
   id: string
   label: string
-  key: keyof InboundScansWithUser[0]
+  key: TableColumnKey
   width?: string
   sortable?: boolean
 }
@@ -202,6 +211,27 @@ const DEFAULT_COLUMNS: TableColumn[] = [
     width: 'w-24',
     sortable: true,
   },
+  {
+    id: 'drop_off_area',
+    label: 'Drop-off Area',
+    key: 'drop_off_area',
+    width: 'w-40',
+    sortable: false,
+  },
+  {
+    id: 'dropped_off_by',
+    label: 'Dropped off by',
+    key: 'dropped_off_by',
+    width: 'w-40',
+    sortable: false,
+  },
+  {
+    id: 'accepted_by',
+    label: 'Accepted by',
+    key: 'accepted_by',
+    width: 'w-40',
+    sortable: false,
+  },
 ]
 
 // Sortable table header component
@@ -214,15 +244,19 @@ function SortableTableHeader({
   sortConfig: SortConfig | null
   onSort: (key: keyof InboundScansWithUser[0]) => void
 }) {
-  const isSorted = sortConfig?.key === column.key
+  const isSortable =
+    column.sortable === true && !isTransferVirtualKey(column.key)
+  const isSorted =
+    isSortable &&
+    sortConfig?.key === (column.key as keyof InboundScansWithUser[0])
   const sortDirection = isSorted ? sortConfig?.direction : null
 
   return (
     <TableHead className={`text-foreground font-medium ${column.width}`}>
       <div className='flex items-center gap-1'>
-        {column.sortable ? (
+        {isSortable ? (
           <button
-            onClick={() => onSort(column.key)}
+            onClick={() => onSort(column.key as keyof InboundScansWithUser[0])}
             className='hover:text-foreground/80 flex items-center gap-1 transition-colors'
           >
             {column.label}
@@ -238,6 +272,12 @@ function SortableTableHeader({
         )}
       </div>
     </TableHead>
+  )
+}
+
+function isTransferVirtualKey(key: TableColumnKey): key is TransferVirtualKey {
+  return (
+    key === 'drop_off_area' || key === 'dropped_off_by' || key === 'accepted_by'
   )
 }
 
@@ -611,6 +651,7 @@ const InboundScanSearch: React.FC<InboundScanSearchProps> = React.memo(
       direction: 'desc',
     })
     const [hotPartAlertDialogOpen, setHotPartAlertDialogOpen] = useState(false)
+    const [dropOffAreaDialogOpen, setDropOffAreaDialogOpen] = useState(false)
     const componentRef = useRef<HTMLDivElement>(null)
 
     // Intersection Observer to only enable real-time updates when component is visible
@@ -786,12 +827,73 @@ const InboundScanSearch: React.FC<InboundScanSearchProps> = React.memo(
 
     // Get cell content based on column
     const getCellContent = (
-      item: InboundScansWithUser[0],
+      item: InboundScanWithTransfer,
       column: TableColumn
     ) => {
-      const value = item[column.key]
+      if (isTransferVirtualKey(column.key)) {
+        const transfer = item.latest_transfer
+        if (!transfer) {
+          return <span className='text-muted-foreground'>—</span>
+        }
 
-      switch (column.key) {
+        switch (column.key) {
+          case 'drop_off_area':
+            return (
+              <div className='flex flex-col gap-0.5'>
+                <Badge
+                  variant='outline'
+                  className='w-fit border-blue-200 bg-blue-50 text-blue-700 dark:border-blue-800 dark:bg-blue-900/30 dark:text-blue-300'
+                >
+                  {transfer.area_name || 'Unknown area'}
+                </Badge>
+                {transfer.area_barcode && (
+                  <span
+                    className='text-muted-foreground font-mono text-[10px]'
+                    title={transfer.area_barcode}
+                  >
+                    {transfer.area_barcode}
+                  </span>
+                )}
+              </div>
+            )
+          case 'dropped_off_by':
+            return (
+              <div className='flex flex-col gap-0.5'>
+                <span className='text-foreground text-sm'>
+                  {transfer.dropped_off_by_name ||
+                    transfer.dropped_off_by_email ||
+                    'Unknown user'}
+                </span>
+                <span className='text-muted-foreground text-[10px]'>
+                  {formatDateTimeEST(transfer.dropped_off_at)}
+                </span>
+              </div>
+            )
+          case 'accepted_by':
+            return (
+              <div className='flex flex-col gap-0.5'>
+                <span className='text-foreground text-sm font-medium'>
+                  {transfer.associate_name ||
+                    transfer.associate_email ||
+                    'Unknown associate'}
+                </span>
+                {transfer.associate_email && (
+                  <span
+                    className='text-muted-foreground truncate font-mono text-[10px]'
+                    title={transfer.associate_email}
+                  >
+                    {transfer.associate_email}
+                  </span>
+                )}
+              </div>
+            )
+        }
+      }
+
+      const scanKey = column.key as keyof InboundScansWithUser[0]
+      const value = item[scanKey]
+
+      switch (scanKey) {
         case 'hot_truck':
           return <HotTruckBadge isHotTruck={value as boolean} />
         case 'quantity':
@@ -991,6 +1093,13 @@ const InboundScanSearch: React.FC<InboundScanSearchProps> = React.memo(
                         Clear Search
                       </DropdownMenuItem>
                       <DropdownMenuSeparator />
+                      <DropdownMenuItem
+                        onClick={() => setDropOffAreaDialogOpen(true)}
+                        className='text-blue-600 hover:bg-blue-50 dark:text-blue-400 dark:hover:bg-blue-950/20'
+                      >
+                        <MapPin className='mr-2 h-4 w-4' />
+                        Manage Drop-off Areas
+                      </DropdownMenuItem>
                       <DropdownMenuItem
                         onClick={() => setHotPartAlertDialogOpen(true)}
                         className='text-orange-600 hover:bg-orange-50 dark:text-orange-400 dark:hover:bg-orange-950/20'
@@ -1224,6 +1333,12 @@ const InboundScanSearch: React.FC<InboundScanSearchProps> = React.memo(
           open={hotPartAlertDialogOpen}
           onOpenChange={setHotPartAlertDialogOpen}
         />
+
+        {/* Drop-off Area Management Dialog */}
+        <DropOffAreaManagerDialog
+          open={dropOffAreaDialogOpen}
+          onOpenChange={setDropOffAreaDialogOpen}
+        />
       </div>
     )
   }
@@ -1232,3 +1347,5 @@ const InboundScanSearch: React.FC<InboundScanSearchProps> = React.memo(
 InboundScanSearch.displayName = 'InboundScanSearch'
 
 export default InboundScanSearch
+
+// Created and developed by Jai Singh

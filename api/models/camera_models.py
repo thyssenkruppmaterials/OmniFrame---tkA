@@ -1,3 +1,4 @@
+# Created and developed by Jai Singh
 """
 Pydantic models for camera operations.
 Supports ExacqVision camera integration and video surveillance.
@@ -297,3 +298,5 @@ class SnapshotResponse(BaseModel):
     snapshot_url: str
     timestamp: datetime
     storage_url: Optional[str] = None
+
+# Created and developed by Jai Singh

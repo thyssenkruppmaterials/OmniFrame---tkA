@@ -1,3 +1,4 @@
+// Created and developed by Jai Singh
 import { HTMLAttributes, useState } from 'react'
 import { z } from 'zod'
 import { useForm } from 'react-hook-form'
@@ -5,6 +6,7 @@ import { zodResolver } from '@hookform/resolvers/zod'
 import { toast } from 'sonner'
 import { supabase } from '@/lib/supabase/client'
 import { cn } from '@/lib/utils'
+import { getAppUrl } from '@/lib/utils/app-url'
 import { Button } from '@/components/ui/button'
 import {
   Form,
@@ -29,7 +31,7 @@ export function ForgotPasswordForm({ className, ...props }: ForgotFormProps) {
   // Use Supabase client directly for password reset
   const resetPassword = async (email: string) => {
     const { error } = await supabase.auth.resetPasswordForEmail(email, {
-      redirectTo: `${window.location.origin}/auth/reset-password`,
+      redirectTo: `${getAppUrl()}/auth/reset-password`,
     })
     if (error) throw error
   }
@@ -82,3 +84,5 @@ export function ForgotPasswordForm({ className, ...props }: ForgotFormProps) {
     </Form>
   )
 }
+
+// Created and developed by Jai Singh

@@ -1,3 +1,4 @@
+// Created and developed by Jai Singh
 import { logger } from '@/lib/utils/logger'
 
 /**
@@ -876,4 +877,5 @@ export const distributedCacheService = DistributedCacheService.getInstance()
 
 // Export types
 export type { CacheEntry, CacheStats, RedisConfig }
-// Developer and Creator: Jai Singh
+
+// Created and developed by Jai Singh

@@ -1,3 +1,4 @@
+// Created and developed by Jai Singh
 import React, { useMemo } from 'react'
 import { format as formatDate } from 'date-fns'
 import { useQuery } from '@tanstack/react-query'
@@ -501,3 +502,5 @@ const InboundReports: React.FC<InboundReportsProps> = () => {
 InboundReports.displayName = 'InboundReports'
 
 export default InboundReports
+
+// Created and developed by Jai Singh

@@ -1,3 +1,4 @@
+// Created and developed by Jai Singh
 /**
  * Simple Worker Management Service
  * Simplified version to avoid TypeScript typing issues while database types are updated
@@ -159,4 +160,5 @@ class WorkerManagementService {
 
 // Export singleton instance
 export const workerManagementService = new WorkerManagementService()
-// Developer and Creator: Jai Singh
+
+// Created and developed by Jai Singh

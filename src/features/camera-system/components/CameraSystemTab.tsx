@@ -1,3 +1,4 @@
+// Created and developed by Jai Singh
 /**
  * Camera System Tab Component
  *
@@ -247,3 +248,5 @@ export function CameraSystemTab({ className }: CameraSystemTabProps) {
     </div>
   )
 }
+
+// Created and developed by Jai Singh

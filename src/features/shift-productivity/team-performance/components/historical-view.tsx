@@ -1,3 +1,4 @@
+// Created and developed by Jai Singh
 /**
  * Historical View Component
  * Daily performance view with date picker and trend analysis
@@ -228,7 +229,7 @@ export function HistoricalView({
               )
             }
           >
-            <TabsList className='grid w-full max-w-md grid-cols-4'>
+            <TabsList className='grid w-full max-w-md grid-cols-2 md:grid-cols-4'>
               <TabsTrigger value='overview'>Overview</TabsTrigger>
               <TabsTrigger value='departments'>Departments</TabsTrigger>
               <TabsTrigger value='areas'>Areas</TabsTrigger>
@@ -448,3 +449,5 @@ function HistoricalViewSkeleton({
     </div>
   )
 }
+
+// Created and developed by Jai Singh

@@ -1,3 +1,4 @@
+// Created and developed by Jai Singh
 //! Redis connection pool with high-performance caching operations
 
 use bb8::Pool;
@@ -76,7 +77,7 @@ impl CacheService {
         Self {
             pool,
             default_ttl,
-            key_prefix: "omniframe:".to_string(),
+            key_prefix: "onebox:".to_string(),
         }
     }
 
@@ -359,3 +360,5 @@ pub struct CacheHealth {
     pub pool_size: u32,
     pub idle_connections: u32,
 }
+
+// Created and developed by Jai Singh

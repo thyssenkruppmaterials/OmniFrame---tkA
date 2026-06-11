@@ -1,3 +1,4 @@
+// Created and developed by Jai Singh
 import { Shield, Users, Settings, Eye, Lock } from 'lucide-react'
 import { useRBAC, CanAccess } from '@/hooks/use-rbac'
 import { Alert, AlertDescription } from '@/components/ui/alert'
@@ -112,3 +113,5 @@ export function RoleRBACDemo() {
     </Card>
   )
 }
+
+// Created and developed by Jai Singh

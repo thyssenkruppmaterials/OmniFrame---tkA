@@ -1,3 +1,4 @@
+// Created and developed by Jai Singh
 /**
  * Wizard Navigation Component
  * Provides navigation buttons for the onboarding wizard
@@ -213,3 +214,5 @@ export function WizardNavigation({
 }
 
 export default WizardNavigation
+
+// Created and developed by Jai Singh

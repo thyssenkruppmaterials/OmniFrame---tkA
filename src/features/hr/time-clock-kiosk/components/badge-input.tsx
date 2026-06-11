@@ -1,3 +1,4 @@
+// Created and developed by Jai Singh
 import { useState, useCallback } from 'react'
 import { IconBackspace, IconArrowRight } from '@tabler/icons-react'
 
@@ -116,3 +117,5 @@ export default function BadgeInput({
     </div>
   )
 }
+
+// Created and developed by Jai Singh

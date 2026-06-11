@@ -1,3 +1,4 @@
+// Created and developed by Jai Singh
 /**
  * DJI Drone Plugin Interface
  *
@@ -272,3 +273,5 @@ export function createAisleMission(
     dwellTime: index % photoInterval === 0 ? 2 : 0,
   }))
 }
+
+// Created and developed by Jai Singh

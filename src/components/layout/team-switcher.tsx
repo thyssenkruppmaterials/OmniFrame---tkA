@@ -1,3 +1,4 @@
+// Created and developed by Jai Singh
 import * as React from 'react'
 import { ChevronsUpDown, Plus } from 'lucide-react'
 import { cn } from '@/lib/utils'
@@ -43,7 +44,8 @@ export function TeamSwitcher({
               )}
             >
               <div className='flex aspect-square size-8 items-center justify-center rounded-sm border'>
-                <activeTeam.logo />
+                {/* @ts-expect-error React 19 dynamic component typing */}
+                <activeTeam.logo {...({} as any)} />
               </div>
               {!isCollapsed && (
                 <>
@@ -74,7 +76,8 @@ export function TeamSwitcher({
                 className='gap-2 p-2'
               >
                 <div className='flex size-6 items-center justify-center rounded-sm border'>
-                  <team.logo />
+                  {/* @ts-expect-error React 19 dynamic component typing */}
+                  <team.logo {...({} as any)} />
                 </div>
                 {team.name}
                 <DropdownMenuShortcut>⌘{index + 1}</DropdownMenuShortcut>
@@ -93,3 +96,5 @@ export function TeamSwitcher({
     </SidebarMenu>
   )
 }
+
+// Created and developed by Jai Singh

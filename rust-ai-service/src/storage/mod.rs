@@ -1,3 +1,4 @@
+// Created and developed by Jai Singh
 //! Supabase Storage Module
 //! 
 //! Handles image upload to Supabase Storage (S3-compatible).
@@ -130,3 +131,5 @@ impl SupabaseStorage {
         Ok(())
     }
 }
+
+// Created and developed by Jai Singh

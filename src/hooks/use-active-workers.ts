@@ -1,3 +1,4 @@
+// Created and developed by Jai Singh
 /**
  * Active Workers Hook
  * React Query hook for monitoring active workers with real-time WebSocket updates
@@ -183,18 +184,93 @@ export function useActiveWorkers(
 }
 
 /**
- * Hook for getting a specific worker's tasks
+ * Options for `useWorkerTasks`.
  */
-export function useWorkerTasks(workerId: string | undefined) {
+export interface UseWorkerTasksOptions {
+  /**
+   * Subscribe to the work-service WebSocket and invalidate the
+   * worker's task cache when relevant events fire (`TaskAssigned`,
+   * `TaskStatusChanged`, `PushedWork`, `ReservationEscalated`,
+   * `WorkerStatusChanged`). Defaults to `false` for back-compat —
+   * legacy callers that don't render a live view stay one-shot.
+   *
+   * Realtime is preferred over polling for this query because the
+   * relevant WS variants already exist on the singleton
+   * `WorkServiceWebSocket` (no new channel introduced — see
+   * `.cursor/rules/realtime-policy.mdc`). When enabled, the safety-
+   * net poll (`refetchInterval`) is left at TanStack's default
+   * `false` because the WS push is the freshness source and the
+   * 30s `staleTime` covers the brief window between mount and the
+   * first WS handshake.
+   */
+  enableRealtime?: boolean
+}
+
+/**
+ * Hook for getting a specific worker's tasks. Optionally subscribes
+ * to the work-service WS so the cache invalidates whenever the
+ * worker's task list changes server-side — drives the
+ * `<OperatorTaskQueue>` tab inside `<LiveOperatorStatus>`.
+ */
+export function useWorkerTasks(
+  workerId: string | undefined,
+  options: UseWorkerTasksOptions = {}
+) {
+  const { enableRealtime = false } = options
   const { authState } = useUnifiedAuth()
   const organizationId = authState.profile?.organization_id
+  const queryClient = useQueryClient()
 
-  return useQuery({
+  const query = useQuery({
     queryKey: [WORKER_TASKS_QUERY_KEY, workerId],
     queryFn: () => workServiceClient.getWorkerTasks(workerId!),
     enabled: !!workerId && !!organizationId,
     staleTime: 30 * 1000,
   })
+
+  // Single multiplexed handler covering every WS variant that can
+  // change the per-worker task list. The handler is intentionally
+  // permissive — `TaskAssigned` / `TaskStatusChanged` / `PushedWork`
+  // / `ReservationEscalated` carry a `user_id` field that we COULD
+  // gate on (skip invalidation when `event.user_id !== workerId`)
+  // but the cost of an extra `getWorkerTasks` round trip is
+  // negligible (typically <50ms, ~1 KB JSON for a 12-task queue) and
+  // gating opens a correctness hole when the supervisor switches
+  // operators between mount and the first WS frame. Cheap to
+  // invalidate; expensive to be wrong.
+  const handleWsEvent = useCallback(
+    (event: WsEvent) => {
+      if (!workerId) return
+      switch (event.type) {
+        case 'TaskAssigned':
+        case 'TaskStatusChanged':
+        case 'PushedWork':
+        case 'ReservationEscalated':
+        case 'WorkerStatusChanged':
+          logger.log(
+            `[useWorkerTasks] WS invalidate for worker ${workerId}:`,
+            event.type
+          )
+          queryClient.invalidateQueries({
+            queryKey: [WORKER_TASKS_QUERY_KEY, workerId],
+          })
+          return
+        default:
+          return
+      }
+    },
+    [queryClient, workerId]
+  )
+
+  useEffect(() => {
+    if (!enableRealtime || !organizationId || !workerId) return
+    workServiceWs.connect(organizationId, handleWsEvent)
+    return () => {
+      workServiceWs.removeHandler(handleWsEvent)
+    }
+  }, [organizationId, workerId, enableRealtime, handleWsEvent])
+
+  return query
 }
 
 /**
@@ -212,3 +288,5 @@ export function useWorkerStatus(workerId: string | undefined) {
     refetchInterval: 30 * 1000,
   })
 }
+
+// Created and developed by Jai Singh

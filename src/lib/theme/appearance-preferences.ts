@@ -1,3 +1,4 @@
+// Created and developed by Jai Singh
 import { fonts } from '@/config/fonts'
 import {
   getPerceivedLightness,
@@ -183,7 +184,9 @@ export function radiusToCSS(preset: RadiusPreset): string {
   return RADIUS_VALUES[preset] ?? RADIUS_VALUES.default
 }
 
-export function getPaletteModeForBackground(backgroundHex: string): PaletteMode {
+export function getPaletteModeForBackground(
+  backgroundHex: string
+): PaletteMode {
   return getPerceivedLightness(backgroundHex) < 0.4 ? 'dark' : 'light'
 }
 
@@ -203,7 +206,10 @@ export function normalizePresetToThemeTokens(
   const secondary = validHexOrDefault(legacy.secondary, defaults.secondary)
   const accent = validHexOrDefault(legacy.accent, defaults.accent)
   const border = validHexOrDefault(legacy.border, defaults.border)
-  const destructive = validHexOrDefault(legacy.destructive, defaults.destructive)
+  const destructive = validHexOrDefault(
+    legacy.destructive,
+    defaults.destructive
+  )
 
   return {
     background: bg,
@@ -232,7 +238,7 @@ export function deriveDarkFromLight(light: ThemeTokens): ThemeTokens {
   return {
     background: adjustLightness(light.background, 0.08),
     foreground: adjustLightness(light.foreground, 0.95),
-    card: adjustLightness(light.card ?? light.background, 0.10),
+    card: adjustLightness(light.card ?? light.background, 0.1),
     primary: light.primary,
     secondary: adjustLightness(light.secondary, 0.18),
     accent: adjustLightness(light.accent, 0.18),
@@ -251,7 +257,7 @@ export function deriveDarkFromLight(light: ThemeTokens): ThemeTokens {
 export function deriveLightFromDark(dark: ThemeTokens): ThemeTokens {
   return {
     background: adjustLightness(dark.background, 0.98),
-    foreground: adjustLightness(dark.foreground, 0.10),
+    foreground: adjustLightness(dark.foreground, 0.1),
     card: adjustLightness(dark.card ?? dark.background, 0.97),
     primary: dark.primary,
     secondary: adjustLightness(dark.secondary, 0.95),
@@ -421,7 +427,8 @@ function syncLegacyKeys(prefs: AppearancePreferencesV2): void {
           : prefs.customBehavior
         : 'light'
 
-    const palette = prefs.customPalettes[resolvedMode] ?? prefs.customPalettes.light
+    const palette =
+      prefs.customPalettes[resolvedMode] ?? prefs.customPalettes.light
     const legacyColors: LegacyCustomThemeColors = {
       primary: palette.primary,
       background: palette.background,
@@ -504,7 +511,9 @@ function normalizeTokens(
 
 export function validateImportPayload(
   data: unknown
-): { valid: true; prefs: AppearancePreferencesV2 } | { valid: false; error: string } {
+):
+  | { valid: true; prefs: AppearancePreferencesV2 }
+  | { valid: false; error: string } {
   if (!data || typeof data !== 'object') {
     return { valid: false, error: 'Import data must be a JSON object.' }
   }
@@ -577,7 +586,10 @@ export function validateImportPayload(
 // Helpers
 // ---------------------------------------------------------------------------
 
-function validHexOrDefault(value: string | undefined, fallback: string): string {
+function validHexOrDefault(
+  value: string | undefined,
+  fallback: string
+): string {
   if (!value) return fallback
   return validateHex(value) ?? fallback
 }
@@ -613,7 +625,10 @@ function adjustLightness(hex: string, targetLightness: number): string {
   return `#${nr.toString(16).padStart(2, '0')}${ng.toString(16).padStart(2, '0')}${nb.toString(16).padStart(2, '0')}`
 }
 
-function surfaceForeground(surfaceHex: string, preferredFgHex?: string): string {
+function surfaceForeground(
+  surfaceHex: string,
+  preferredFgHex?: string
+): string {
   const preferred = validateHex(preferredFgHex ?? '')
   if (preferred && getWCAGContrastRatio(surfaceHex, preferred) >= 4.5) {
     return preferred
@@ -632,3 +647,5 @@ export {
   LEGACY_FONT_KEY,
   THEME_TOKEN_KEYS,
 }
+
+// Created and developed by Jai Singh

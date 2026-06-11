@@ -1,3 +1,4 @@
+// Created and developed by Jai Singh
 import { useState, useEffect, useMemo, useCallback } from 'react'
 import {
   ChevronDown,
@@ -451,3 +452,5 @@ export function NavigationSelector({
     </div>
   )
 }
+
+// Created and developed by Jai Singh

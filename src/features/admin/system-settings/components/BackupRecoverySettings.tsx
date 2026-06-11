@@ -1,3 +1,4 @@
+// Created and developed by Jai Singh
 import { useState } from 'react'
 import {
   IconClock,
@@ -547,3 +548,5 @@ export function BackupRecoverySettings() {
     </div>
   )
 }
+
+// Created and developed by Jai Singh

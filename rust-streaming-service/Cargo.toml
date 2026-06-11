@@ -3,8 +3,8 @@ name = "rust-streaming-service"
 version = "0.1.0"
 edition = "2021"
 rust-version = "1.80"
-description = "High-performance ExacqVision camera streaming proxy for OmniFrame"
-authors = ["Jai Singh"]
+description = "High-performance ExacqVision camera streaming proxy for OneBox AI"
+authors = ["OneBox AI Team"]
 
 [dependencies]
 # Web Framework with WebSocket supports

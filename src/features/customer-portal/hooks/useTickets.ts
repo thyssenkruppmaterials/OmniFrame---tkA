@@ -1,3 +1,4 @@
+// Created and developed by Jai Singh
 /**
  * Customer Portal Ticket Hooks
  *
@@ -1242,3 +1243,5 @@ export function useCustomerPortalMetrics(
 
 // Re-export the sheet ID for components that need it
 export { TICKET_SHEET_ID as SHEET_ID }
+
+// Created and developed by Jai Singh

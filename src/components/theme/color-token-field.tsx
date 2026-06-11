@@ -1,3 +1,4 @@
+// Created and developed by Jai Singh
 import { useEffect, useId, useRef, useState } from 'react'
 import { cn } from '@/lib/utils'
 import {
@@ -5,9 +6,9 @@ import {
   getPerceivedLightness,
   shouldUseLightText,
 } from '@/lib/utils/color-conversion'
-import { Label } from '@/components/ui/label'
-import { Input } from '@/components/ui/input'
 import { Badge } from '@/components/ui/badge'
+import { Input } from '@/components/ui/input'
+import { Label } from '@/components/ui/label'
 
 export interface ColorTokenFieldProps {
   label: string
@@ -59,7 +60,14 @@ export function ColorTokenField({
     if (raw.length > 0 && !raw.startsWith('#')) {
       raw = '#' + raw
     }
-    const cleaned = raw === '#' ? '#' : '#' + raw.slice(1).replace(/[^0-9A-Fa-f]/g, '').slice(0, 6)
+    const cleaned =
+      raw === '#'
+        ? '#'
+        : '#' +
+          raw
+            .slice(1)
+            .replace(/[^0-9A-Fa-f]/g, '')
+            .slice(0, 6)
     setInputValue(cleaned)
 
     const normalized = validateHex(cleaned)
@@ -81,7 +89,10 @@ export function ColorTokenField({
 
   const handlePaste = (e: React.ClipboardEvent) => {
     const pasted = e.clipboardData.getData('text').trim()
-    const hex = pasted.replace(/^#/, '').replace(/[^0-9A-Fa-f]/g, '').slice(0, 6)
+    const hex = pasted
+      .replace(/^#/, '')
+      .replace(/[^0-9A-Fa-f]/g, '')
+      .slice(0, 6)
     if (hex.length >= 3) {
       e.preventDefault()
       const full = `#${hex}`
@@ -126,7 +137,8 @@ export function ColorTokenField({
         style={{
           backgroundColor: displayHex,
           color: textType === 'light' ? '#fff' : '#000',
-          borderColor: textType === 'light' ? 'rgba(255,255,255,0.3)' : 'rgba(0,0,0,0.2)',
+          borderColor:
+            textType === 'light' ? 'rgba(255,255,255,0.3)' : 'rgba(0,0,0,0.2)',
         }}
       >
         {textType === 'light' ? 'Light' : 'Dark'}
@@ -176,7 +188,8 @@ export function ColorTokenField({
             aria-invalid={showError}
             className={cn(
               'h-9 font-mono text-xs',
-              showError && 'border-destructive focus-visible:ring-destructive/20'
+              showError &&
+                'border-destructive focus-visible:ring-destructive/20'
             )}
           />
         </div>
@@ -192,3 +205,5 @@ export function ColorTokenField({
     </div>
   )
 }
+
+// Created and developed by Jai Singh

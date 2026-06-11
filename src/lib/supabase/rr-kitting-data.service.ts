@@ -1,3 +1,4 @@
+// Created and developed by Jai Singh
 /**
  * RR_Kitting_DATA Service
  * Service for managing kit build plan data in Supabase
@@ -8,8 +9,73 @@
  * to regenerate types after the table is created.
  */
 import { logger } from '@/lib/utils/logger'
+import {
+  getDaysAgoEST,
+  getStartOfDayEST,
+  getTodayEST,
+} from '@/lib/utils/timezone'
 import { supabase } from './client'
 import { KitKanbanService } from './kit-kanban.service'
+
+// Expedite delivery time priority — matches CHECK constraint on
+// RR_Kitting_DATA.part_expedite_delivery_time
+export type ExpediteDeliveryTime = 'critical' | '24_hour' | '2_day'
+
+// Shape returned by the Build Kit verification entry points.
+// `kitSerialNumber` is exposed so the form can pass it through to the
+// downstream Build Kit mutations (`startKitBuild`, `kitMaterial`,
+// `completeKitBuild`) and avoid the multi-kit-per-PO aggregation bug
+// documented in `Debug/Fix-Build-Kit-Completion-Multi-Kit-PO.md`.
+export interface BuildKitVerifyResult {
+  exists: boolean
+  kitData?: {
+    kitPoNumber: string
+    kitSerialNumber: string | null
+    kitBuildNumber: string
+    kitNumber: string
+    engineProgram: string
+    deliverToPlant: string
+    dueDate: string | null
+    status: string
+    totalLines: number
+    kittedLines: number
+    toLines: Array<{
+      id: string
+      transferOrderNumber: string
+      material: string
+      materialDescription: string
+      sourceStorageBin: string
+      destStorageBin: string
+      quantity: number
+      kitted: boolean
+      kittedBy: string | null
+      kittedAt: string | null
+    }>
+  }
+  error?: string
+}
+
+export const EXPEDITE_DELIVERY_TIMES: Array<{
+  value: ExpediteDeliveryTime
+  label: string
+  description: string
+}> = [
+  {
+    value: 'critical',
+    label: 'Critical',
+    description: 'Highest priority — needed ASAP.',
+  },
+  {
+    value: '24_hour',
+    label: '24 Hours',
+    description: 'Required within 24 hours.',
+  },
+  {
+    value: '2_day',
+    label: '2-Day',
+    description: 'Required within 2 days.',
+  },
+]
 
 // Database record structure matching the RR_Kitting_DATA table
 export interface RRKittingDataRecord {
@@ -39,6 +105,11 @@ export interface RRKittingDataRecord {
   // Kit Build Plan Fields
   kit_build_number: string
   kit_po_number: string
+  // Globally unique kit identity (`KIT-YYYYMMDD-NNN`). Optional on the
+  // raw record type because legacy rows pre-dating `createKitBuildPlan`
+  // may have NULL — modern inserts always populate it. See
+  // `memorybank/OmniFrame/Patterns/Kit-Serial-Scoping.md`.
+  kit_serial_number?: string | null
   engine_program: string
   kit_number: string
   deliver_to_plant: string
@@ -67,6 +138,13 @@ export interface RRKittingDataRecord {
   // Kit Ready On Dock Tracking
   kit_ready_on_dock_by_user?: string
   kit_ready_on_dock_date_time?: string
+  // Operator-scanned dock location stamped by the RF Dock Staging flow.
+  // Nullable; legacy rows (and kits that reached on-dock via the
+  // pre-2026-05-17 completeKitBuild skip-inspection path) carry NULL.
+  // Validated client-side against `kitting_dropdown_options` rows where
+  // `option_group = 'dock_location'`. See
+  // `memorybank/OmniFrame/Implementations/RF-Dock-Staging-Flow.md`.
+  kit_dock_location?: string | null
 
   // Kit Status and Priority
   kit_build_status?: string
@@ -81,6 +159,18 @@ export interface RRKittingDataRecord {
   kit_flag_cleared_by_user?: string
   kit_flag_cleared_date_time?: string
 
+  // Per-line cancellation (migration 325). When `cancelled = true` the
+  // line is excluded from the picking/kitting stage gate and from BOM
+  // coverage matching, but remains visible in the Kit Build Audit
+  // Trail's TO Lines table for audit history. The four columns are
+  // populated together — DB CHECK constraint
+  // `rr_kitting_data_cancellation_invariants` enforces the all-or-
+  // nothing invariant. See [[Cancel-Kit-TO-Line]].
+  cancelled?: boolean
+  cancelled_at?: string | null
+  cancelled_by_user?: string | null
+  cancelled_reason?: string | null
+
   // INCORA and Ship Short Items (JSON arrays)
   incora_items?: Array<{ lineNumber: number; value: string }>
   authorized_ship_short_items?: Array<{
@@ -94,8 +184,16 @@ export interface RRKittingDataRecord {
     shortageDescription: string
   }>
 
+  // Kit Cart Color (hex, e.g. '#22c55e')
+  kit_cart_color?: string
+  kit_container_type?: string
+  charge_code?: string
+
   // Part Expedite Fields
   part_expedite_part_number?: string
+  part_expedite_description?: string
+  part_expedite_quantity?: number
+  part_expedite_delivery_time?: ExpediteDeliveryTime
   part_expedite_request_by_user?: string
   part_expedite_requested_by_date?: string
   part_expedite_request_create_date_time?: string
@@ -128,6 +226,22 @@ export interface KitGridRecord {
   kit_added_by_user_name: string | null
   kit_added_create_date_time: string | null
   kit_build_status: string | null
+  // Derived granular stage (picking / picking_complete / kitting / kit_built /
+  // kit_inspected / completed, else the raw status) computed from per-line
+  // progress. Display-only — raw kit_build_status drives tab/search logic.
+  kit_stage_status: string | null
+  // Engine program. Stand-alone single-part expedites are stamped 'EXPEDITE'
+  // (see addExpediteToKit mode 2) — the grid uses this to split them into
+  // their own tab.
+  engine_program: string | null
+  // Authorized to Ship Short part numbers attached to this kit (negate the
+  // auto-Black-Hat for the matching BOM line). Surfaced on the grid so the
+  // queue shows at a glance which kits carry a ship-short authorization.
+  authorized_ship_short_items: Array<{
+    lineNumber: number
+    partNumber: string
+    description: string
+  }>
   // Multiple flags support
   active_flags: ActiveFlagRecord[]
   // Legacy single flag fields (for backward compatibility)
@@ -176,31 +290,110 @@ export interface CreateKitBuildPlanInput {
     lineNumber: number
     partNumber: string
     description: string
+    // Display name of the operator who authorized the ship-short (stamped
+    // server-side at write time; see migration 101 format). Optional on input.
+    authorizedBy?: string | null
   }>
+  // Kit cart color designator (hex, e.g. '#22c55e')
+  kitCartColor?: string
+  // Kit container type snapshot (kit_cart | pallet | flight_case)
+  kitContainerType?: string
+  // Charge code snapshot for the build sheet
+  chargeCode?: string
   // BOM linkage
   kitDefinitionId?: string
   bomCoverage?: {
     matched: Array<{
+      componentType?: 'material' | 'incora_sub_kit' | 'incora_component'
       materialNumber: string
       materialDescription: string
       requiredQuantity: number
+      incoraReference?: string
     }>
     unmatched: Array<{
+      componentType?: 'material' | 'incora_sub_kit' | 'incora_component'
       materialNumber: string
       materialDescription: string
       requiredQuantity: number
+      incoraReference?: string
     }>
     isComplete: boolean
   }
 }
 
 // Type-safe wrapper for the supabase client to handle tables not in generated types
-const db = supabase as ReturnType<(typeof supabase)['from']> & {
+const db = supabase as unknown as ReturnType<(typeof supabase)['from']> & {
   from: (table: string) => ReturnType<(typeof supabase)['from']>
+}
+
+const HEX_COLOR_REGEX = /^#[0-9A-F]{6}$/i
+
+function formatBomCoverageLabel(component: {
+  componentType?: 'material' | 'incora_sub_kit' | 'incora_component'
+  materialNumber: string
+  materialDescription: string
+  incoraReference?: string
+}) {
+  let identifier: string
+  if (component.componentType === 'incora_sub_kit') {
+    identifier = `INCORA: ${component.incoraReference || 'Unknown'}`
+  } else if (component.componentType === 'incora_component') {
+    const matPart = component.materialNumber || ''
+    const refPart = component.incoraReference
+      ? `INCORA: ${component.incoraReference}`
+      : ''
+    identifier =
+      matPart && refPart
+        ? `${matPart} / ${refPart}`
+        : matPart || refPart || 'Unknown'
+  } else {
+    identifier = component.materialNumber
+  }
+
+  return `${identifier} (${component.materialDescription})`
+}
+
+function validateOptionalHexColor(color?: string) {
+  if (!color) return null
+  if (!HEX_COLOR_REGEX.test(color)) {
+    return 'Kit cart color must be a valid 6-digit hex value like #22C55E'
+  }
+  return null
 }
 
 export class RRKittingDataService {
   private static readonly TABLE_NAME = 'RR_Kitting_DATA'
+
+  /**
+   * Resolve the current signed-in user's display name (full name → first/last
+   * → email local-part). Used to stamp `authorizedBy` on ship-short items so
+   * the Kit Build Sheet can show who authorized each part. Returns null when
+   * unauthenticated or the profile can't be resolved.
+   */
+  private static async getCurrentUserDisplayName(): Promise<string | null> {
+    try {
+      const {
+        data: { user },
+      } = await supabase.auth.getUser()
+      if (!user) return null
+
+      const { data: profile } = await supabase
+        .from('user_profiles')
+        .select('full_name, first_name, last_name, email')
+        .eq('id', user.id)
+        .single()
+
+      if (!profile) return null
+      return (
+        profile.full_name?.trim() ||
+        `${profile.first_name?.trim() || ''} ${profile.last_name?.trim() || ''}`.trim() ||
+        profile.email?.split('@')[0] ||
+        null
+      )
+    } catch {
+      return null
+    }
+  }
 
   /**
    * Create kit build plan entries from form data
@@ -214,11 +407,29 @@ export class RRKittingDataService {
     kanbanError?: string // Error message if kanban task creation failed
     error?: string
   }> {
+    const colorError = validateOptionalHexColor(input.kitCartColor)
+    if (colorError) {
+      return { success: false, recordCount: 0, error: colorError }
+    }
+
     // Get the current user
     const {
       data: { user },
     } = await supabase.auth.getUser()
     const userId = user?.id
+
+    // Resolve the creator's display name to stamp as the ship-short authorizer
+    // for any items entered at creation time (preserves an explicit authorizedBy
+    // if the caller already provided one).
+    const creatorName = await this.getCurrentUserDisplayName()
+    const shipShortItems =
+      input.authorizedShipShortItems &&
+      input.authorizedShipShortItems.length > 0
+        ? input.authorizedShipShortItems.map((item) => ({
+            ...item,
+            authorizedBy: item.authorizedBy ?? creatorName ?? null,
+          }))
+        : []
 
     // Format due date for database
     const formattedDueDate = input.dueDate
@@ -250,15 +461,23 @@ export class RRKittingDataService {
         input.incoraItems && input.incoraItems.length > 0
           ? input.incoraItems
           : [],
-      authorized_ship_short_items:
-        input.authorizedShipShortItems &&
-        input.authorizedShipShortItems.length > 0
-          ? input.authorizedShipShortItems
-          : [],
+      authorized_ship_short_items: shipShortItems,
     }
 
     if (input.kitDefinitionId) {
       baseRecord.kit_definition_id = input.kitDefinitionId
+    }
+
+    if (input.kitCartColor) {
+      baseRecord.kit_cart_color = input.kitCartColor
+    }
+
+    if (input.kitContainerType) {
+      baseRecord.kit_container_type = input.kitContainerType
+    }
+
+    if (input.chargeCode) {
+      baseRecord.charge_code = input.chargeCode
     }
 
     // Track first record ID to link kanban task
@@ -290,9 +509,11 @@ export class RRKittingDataService {
       }))
 
       const { data, error } = await (
-        db.from(this.TABLE_NAME) as ReturnType<(typeof supabase)['from']>
+        db.from(this.TABLE_NAME) as unknown as ReturnType<
+          (typeof supabase)['from']
+        >
       )
-        .insert(records as unknown[])
+        .insert(records as never[])
         .select('id')
 
       if (error) {
@@ -301,8 +522,8 @@ export class RRKittingDataService {
       }
 
       // Get the first record ID for kanban linking
-      if (data && (data as { id: string }[]).length > 0) {
-        firstRecordId = (data as { id: string }[])[0].id
+      if (data && (data as unknown as { id: string }[]).length > 0) {
+        firstRecordId = (data as unknown as { id: string }[])[0].id
       }
 
       // Create kanban task for the Kit Assembly Board
@@ -317,16 +538,21 @@ export class RRKittingDataService {
         dueDate: formattedDueDate || undefined,
       })
 
-      // Update the records with the kanban task ID
+      // Update the records with the kanban task ID. Scope by
+      // kit_serial_number — keying by kit_po_number would clobber the
+      // kanban link of any existing kit that happens to share this PO
+      // (regression fix: 2026-05-12 KIT-001 / KIT-002 cross-link).
       if (kanbanResult.success && kanbanResult.taskId && firstRecordId) {
         await (
-          db.from(this.TABLE_NAME) as ReturnType<(typeof supabase)['from']>
+          db.from(this.TABLE_NAME) as unknown as ReturnType<
+            (typeof supabase)['from']
+          >
         )
           .update({ kanban_task_id: kanbanResult.taskId } as Record<
             string,
             unknown
           >)
-          .eq('kit_po_number', input.kitPoNumber)
+          .eq('kit_serial_number', kitSerialNumber)
       } else if (!kanbanResult.success) {
         // Log kanban task creation failure but don't fail the overall operation
         // The kit build plan records are already saved
@@ -335,22 +561,24 @@ export class RRKittingDataService {
         )
       }
 
-      // Auto-flag Black Hat if BOM coverage is incomplete
+      // Auto-flag Black Hat if BOM coverage is incomplete. Scope by
+      // kit_serial_number so two kits sharing a PO each carry their own
+      // flag.
       if (
         input.bomCoverage &&
         !input.bomCoverage.isComplete &&
         input.bomCoverage.unmatched.length > 0
       ) {
         const missingList = input.bomCoverage.unmatched
-          .map((m) => `${m.materialNumber} (${m.materialDescription})`)
+          .map((m) => formatBomCoverageLabel(m))
           .join(', ')
-        await this.addFlag(
-          input.kitPoNumber,
+        await this.addFlagBySerialNumber(
+          kitSerialNumber,
           'black',
-          `Auto-flagged: Missing BOM materials — ${missingList}`
+          `Auto-flagged: Missing BOM components — ${missingList}`
         )
         logger.log(
-          `[KittingService] Auto-flagged Black Hat for kit ${input.kitPoNumber}: ${input.bomCoverage.unmatched.length} missing materials`
+          `[KittingService] Auto-flagged Black Hat for kit ${kitSerialNumber}: ${input.bomCoverage.unmatched.length} missing components`
         )
       }
 
@@ -363,9 +591,11 @@ export class RRKittingDataService {
     } else {
       // No TOs imported, create a single record with just the form data
       const { data, error } = await (
-        db.from(this.TABLE_NAME) as ReturnType<(typeof supabase)['from']>
+        db.from(this.TABLE_NAME) as unknown as ReturnType<
+          (typeof supabase)['from']
+        >
       )
-        .insert([baseRecord] as unknown[])
+        .insert([baseRecord] as never[])
         .select('id')
 
       if (error) {
@@ -374,8 +604,8 @@ export class RRKittingDataService {
       }
 
       // Get the record ID for kanban linking
-      if (data && (data as { id: string }[]).length > 0) {
-        firstRecordId = (data as { id: string }[])[0].id
+      if (data && (data as unknown as { id: string }[]).length > 0) {
+        firstRecordId = (data as unknown as { id: string }[])[0].id
       }
 
       // Create kanban task for the Kit Assembly Board (0 TO lines if no TOs imported)
@@ -393,7 +623,9 @@ export class RRKittingDataService {
       // Update the record with the kanban task ID
       if (kanbanResult.success && kanbanResult.taskId && firstRecordId) {
         await (
-          db.from(this.TABLE_NAME) as ReturnType<(typeof supabase)['from']>
+          db.from(this.TABLE_NAME) as unknown as ReturnType<
+            (typeof supabase)['from']
+          >
         )
           .update({ kanban_task_id: kanbanResult.taskId } as Record<
             string,
@@ -407,22 +639,23 @@ export class RRKittingDataService {
         )
       }
 
-      // Auto-flag Black Hat if BOM coverage is incomplete
+      // Auto-flag Black Hat if BOM coverage is incomplete (per kit
+      // serial — see rationale on the with-TOs branch above).
       if (
         input.bomCoverage &&
         !input.bomCoverage.isComplete &&
         input.bomCoverage.unmatched.length > 0
       ) {
         const missingList = input.bomCoverage.unmatched
-          .map((m) => `${m.materialNumber} (${m.materialDescription})`)
+          .map((m) => formatBomCoverageLabel(m))
           .join(', ')
-        await this.addFlag(
-          input.kitPoNumber,
+        await this.addFlagBySerialNumber(
+          kitSerialNumber,
           'black',
-          `Auto-flagged: Missing BOM materials — ${missingList}`
+          `Auto-flagged: Missing BOM components — ${missingList}`
         )
         logger.log(
-          `[KittingService] Auto-flagged Black Hat for kit ${input.kitPoNumber}: ${input.bomCoverage.unmatched.length} missing materials`
+          `[KittingService] Auto-flagged Black Hat for kit ${kitSerialNumber}: ${input.bomCoverage.unmatched.length} missing components`
         )
       }
 
@@ -446,7 +679,9 @@ export class RRKittingDataService {
 
     // Find existing serials with today's prefix
     const { data } = await (
-      db.from(this.TABLE_NAME) as ReturnType<(typeof supabase)['from']>
+      db.from(this.TABLE_NAME) as unknown as ReturnType<
+        (typeof supabase)['from']
+      >
     )
       .select('kit_serial_number')
       .like('kit_serial_number', `${prefix}%`)
@@ -454,8 +689,11 @@ export class RRKittingDataService {
       .limit(1)
 
     let nextNumber = 1
-    if (data && (data as { kit_serial_number: string }[]).length > 0) {
-      const lastSerial = (data as { kit_serial_number: string }[])[0]
+    if (
+      data &&
+      (data as unknown as { kit_serial_number: string }[]).length > 0
+    ) {
+      const lastSerial = (data as unknown as { kit_serial_number: string }[])[0]
         .kit_serial_number
       const lastNumber = parseInt(lastSerial.replace(prefix, ''), 10)
       if (!isNaN(lastNumber)) {
@@ -471,15 +709,17 @@ export class RRKittingDataService {
    */
   private static async getNextPriority(): Promise<number> {
     const { data } = await (
-      db.from(this.TABLE_NAME) as ReturnType<(typeof supabase)['from']>
+      db.from(this.TABLE_NAME) as unknown as ReturnType<
+        (typeof supabase)['from']
+      >
     )
       .select('kit_priority')
       .not('kit_priority', 'is', null)
       .order('kit_priority', { ascending: false })
       .limit(1)
 
-    if (data && (data as { kit_priority: number }[]).length > 0) {
-      return (data as { kit_priority: number }[])[0].kit_priority + 1
+    if (data && (data as unknown as { kit_priority: number }[]).length > 0) {
+      return (data as unknown as { kit_priority: number }[])[0].kit_priority + 1
     }
 
     return 1
@@ -490,7 +730,9 @@ export class RRKittingDataService {
    */
   static async getAll(): Promise<RRKittingDataRecord[]> {
     const { data, error } = await (
-      db.from(this.TABLE_NAME) as ReturnType<(typeof supabase)['from']>
+      db.from(this.TABLE_NAME) as unknown as ReturnType<
+        (typeof supabase)['from']
+      >
     )
       .select('*')
       .order('created_at', { ascending: false })
@@ -500,7 +742,7 @@ export class RRKittingDataService {
       return []
     }
 
-    return (data as RRKittingDataRecord[]) || []
+    return (data as unknown as RRKittingDataRecord[]) || []
   }
 
   /**
@@ -510,7 +752,9 @@ export class RRKittingDataService {
     kitBuildNumber: string
   ): Promise<RRKittingDataRecord[]> {
     const { data, error } = await (
-      db.from(this.TABLE_NAME) as ReturnType<(typeof supabase)['from']>
+      db.from(this.TABLE_NAME) as unknown as ReturnType<
+        (typeof supabase)['from']
+      >
     )
       .select('*')
       .eq('kit_build_number', kitBuildNumber)
@@ -521,7 +765,7 @@ export class RRKittingDataService {
       return []
     }
 
-    return (data as RRKittingDataRecord[]) || []
+    return (data as unknown as RRKittingDataRecord[]) || []
   }
 
   /**
@@ -532,7 +776,9 @@ export class RRKittingDataService {
     status: string
   ): Promise<{ success: boolean; error?: string }> {
     const { error } = await (
-      db.from(this.TABLE_NAME) as ReturnType<(typeof supabase)['from']>
+      db.from(this.TABLE_NAME) as unknown as ReturnType<
+        (typeof supabase)['from']
+      >
     )
       .update({ kit_build_status: status } as Record<string, unknown>)
       .eq('id', id)
@@ -553,7 +799,9 @@ export class RRKittingDataService {
     updates: Partial<RRKittingDataRecord>
   ): Promise<{ success: boolean; error?: string }> {
     const { error } = await (
-      db.from(this.TABLE_NAME) as ReturnType<(typeof supabase)['from']>
+      db.from(this.TABLE_NAME) as unknown as ReturnType<
+        (typeof supabase)['from']
+      >
     )
       .update(updates as Record<string, unknown>)
       .eq('kit_build_number', kitBuildNumber)
@@ -573,7 +821,9 @@ export class RRKittingDataService {
     id: string
   ): Promise<{ success: boolean; error?: string }> {
     const { error } = await (
-      db.from(this.TABLE_NAME) as ReturnType<(typeof supabase)['from']>
+      db.from(this.TABLE_NAME) as unknown as ReturnType<
+        (typeof supabase)['from']
+      >
     )
       .delete()
       .eq('id', id)
@@ -587,6 +837,134 @@ export class RRKittingDataService {
   }
 
   /**
+   * Delete an entire kit from the build plan by serial number.
+   * Wipes RR_Kitting_DATA rows, kit_build_flags, and the kit_kanban_tasks
+   * card (which cascade-deletes kit_kanban_task_history).
+   */
+  static async deleteKitBySerialNumber(
+    kitSerialNumber: string
+  ): Promise<{ success: boolean; error?: string }> {
+    try {
+      // 1. Look up kit_po_number and kanban_task_id from the first row
+      const { data: rows, error: lookupError } = await (
+        db.from(this.TABLE_NAME) as unknown as ReturnType<
+          (typeof supabase)['from']
+        >
+      )
+        .select('id, kit_po_number, kanban_task_id')
+        .eq('kit_serial_number', kitSerialNumber)
+
+      if (lookupError) {
+        logger.error('Error looking up kit for deletion:', lookupError)
+        return { success: false, error: lookupError.message }
+      }
+
+      const typedRows =
+        (rows as unknown as
+          | {
+              id: string
+              kit_po_number: string
+              kanban_task_id: string | null
+            }[]
+          | null) ?? []
+
+      if (typedRows.length === 0) {
+        return { success: false, error: 'Kit not found' }
+      }
+
+      const kitPoNumber = typedRows[0].kit_po_number
+      const rowIds = typedRows.map((r) => r.id)
+      const kanbanTaskId = typedRows.find(
+        (r) => r.kanban_task_id
+      )?.kanban_task_id
+
+      // 2. Delete kit_build_flags (no FK — must be explicit)
+      //    Try by kit_serial_number first, fall back to kit_po_number
+      const { error: flagSerialErr } = await (
+        db.from('kit_build_flags') as ReturnType<(typeof supabase)['from']>
+      )
+        .delete()
+        .eq('kit_serial_number', kitSerialNumber)
+
+      if (flagSerialErr) {
+        logger.warn(
+          'Falling back to kit_po_number for flag deletion:',
+          flagSerialErr.message
+        )
+        const { error: flagPoErr } = await (
+          db.from('kit_build_flags') as ReturnType<(typeof supabase)['from']>
+        )
+          .delete()
+          .eq('kit_po_number', kitPoNumber)
+
+        if (flagPoErr) {
+          logger.error('Error deleting kit_build_flags:', flagPoErr)
+        }
+      }
+
+      // 3. Delete kit_kanban_tasks (cascades to kit_kanban_task_history)
+      //    Try by kit_serial_number on the tasks table
+      const { error: kanbanErr } = await (
+        db.from('kit_kanban_tasks') as ReturnType<(typeof supabase)['from']>
+      )
+        .delete()
+        .eq('kit_serial_number', kitSerialNumber)
+
+      if (kanbanErr) {
+        logger.warn(
+          'Kanban delete by serial failed, trying by task ID:',
+          kanbanErr.message
+        )
+        if (kanbanTaskId) {
+          await KitKanbanService.deleteTask(kanbanTaskId)
+        }
+      }
+
+      // 4. Delete all RR_Kitting_DATA rows by their specific IDs
+      //    Using .in('id', [...]) avoids silent RLS no-ops on kit_serial_number
+      const { error: dataErr } = await (
+        db.from(this.TABLE_NAME) as unknown as ReturnType<
+          (typeof supabase)['from']
+        >
+      )
+        .delete()
+        .in('id', rowIds)
+
+      if (dataErr) {
+        logger.error('Error deleting RR_Kitting_DATA rows:', dataErr)
+        return { success: false, error: dataErr.message }
+      }
+
+      // 5. Verify the rows are actually gone
+      const { data: remaining } = await (
+        db.from(this.TABLE_NAME) as unknown as ReturnType<
+          (typeof supabase)['from']
+        >
+      )
+        .select('id')
+        .eq('kit_serial_number', kitSerialNumber)
+        .limit(1)
+
+      if (remaining && (remaining as unknown as { id: string }[]).length > 0) {
+        logger.error(
+          'Kit rows still exist after delete — likely blocked by RLS policy'
+        )
+        return {
+          success: false,
+          error:
+            'Delete was blocked by database permissions. Contact an administrator.',
+        }
+      }
+
+      logger.log(`Kit ${kitSerialNumber} fully deleted from build plan`)
+      return { success: true }
+    } catch (err) {
+      logger.error('Unexpected error deleting kit:', err)
+      return { success: false, error: 'Unexpected error during kit deletion' }
+    }
+  }
+
+  /**
    * Get statistics for the dashboard
    */
   static async getStatistics(): Promise<{
@@ -594,31 +972,145 @@ export class RRKittingDataService {
     pendingCount: number
     inProgressCount: number
     completedCount: number
+    completedTodayCount: number
+    completedYesterdayCount: number
+    completedThisWeekCount: number
   }> {
-    const { data, error } = await (
-      db.from(this.TABLE_NAME) as ReturnType<(typeof supabase)['from']>
-    ).select('kit_build_status')
+    // Supabase caps a single select at 1000 rows. RR_Kitting_DATA has one row
+    // per TO line, so a large queue easily exceeds that — page through in
+    // 1000-row batches (ordered by the unique `id` so pages don't skip/dup)
+    // until a short page, the same pattern the inbound-scan / putaway-log
+    // services use to pull the full dataset.
+    const PAGE_SIZE = 1000
+    const records: Array<{
+      kit_serial_number: string | null
+      kit_build_status: string | null
+      kit_ready_on_dock_date_time: string | null
+    }> = []
+    let page = 0
+    let hasMore = true
 
-    if (error) {
-      logger.error('Error fetching statistics:', error)
-      return {
-        totalRecords: 0,
-        pendingCount: 0,
-        inProgressCount: 0,
-        completedCount: 0,
+    while (hasMore) {
+      const from = page * PAGE_SIZE
+      const to = from + PAGE_SIZE - 1
+      const { data, error } = await (
+        db.from(this.TABLE_NAME) as unknown as ReturnType<
+          (typeof supabase)['from']
+        >
+      )
+        .select(
+          'kit_serial_number, kit_build_status, kit_ready_on_dock_date_time'
+        )
+        .order('id', { ascending: true })
+        .range(from, to)
+
+      if (error) {
+        logger.error('Error fetching statistics:', error)
+        // First page failed → nothing usable; otherwise compute from what we
+        // already paged in (best-effort rather than reporting zeros).
+        if (page === 0) {
+          return {
+            totalRecords: 0,
+            pendingCount: 0,
+            inProgressCount: 0,
+            completedCount: 0,
+            completedTodayCount: 0,
+            completedYesterdayCount: 0,
+            completedThisWeekCount: 0,
+          }
+        }
+        break
       }
+
+      const batch =
+        (data as unknown as Array<{
+          kit_serial_number: string | null
+          kit_build_status: string | null
+          kit_ready_on_dock_date_time: string | null
+        }>) || []
+      records.push(...batch)
+      hasMore = batch.length === PAGE_SIZE
+      page++
     }
 
-    const records = (data as Array<{ kit_build_status: string | null }>) || []
+    // RR_Kitting_DATA holds one row per TO line (i.e. per part), so counting
+    // rows would report parts, not kits. The status is snapshot-replicated
+    // across a kit's rows, so count DISTINCT kit_serial_number per state.
+    //
+    // "Completed" follows the canonical on-dock = done invariant: a kit is
+    // completed if it's on dock OR stored 'completed' (some on-dock kits sit
+    // at a stale 'printed' status — e.g. a cover-sheet reprint regressed it),
+    // matching the Completed Kits tab. Pending / In Progress exclude any kit
+    // that's completed.
+    const completedSerials = new Set<string>()
+    for (const r of records) {
+      if (
+        r.kit_serial_number &&
+        (r.kit_ready_on_dock_date_time != null ||
+          r.kit_build_status === 'completed')
+      ) {
+        completedSerials.add(r.kit_serial_number)
+      }
+    }
+    const countOpenKitsByStatus = (status: string): number => {
+      const serials = new Set<string>()
+      for (const r of records) {
+        if (
+          r.kit_serial_number &&
+          r.kit_build_status === status &&
+          !completedSerials.has(r.kit_serial_number)
+        ) {
+          serials.add(r.kit_serial_number)
+        }
+      }
+      return serials.size
+    }
+
+    // Date-scoped completion buckets (Today / Yesterday / Last 7 days),
+    // mirroring the outbound data manager's EST-based "today" metrics.
+    // The dock timestamp is the completion moment — stageKitToDock stamps
+    // kit_ready_on_dock_date_time on every row of the kit when it reaches
+    // the dock. Kits stored as 'completed' without a dock timestamp
+    // (legacy rows) can't be dated, so they only count toward the
+    // all-time total above.
+    const dockDateBySerial = new Map<string, string>()
+    for (const r of records) {
+      if (
+        r.kit_serial_number &&
+        r.kit_ready_on_dock_date_time &&
+        !dockDateBySerial.has(r.kit_serial_number)
+      ) {
+        // EST calendar date (YYYY-MM-DD) of the UTC dock timestamp
+        dockDateBySerial.set(
+          r.kit_serial_number,
+          getStartOfDayEST(new Date(r.kit_ready_on_dock_date_time)).slice(0, 10)
+        )
+      }
+    }
+    const todayEST = getTodayEST()
+    const yesterdayEST = getDaysAgoEST(1)
+    // Rolling 7-day window including today — same convention as the
+    // outbound statistics' getDaysAgoEST(7) week metric.
+    const weekAgoEST = getDaysAgoEST(7)
+    let completedTodayCount = 0
+    let completedYesterdayCount = 0
+    let completedThisWeekCount = 0
+    for (const date of dockDateBySerial.values()) {
+      if (date === todayEST) completedTodayCount++
+      if (date === yesterdayEST) completedYesterdayCount++
+      if (date >= weekAgoEST) completedThisWeekCount++
+    }
+
     return {
+      // totalRecords stays a row count — the "Total kit records" card reports
+      // total line items, not kits (the "Kit PO Numbers" card shows kit count).
       totalRecords: records.length,
-      pendingCount: records.filter((r) => r.kit_build_status === 'pending')
-        .length,
-      inProgressCount: records.filter(
-        (r) => r.kit_build_status === 'in_progress'
-      ).length,
-      completedCount: records.filter((r) => r.kit_build_status === 'completed')
-        .length,
+      pendingCount: countOpenKitsByStatus('pending'),
+      inProgressCount: countOpenKitsByStatus('in_progress'),
+      completedCount: completedSerials.size,
+      completedTodayCount,
+      completedYesterdayCount,
+      completedThisWeekCount,
     }
   }
 
@@ -627,18 +1119,6 @@ export class RRKittingDataService {
    * Records are ordered by kit_priority (ascending), with priority being the row position
    */
   static async getKitGridData(): Promise<KitGridRecord[]> {
-    // Fetch main kitting data
-    const { data, error } = await (
-      db.from(this.TABLE_NAME) as ReturnType<(typeof supabase)['from']>
-    )
-      .select('*')
-      .order('kit_added_create_date_time', { ascending: false })
-
-    if (error) {
-      logger.error('Error fetching kit grid data:', error)
-      return []
-    }
-
     type RawKitRecord = {
       id: string
       kit_serial_number?: string | null // PRIMARY KEY: Unique identifier for each kit build
@@ -650,6 +1130,19 @@ export class RRKittingDataService {
       kit_added_by_user?: string | null
       kit_added_create_date_time?: string | null
       kit_build_status?: string | null
+      engine_program?: string | null
+      // Per-line + kit-level progress, used to derive the real current stage
+      // (Picking / Picking Complete / Kitting / …) for the Status column.
+      kit_to_line_picked_date_time?: string | null
+      kit_to_line_kitted_date_time?: string | null
+      kit_inspection_completion_date_time?: string | null
+      kit_ready_on_dock_date_time?: string | null
+      cancelled?: boolean | null
+      authorized_ship_short_items?: Array<{
+        lineNumber: number
+        partNumber: string
+        description: string
+      }> | null
       // Kit Flag fields (legacy)
       kit_flag_type?: 'purple' | 'orange' | 'red' | 'black' | null
       kit_flag_set_by_user?: string | null
@@ -658,13 +1151,59 @@ export class RRKittingDataService {
       kit_flag_cleared_date_time?: string | null
     }
 
-    const records = (data as RawKitRecord[]) || []
+    // Fetch main kitting data. Supabase caps a select at 1000 rows and
+    // RR_Kitting_DATA has one row per TO line, so page through in 1000-row
+    // batches until a short page (mirrors the inbound-scan / putaway-log
+    // fetch-all pattern). Secondary sort on the unique `id` keeps pages stable
+    // when many rows share the same kit_added_create_date_time.
+    const PAGE_SIZE = 1000
+    const records: RawKitRecord[] = []
+    let page = 0
+    let hasMore = true
+
+    while (hasMore) {
+      const from = page * PAGE_SIZE
+      const to = from + PAGE_SIZE - 1
+      const { data, error } = await (
+        db.from(this.TABLE_NAME) as unknown as ReturnType<
+          (typeof supabase)['from']
+        >
+      )
+        .select('*')
+        .order('kit_added_create_date_time', { ascending: false })
+        .order('id', { ascending: true })
+        .range(from, to)
+
+      if (error) {
+        logger.error('Error fetching kit grid data:', error)
+        if (page === 0) return []
+        break
+      }
+
+      const batch = (data as RawKitRecord[]) || []
+      records.push(...batch)
+      hasMore = batch.length === PAGE_SIZE
+      page++
+    }
 
     logger.log('[KittingService] Fetched records:', records.length)
 
     // Group by kit_serial_number (unique identifier for each kit build)
-    // This ensures each kit build is treated as its own entity, even with same PO number
+    // This ensures each kit build is treated as its own entity, even with same PO number.
+    // While grouping we also AGGREGATE the per-line picked/kitted progress (one
+    // RR_Kitting_DATA row per TO line) + kit-level inspection / on-dock flags so
+    // we can derive the real current stage for the Status column instead of the
+    // coarse stored kit_build_status (which sits on "in_progress" through both
+    // picking and kitting). Mirrors the stage math in getKitBuildPlanDetails*.
+    type StageAgg = {
+      total: number
+      picked: number
+      kitted: number
+      inspected: boolean
+      onDock: boolean
+    }
     const uniqueBySerialNumber = new Map<string, RawKitRecord>()
+    const aggBySerialNumber = new Map<string, StageAgg>()
     for (const record of records) {
       // Use kit_serial_number as the unique key - it's generated uniquely for each kit build
       const serialNumber =
@@ -672,6 +1211,40 @@ export class RRKittingDataService {
       if (!uniqueBySerialNumber.has(serialNumber)) {
         uniqueBySerialNumber.set(serialNumber, record)
       }
+
+      const agg = aggBySerialNumber.get(serialNumber) ?? {
+        total: 0,
+        picked: 0,
+        kitted: 0,
+        inspected: false,
+        onDock: false,
+      }
+      // Cancelled lines don't count toward picking/kitting completion.
+      if (!record.cancelled) {
+        agg.total += 1
+        if (record.kit_to_line_picked_date_time) agg.picked += 1
+        if (record.kit_to_line_kitted_date_time) agg.kitted += 1
+      }
+      if (record.kit_inspection_completion_date_time) agg.inspected = true
+      if (record.kit_ready_on_dock_date_time) agg.onDock = true
+      aggBySerialNumber.set(serialNumber, agg)
+    }
+
+    // Derive the granular current stage from aggregated progress. Falls back to
+    // the stored status (pending / printed) when nothing has been picked yet.
+    const deriveStage = (
+      agg: StageAgg | undefined,
+      rawStatus: string | null | undefined
+    ): string => {
+      if (agg) {
+        if (agg.onDock || rawStatus === 'completed') return 'completed'
+        if (agg.inspected) return 'kit_inspected'
+        if (agg.total > 0 && agg.kitted === agg.total) return 'kit_built'
+        if (agg.kitted > 0) return 'kitting'
+        if (agg.total > 0 && agg.picked === agg.total) return 'picking_complete'
+        if (agg.picked > 0) return 'picking'
+      }
+      return rawStatus ?? 'pending'
     }
 
     logger.log(
@@ -845,6 +1418,16 @@ export class RRKittingDataService {
           : null,
         kit_added_create_date_time: record.kit_added_create_date_time ?? null,
         kit_build_status: record.kit_build_status ?? null,
+        // Derived current stage (Picking / Picking Complete / Kitting / …) for
+        // the Status column. Raw kit_build_status is kept for tab/search logic.
+        kit_stage_status: deriveStage(
+          aggBySerialNumber.get(
+            record.kit_serial_number || `__no_serial_${record.id}`
+          ),
+          record.kit_build_status
+        ),
+        engine_program: record.engine_program ?? null,
+        authorized_ship_short_items: record.authorized_ship_short_items ?? [],
         // Multiple active flags
         active_flags: flags.map((f) => ({
           id: f.id,
@@ -913,7 +1496,9 @@ export class RRKittingDataService {
         let currentCount = 0
         try {
           const { data: currentData } = await (
-            db.from(this.TABLE_NAME) as ReturnType<(typeof supabase)['from']>
+            db.from(this.TABLE_NAME) as unknown as ReturnType<
+              (typeof supabase)['from']
+            >
           )
             .select('kit_priority_change_count')
             .eq('kit_serial_number', row.kit_serial_number)
@@ -945,7 +1530,9 @@ export class RRKittingDataService {
 
         // Use kit_serial_number as the unique identifier for this specific kit build
         const { error } = await (
-          db.from(this.TABLE_NAME) as ReturnType<(typeof supabase)['from']>
+          db.from(this.TABLE_NAME) as unknown as ReturnType<
+            (typeof supabase)['from']
+          >
         )
           .update(updateData)
           .eq('kit_serial_number', row.kit_serial_number)
@@ -1038,6 +1625,11 @@ export class RRKittingDataService {
       missingPartFlag: boolean
       missingPartPhotoUrl: string | null
       missingPartNotes: string | null
+      // Per-line cancellation (migration 325)
+      cancelled: boolean
+      cancelledAt: string | null
+      cancelledBy: string | null
+      cancelledReason: string | null
     }>
     stages: Array<{
       id: string
@@ -1055,17 +1647,26 @@ export class RRKittingDataService {
     flagClearedByUser: string | null
     flagClearedByUserName: string | null
     flagClearedDateTime: string | null
+    // Kit cart color designator
+    kitCartColor: string | null
+    // Kit container type snapshot
+    kitContainerType: string | null
+    // Charge code snapshot
+    chargeCode: string | null
     // INCORA and Ship Short items
     incoraItems: Array<{ lineNumber: number; value: string }>
     authorizedShipShortItems: Array<{
       lineNumber: number
       partNumber: string
       description: string
+      authorizedBy?: string | null
     }>
   } | null> {
     // Build query - filter by kit_po_number and optionally by kit_number for unique identification
     let query = (
-      db.from(this.TABLE_NAME) as ReturnType<(typeof supabase)['from']>
+      db.from(this.TABLE_NAME) as unknown as ReturnType<
+        (typeof supabase)['from']
+      >
     )
       .select('*')
       .eq('kit_po_number', kitPoNumber)
@@ -1078,12 +1679,16 @@ export class RRKittingDataService {
 
     const { data, error } = await query.order('created_at', { ascending: true })
 
-    if (error || !data || (data as RRKittingDataRecord[]).length === 0) {
+    if (
+      error ||
+      !data ||
+      (data as unknown as RRKittingDataRecord[]).length === 0
+    ) {
       logger.error('Error fetching kit build plan details:', error)
       return null
     }
 
-    const records = data as RRKittingDataRecord[]
+    const records = data as unknown as RRKittingDataRecord[]
     const firstRecord = records[0]
 
     // Calculate position-based priority to match Kitting Data Manager display
@@ -1091,7 +1696,9 @@ export class RRKittingDataService {
     let positionPriority = 1
     try {
       const { data: allKits } = await (
-        db.from(this.TABLE_NAME) as ReturnType<(typeof supabase)['from']>
+        db.from(this.TABLE_NAME) as unknown as ReturnType<
+          (typeof supabase)['from']
+        >
       )
         .select('kit_po_number, kit_number, kit_priority')
         .not('kit_priority', 'is', null)
@@ -1101,7 +1708,7 @@ export class RRKittingDataService {
         // Group by PO + Kit Number to get unique kits
         const seenKits = new Set<string>()
         const sortedUniqueKits: string[] = []
-        for (const kit of allKits as Array<{
+        for (const kit of allKits as unknown as Array<{
           kit_po_number: string
           kit_number: string
           kit_priority: number
@@ -1136,6 +1743,7 @@ export class RRKittingDataService {
         userIds.add(r.kit_to_line_kitted_by_user)
       if (r.kit_flag_set_by_user) userIds.add(r.kit_flag_set_by_user)
       if (r.kit_flag_cleared_by_user) userIds.add(r.kit_flag_cleared_by_user)
+      if (r.cancelled_by_user) userIds.add(r.cancelled_by_user)
     })
 
     const userNameMap = new Map<string, string>()
@@ -1184,12 +1792,24 @@ export class RRKittingDataService {
         missingPartFlag: !!(r as any).missing_part_flag,
         missingPartPhotoUrl: (r as any).missing_part_photo_url || null,
         missingPartNotes: (r as any).missing_part_notes || null,
+        // Per-line cancellation (migration 325). Cancelled lines stay
+        // visible in the audit-trail TO Lines table but are excluded
+        // from picking/kitting/total stage counts below.
+        cancelled: !!r.cancelled,
+        cancelledAt: r.cancelled_at || null,
+        cancelledBy: r.cancelled_by_user
+          ? userNameMap.get(r.cancelled_by_user) || null
+          : null,
+        cancelledReason: r.cancelled_reason || null,
       }))
 
-    // Calculate stage progress
-    const totalLines = toLines.length || 1
-    const pickedCount = toLines.filter((t) => t.picked).length
-    const kittedCount = toLines.filter((t) => t.kitted).length
+    // Calculate stage progress — cancelled lines are excluded from
+    // totals so a cancelled TO doesn't block the kit from advancing.
+    // See [[Cancel-Kit-TO-Line]].
+    const activeToLines = toLines.filter((t) => !t.cancelled)
+    const totalLines = activeToLines.length || 1
+    const pickedCount = activeToLines.filter((t) => t.picked).length
+    const kittedCount = activeToLines.filter((t) => t.kitted).length
     const inspected = !!firstRecord.kit_inspection_completion_date_time
     const onDock = !!firstRecord.kit_ready_on_dock_date_time
 
@@ -1283,6 +1903,12 @@ export class RRKittingDataService {
         ? userNameMap.get(firstRecord.kit_flag_cleared_by_user) || null
         : null,
       flagClearedDateTime: firstRecord.kit_flag_cleared_date_time || null,
+      // Kit cart color
+      kitCartColor: firstRecord.kit_cart_color || null,
+      // Kit container type
+      kitContainerType: firstRecord.kit_container_type || null,
+      // Charge code
+      chargeCode: firstRecord.charge_code || null,
       // INCORA and Ship Short items
       incoraItems:
         (firstRecord.incora_items as Array<{
@@ -1294,6 +1920,7 @@ export class RRKittingDataService {
           lineNumber: number
           partNumber: string
           description: string
+          authorizedBy?: string | null
         }>) || [],
     }
   }
@@ -1334,6 +1961,11 @@ export class RRKittingDataService {
       missingPartFlag: boolean
       missingPartPhotoUrl: string | null
       missingPartNotes: string | null
+      // Per-line cancellation (migration 325)
+      cancelled: boolean
+      cancelledAt: string | null
+      cancelledBy: string | null
+      cancelledReason: string | null
     }>
     stages: Array<{
       id: string
@@ -1350,22 +1982,32 @@ export class RRKittingDataService {
     flagClearedByUser: string | null
     flagClearedByUserName: string | null
     flagClearedDateTime: string | null
+    kitCartColor: string | null
+    kitContainerType: string | null
+    chargeCode: string | null
     incoraItems: Array<{ lineNumber: number; value: string }>
     authorizedShipShortItems: Array<{
       lineNumber: number
       partNumber: string
       description: string
+      authorizedBy?: string | null
     }>
   } | null> {
     // Query by kit_serial_number - unique identifier for each kit build
     const { data, error } = await (
-      db.from(this.TABLE_NAME) as ReturnType<(typeof supabase)['from']>
+      db.from(this.TABLE_NAME) as unknown as ReturnType<
+        (typeof supabase)['from']
+      >
     )
       .select('*')
       .eq('kit_serial_number', kitSerialNumber)
       .order('created_at', { ascending: true })
 
-    if (error || !data || (data as RRKittingDataRecord[]).length === 0) {
+    if (
+      error ||
+      !data ||
+      (data as unknown as RRKittingDataRecord[]).length === 0
+    ) {
       logger.error(
         'Error fetching kit build plan details by serial number:',
         error
@@ -1373,14 +2015,16 @@ export class RRKittingDataService {
       return null
     }
 
-    const records = data as RRKittingDataRecord[]
+    const records = data as unknown as RRKittingDataRecord[]
     const firstRecord = records[0]
 
     // Calculate position-based priority
     let positionPriority = 1
     try {
       const { data: allKits } = await (
-        db.from(this.TABLE_NAME) as ReturnType<(typeof supabase)['from']>
+        db.from(this.TABLE_NAME) as unknown as ReturnType<
+          (typeof supabase)['from']
+        >
       )
         .select('kit_serial_number, kit_priority')
         .not('kit_priority', 'is', null)
@@ -1389,7 +2033,7 @@ export class RRKittingDataService {
       if (allKits) {
         const seenSerials = new Set<string>()
         const sortedUniqueKits: string[] = []
-        for (const kit of allKits as Array<{
+        for (const kit of allKits as unknown as Array<{
           kit_serial_number: string
           kit_priority: number
         }>) {
@@ -1420,6 +2064,7 @@ export class RRKittingDataService {
         userIds.add(r.kit_to_line_kitted_by_user)
       if (r.kit_flag_set_by_user) userIds.add(r.kit_flag_set_by_user)
       if (r.kit_flag_cleared_by_user) userIds.add(r.kit_flag_cleared_by_user)
+      if (r.cancelled_by_user) userIds.add(r.cancelled_by_user)
     })
 
     const userNameMap = new Map<string, string>()
@@ -1467,12 +2112,23 @@ export class RRKittingDataService {
         missingPartFlag: !!(r as any).missing_part_flag,
         missingPartPhotoUrl: (r as any).missing_part_photo_url || null,
         missingPartNotes: (r as any).missing_part_notes || null,
+        // Per-line cancellation (migration 325).
+        cancelled: !!r.cancelled,
+        cancelledAt: r.cancelled_at || null,
+        cancelledBy: r.cancelled_by_user
+          ? userNameMap.get(r.cancelled_by_user) || null
+          : null,
+        cancelledReason: r.cancelled_reason || null,
       }))
 
-    // Calculate stages
-    const totalLines = toLines.length || 1
-    const pickedCount = toLines.filter((t) => t.picked).length
-    const kittedCount = toLines.filter((t) => t.kitted).length
+    // Calculate stages — cancelled lines are excluded from totals so a
+    // cancelled TO doesn't block the kit from advancing through Picking
+    // → Kitting → On Dock. The cancelled rows are still rendered in the
+    // audit-trail table for traceability. See [[Cancel-Kit-TO-Line]].
+    const activeToLines = toLines.filter((t) => !t.cancelled)
+    const totalLines = activeToLines.length || 1
+    const pickedCount = activeToLines.filter((t) => t.picked).length
+    const kittedCount = activeToLines.filter((t) => t.kitted).length
     const inspected = !!firstRecord.kit_inspection_completion_date_time
     const onDock = !!firstRecord.kit_ready_on_dock_date_time
 
@@ -1565,6 +2221,9 @@ export class RRKittingDataService {
         ? userNameMap.get(firstRecord.kit_flag_cleared_by_user) || null
         : null,
       flagClearedDateTime: firstRecord.kit_flag_cleared_date_time || null,
+      kitCartColor: firstRecord.kit_cart_color || null,
+      kitContainerType: firstRecord.kit_container_type || null,
+      chargeCode: firstRecord.charge_code || null,
       incoraItems:
         (firstRecord.incora_items as Array<{
           lineNumber: number
@@ -1575,6 +2234,7 @@ export class RRKittingDataService {
           lineNumber: number
           partNumber: string
           description: string
+          authorizedBy?: string | null
         }>) || [],
     }
   }
@@ -1702,7 +2362,7 @@ export class RRKittingDataService {
         .eq('is_active', true)
         .limit(1)
 
-      if (existing && (existing as { id: string }[]).length > 0) {
+      if (existing && (existing as unknown as { id: string }[]).length > 0) {
         return {
           success: false,
           error: `${flagType} flag already exists for this kit`,
@@ -1711,7 +2371,9 @@ export class RRKittingDataService {
 
       // Get the kit_po_number for this kit (for backward compatibility)
       const { data: kitData } = await (
-        db.from(this.TABLE_NAME) as ReturnType<(typeof supabase)['from']>
+        db.from(this.TABLE_NAME) as unknown as ReturnType<
+          (typeof supabase)['from']
+        >
       )
         .select('kit_po_number')
         .eq('kit_serial_number', kitSerialNumber)
@@ -1719,10 +2381,13 @@ export class RRKittingDataService {
         .single()
 
       const kitPoNumber =
-        (kitData as { kit_po_number: string } | null)?.kit_po_number || ''
+        (kitData as unknown as { kit_po_number: string } | null)
+          ?.kit_po_number || ''
 
       const { data, error } = await (
-        db.from('kit_build_flags') as ReturnType<(typeof supabase)['from']>
+        db.from('kit_build_flags') as unknown as ReturnType<
+          (typeof supabase)['from']
+        >
       )
         .insert({
           kit_serial_number: kitSerialNumber,
@@ -1732,7 +2397,7 @@ export class RRKittingDataService {
           set_by_user: userId,
           set_date_time: new Date().toISOString(),
           notes: notes || null,
-        } as unknown)
+        } as never)
         .select('id')
         .single()
 
@@ -1792,7 +2457,9 @@ export class RRKittingDataService {
 
       if (primaryFlag) {
         await (
-          db.from(this.TABLE_NAME) as ReturnType<(typeof supabase)['from']>
+          db.from(this.TABLE_NAME) as unknown as ReturnType<
+            (typeof supabase)['from']
+          >
         )
           .update({
             kit_flag_type: primaryFlag.flag_type,
@@ -1807,7 +2474,9 @@ export class RRKittingDataService {
           data: { user },
         } = await supabase.auth.getUser()
         await (
-          db.from(this.TABLE_NAME) as ReturnType<(typeof supabase)['from']>
+          db.from(this.TABLE_NAME) as unknown as ReturnType<
+            (typeof supabase)['from']
+          >
         )
           .update({
             kit_flag_type: null,
@@ -1842,7 +2511,9 @@ export class RRKittingDataService {
       }
 
       const { error } = await (
-        db.from(this.TABLE_NAME) as ReturnType<(typeof supabase)['from']>
+        db.from(this.TABLE_NAME) as unknown as ReturnType<
+          (typeof supabase)['from']
+        >
       )
         .update({
           kit_flag_type: flagType,
@@ -1892,7 +2563,9 @@ export class RRKittingDataService {
       }
 
       const { error } = await (
-        db.from(this.TABLE_NAME) as ReturnType<(typeof supabase)['from']>
+        db.from(this.TABLE_NAME) as unknown as ReturnType<
+          (typeof supabase)['from']
+        >
       )
         .update({
           kit_flag_type: null,
@@ -1935,7 +2608,9 @@ export class RRKittingDataService {
   } | null> {
     try {
       const { data, error } = await (
-        db.from(this.TABLE_NAME) as ReturnType<(typeof supabase)['from']>
+        db.from(this.TABLE_NAME) as unknown as ReturnType<
+          (typeof supabase)['from']
+        >
       )
         .select(
           'kit_flag_type, kit_flag_set_by_user, kit_flag_set_date_time, kit_flag_cleared_by_user, kit_flag_cleared_date_time'
@@ -1949,7 +2624,7 @@ export class RRKittingDataService {
         return null
       }
 
-      const record = data as {
+      const record = data as unknown as {
         kit_flag_type: 'purple' | 'orange' | 'red' | 'black' | null
         kit_flag_set_by_user: string | null
         kit_flag_set_date_time: string | null
@@ -2297,7 +2972,7 @@ export class RRKittingDataService {
 
       const { data: existing } = await existingQuery.limit(1)
 
-      if (existing && (existing as { id: string }[]).length > 0) {
+      if (existing && (existing as unknown as { id: string }[]).length > 0) {
         return {
           success: false,
           error: `${flagType} flag already exists for this kit`,
@@ -2405,9 +3080,11 @@ export class RRKittingDataService {
   }
 
   /**
-   * Clear all active flags of a specific type for a kit
-   * @param kitPoNumber - The kit PO number
-   * @param flagType - The type of flag to clear
+   * Clear all active flags of a specific type for a kit (PO scope).
+   *
+   * @deprecated Use {@link clearFlagByTypeBySerialNumber}. When two kits
+   * share a PO this clears flags on both, which is wrong for floor SOP
+   * (clearing a Black Hat on Gear Box 1 must NOT clear it on Gear Box 2).
    */
   static async clearFlagByType(
     kitPoNumber: string,
@@ -2457,6 +3134,57 @@ export class RRKittingDataService {
   }
 
   /**
+   * Clear all active flags of a specific type for a single kit serial.
+   * Preferred over {@link clearFlagByType} — flags are per-kit-serial
+   * post 303_kit_build_flags_serial_scope.
+   */
+  static async clearFlagByTypeBySerialNumber(
+    kitSerialNumber: string,
+    flagType: 'purple' | 'orange' | 'red' | 'black'
+  ): Promise<{ success: boolean; error?: string }> {
+    try {
+      const {
+        data: { user },
+      } = await supabase.auth.getUser()
+      const userId = user?.id
+
+      if (!userId) {
+        return { success: false, error: 'User not authenticated' }
+      }
+
+      const { error } = await (
+        db.from('kit_build_flags') as ReturnType<(typeof supabase)['from']>
+      )
+        .update({
+          is_active: false,
+          cleared_by_user: userId,
+          cleared_date_time: new Date().toISOString(),
+        } as Record<string, unknown>)
+        .eq('kit_serial_number', kitSerialNumber)
+        .eq('flag_type', flagType)
+        .eq('is_active', true)
+
+      if (error) {
+        logger.error('Error clearing flag by type by serial number:', error)
+        return { success: false, error: error.message }
+      }
+
+      await this.syncLegacyFlagBySerialNumber(kitSerialNumber)
+
+      logger.log(
+        `[KittingService] Cleared ${flagType} flag for kit ${kitSerialNumber}`
+      )
+      return { success: true }
+    } catch (err) {
+      logger.error('Error clearing flag by type by serial number:', err)
+      return {
+        success: false,
+        error: err instanceof Error ? err.message : 'Unknown error',
+      }
+    }
+  }
+
+  /**
    * Sync the legacy single flag field with the first active flag from kit_build_flags
    * This maintains backward compatibility with the original single-flag implementation
    */
@@ -2494,7 +3222,9 @@ export class RRKittingDataService {
       // Update the legacy fields
       if (primaryFlag) {
         await (
-          db.from(this.TABLE_NAME) as ReturnType<(typeof supabase)['from']>
+          db.from(this.TABLE_NAME) as unknown as ReturnType<
+            (typeof supabase)['from']
+          >
         )
           .update({
             kit_flag_type: primaryFlag.flag_type,
@@ -2510,7 +3240,9 @@ export class RRKittingDataService {
           data: { user },
         } = await supabase.auth.getUser()
         await (
-          db.from(this.TABLE_NAME) as ReturnType<(typeof supabase)['from']>
+          db.from(this.TABLE_NAME) as unknown as ReturnType<
+            (typeof supabase)['from']
+          >
         )
           .update({
             kit_flag_type: null,
@@ -2535,7 +3267,9 @@ export class RRKittingDataService {
   ): Promise<{ success: boolean; error?: string }> {
     try {
       const { error } = await (
-        db.from(this.TABLE_NAME) as ReturnType<(typeof supabase)['from']>
+        db.from(this.TABLE_NAME) as unknown as ReturnType<
+          (typeof supabase)['from']
+        >
       )
         .update({
           kit_build_status: newStatus,
@@ -2576,7 +3310,9 @@ export class RRKittingDataService {
       const userId = user?.id
 
       const { error } = await (
-        db.from(this.TABLE_NAME) as ReturnType<(typeof supabase)['from']>
+        db.from(this.TABLE_NAME) as unknown as ReturnType<
+          (typeof supabase)['from']
+        >
       )
         .update({
           kit_build_status: 'printed',
@@ -2604,43 +3340,106 @@ export class RRKittingDataService {
     }
   }
 
+  /**
+   * Serial-scoped variant of {@link markKitAsPrinted}. Marks ONLY the
+   * kit identified by `kit_serial_number` as printed. Required for
+   * multi-kit POs — the PO-scoped variant flips every sibling kit on the
+   * same PO to `printed` (see [[Kit-Serial-Scoping]]).
+   */
+  static async markKitAsPrintedBySerialNumber(
+    kitSerialNumber: string
+  ): Promise<{ success: boolean; error?: string }> {
+    try {
+      const {
+        data: { user },
+      } = await supabase.auth.getUser()
+      const userId = user?.id
+
+      const { error } = await (
+        db.from(this.TABLE_NAME) as unknown as ReturnType<
+          (typeof supabase)['from']
+        >
+      )
+        .update({
+          kit_build_status: 'printed',
+          kit_printed_by_user: userId || null,
+          kit_printed_date_time: new Date().toISOString(),
+          updated_at: new Date().toISOString(),
+        } as Record<string, unknown>)
+        .eq('kit_serial_number', kitSerialNumber)
+
+      if (error) {
+        logger.error('Error marking kit as printed by serial number:', error)
+        return { success: false, error: error.message }
+      }
+
+      logger.log(
+        `[KittingService] Marked kit ${kitSerialNumber} as printed by user ${userId}`
+      )
+      return { success: true }
+    } catch (err) {
+      logger.error('Error marking kit as printed by serial number:', err)
+      return {
+        success: false,
+        error: err instanceof Error ? err.message : 'Unknown error',
+      }
+    }
+  }
+
   // ==================== BUILD KIT TOOL METHODS ====================
 
   /**
-   * Verify a Kit PO Number exists and is ready for kitting
+   * Shape returned by both build-kit verification entry points.
+   * Extracted to a named alias so the legacy PO-keyed
+   * {@link verifyKitForBuild} and the new serial-keyed
+   * {@link verifyKitForBuildBySerialNumber} stay symmetric, and so
+   * the downstream Build Kit mutations
+   * (`startKitBuild` / `kitMaterial` / `completeKitBuild`) can scope
+   * by `kitSerialNumber` when present — see
+   * [[Fix-Build-Kit-Completion-Multi-Kit-PO]] in the omniframe vault
+   * for the regression that motivated exposing the serial here.
+   */
+  static buildKitToLineFromRecord(
+    r: RRKittingDataRecord,
+    userNameMap: Map<string, string>
+  ) {
+    return {
+      id: r.id!,
+      transferOrderNumber: r.transfer_order_number!,
+      material: r.material || '',
+      materialDescription: r.material_description || '',
+      sourceStorageBin: r.source_storage_bin || '',
+      destStorageBin: r.dest_storage_bin || '',
+      quantity: parseFloat(r.source_target_qty || '0'),
+      kitted: !!r.kit_to_line_kitted_date_time,
+      kittedBy: r.kit_to_line_kitted_by_user
+        ? userNameMap.get(r.kit_to_line_kitted_by_user) || null
+        : null,
+      kittedAt: r.kit_to_line_kitted_date_time || null,
+    }
+  }
+
+  /**
+   * Verify a Kit PO Number exists and is ready for kitting.
+   *
+   * Operators who scan a `kit_serial_number` (`KIT-YYYYMMDD-NNN`)
+   * directly should call {@link verifyKitForBuildBySerialNumber}
+   * instead — that path is a direct PK lookup on `RR_Kitting_DATA`
+   * and never aggregates across sibling kits sharing a PO.
+   *
+   * Valid statuses for building: 'pending', 'printed', 'in_progress'.
+   *
    * @param kitPoNumber - The Kit PO number to verify
    * @returns Kit data if found, with TO lines and their kitting status
    */
-  static async verifyKitForBuild(kitPoNumber: string): Promise<{
-    exists: boolean
-    kitData?: {
-      kitPoNumber: string
-      kitBuildNumber: string
-      kitNumber: string
-      engineProgram: string
-      deliverToPlant: string
-      dueDate: string | null
-      status: string
-      totalLines: number
-      kittedLines: number
-      toLines: Array<{
-        id: string
-        transferOrderNumber: string
-        material: string
-        materialDescription: string
-        sourceStorageBin: string
-        destStorageBin: string
-        quantity: number
-        kitted: boolean
-        kittedBy: string | null
-        kittedAt: string | null
-      }>
-    }
-    error?: string
-  }> {
+  static async verifyKitForBuild(
+    kitPoNumber: string
+  ): Promise<BuildKitVerifyResult> {
     try {
       const { data, error } = await (
-        db.from(this.TABLE_NAME) as ReturnType<(typeof supabase)['from']>
+        db.from(this.TABLE_NAME) as unknown as ReturnType<
+          (typeof supabase)['from']
+        >
       )
         .select('*')
         .eq('kit_po_number', kitPoNumber.trim())
@@ -2651,94 +3450,152 @@ export class RRKittingDataService {
         return { exists: false, error: error.message }
       }
 
-      if (!data || (data as RRKittingDataRecord[]).length === 0) {
+      if (!data || (data as unknown as RRKittingDataRecord[]).length === 0) {
         return { exists: false, error: 'Kit PO Number not found' }
       }
 
-      const records = data as RRKittingDataRecord[]
-      const firstRecord = records[0]
-
-      // Check if kit is in a valid status for building (printed or in_progress)
-      const validStatuses = ['printed', 'in_progress', 'pending']
-      if (
-        firstRecord.kit_build_status &&
-        !validStatuses.includes(firstRecord.kit_build_status)
-      ) {
-        return {
-          exists: false,
-          error: `Kit is in "${firstRecord.kit_build_status}" status and cannot be built`,
-        }
-      }
-
-      // Get user names for kitted by users
-      const userIds = new Set<string>()
-      records.forEach((r) => {
-        if (r.kit_to_line_kitted_by_user)
-          userIds.add(r.kit_to_line_kitted_by_user)
-      })
-
-      const userNameMap = new Map<string, string>()
-      if (userIds.size > 0) {
-        const { data: profiles } = await supabase
-          .from('user_profiles')
-          .select('id, full_name, first_name, last_name, email')
-          .in('id', Array.from(userIds))
-
-        if (profiles) {
-          for (const profile of profiles) {
-            const displayName =
-              profile.full_name ||
-              `${profile.first_name || ''} ${profile.last_name || ''}`.trim() ||
-              profile.email?.split('@')[0] ||
-              null
-            if (displayName) {
-              userNameMap.set(profile.id, displayName)
-            }
-          }
-        }
-      }
-
-      // Build TO lines from records
-      const toLines = records
-        .filter((r) => r.transfer_order_number)
-        .map((r) => ({
-          id: r.id!,
-          transferOrderNumber: r.transfer_order_number!,
-          material: r.material || '',
-          materialDescription: r.material_description || '',
-          sourceStorageBin: r.source_storage_bin || '',
-          destStorageBin: r.dest_storage_bin || '',
-          quantity: parseFloat(r.source_target_qty || '0'),
-          kitted: !!r.kit_to_line_kitted_date_time,
-          kittedBy: r.kit_to_line_kitted_by_user
-            ? userNameMap.get(r.kit_to_line_kitted_by_user) || null
-            : null,
-          kittedAt: r.kit_to_line_kitted_date_time || null,
-        }))
-
-      const kittedLines = toLines.filter((t) => t.kitted).length
-
-      return {
-        exists: true,
-        kitData: {
-          kitPoNumber: firstRecord.kit_po_number,
-          kitBuildNumber: firstRecord.kit_build_number,
-          kitNumber: firstRecord.kit_number,
-          engineProgram: firstRecord.engine_program,
-          deliverToPlant: firstRecord.deliver_to_plant,
-          dueDate: firstRecord.due_date || null,
-          status: firstRecord.kit_build_status || 'pending',
-          totalLines: toLines.length,
-          kittedLines,
-          toLines,
-        },
-      }
+      return this.assembleBuildKitPayload(
+        data as unknown as RRKittingDataRecord[]
+      )
     } catch (err) {
       logger.error('[BuildKit] Error verifying kit:', err)
       return {
         exists: false,
         error: err instanceof Error ? err.message : 'Unknown error',
       }
+    }
+  }
+
+  /**
+   * Direct-by-serial entry point for the RF Build Kit scan input.
+   *
+   * `kit_serial_number` is the globally unique PK on `RR_Kitting_DATA`
+   * (format `KIT-YYYYMMDD-NNN`) so this path never silently aggregates
+   * across sibling kits sharing a PO — the load is naturally per-kit.
+   * Mirrors {@link RFKittingPickingService.verifyKitForPickingBySerialNumber}
+   * shape so the smart-detect UX stays consistent across both RF flows.
+   *
+   * Valid statuses for building: 'pending', 'printed', 'in_progress'.
+   *
+   * @param kitSerialNumber - The kit serial number to verify (`KIT-YYYYMMDD-NNN`)
+   * @returns Kit data if found, with TO lines and their kitting status
+   */
+  static async verifyKitForBuildBySerialNumber(
+    kitSerialNumber: string
+  ): Promise<BuildKitVerifyResult> {
+    try {
+      const serial = kitSerialNumber.trim()
+      if (!serial) {
+        return { exists: false, error: 'Kit serial number is required' }
+      }
+
+      const { data, error } = await (
+        db.from(this.TABLE_NAME) as unknown as ReturnType<
+          (typeof supabase)['from']
+        >
+      )
+        .select('*')
+        .eq('kit_serial_number', serial)
+        .order('created_at', { ascending: true })
+
+      if (error) {
+        logger.error('[BuildKit] Error verifying kit by serial:', error)
+        return { exists: false, error: error.message }
+      }
+
+      if (!data || (data as unknown as RRKittingDataRecord[]).length === 0) {
+        return { exists: false, error: `Kit serial ${serial} not found` }
+      }
+
+      return this.assembleBuildKitPayload(
+        data as unknown as RRKittingDataRecord[]
+      )
+    } catch (err) {
+      logger.error('[BuildKit] Error verifying kit by serial:', err)
+      return {
+        exists: false,
+        error: err instanceof Error ? err.message : 'Unknown error',
+      }
+    }
+  }
+
+  /**
+   * Shared payload assembly for the build-kit entry points. Runs the
+   * status sanity check, decorates kitted-by user names, and maps
+   * records onto the public TO-line shape. Kept as a single source of
+   * truth so the PO-path and serial-path behave identically once the
+   * raw rows are loaded.
+   */
+  private static async assembleBuildKitPayload(
+    records: RRKittingDataRecord[]
+  ): Promise<BuildKitVerifyResult> {
+    const firstRecord = records[0]
+
+    const validStatuses = ['printed', 'in_progress', 'pending']
+    if (
+      firstRecord.kit_build_status &&
+      !validStatuses.includes(firstRecord.kit_build_status)
+    ) {
+      return {
+        exists: false,
+        error: `Kit is in "${firstRecord.kit_build_status}" status and cannot be built`,
+      }
+    }
+
+    const userIds = new Set<string>()
+    records.forEach((r) => {
+      if (r.kit_to_line_kitted_by_user)
+        userIds.add(r.kit_to_line_kitted_by_user)
+    })
+
+    const userNameMap = new Map<string, string>()
+    if (userIds.size > 0) {
+      const { data: profiles } = await supabase
+        .from('user_profiles')
+        .select('id, full_name, first_name, last_name, email')
+        .in('id', Array.from(userIds))
+
+      if (profiles) {
+        for (const profile of profiles) {
+          const displayName =
+            profile.full_name ||
+            `${profile.first_name || ''} ${profile.last_name || ''}`.trim() ||
+            profile.email?.split('@')[0] ||
+            null
+          if (displayName) {
+            userNameMap.set(profile.id, displayName)
+          }
+        }
+      }
+    }
+
+    const toLines = records
+      .filter((r) => r.transfer_order_number)
+      .map((r) => this.buildKitToLineFromRecord(r, userNameMap))
+
+    const kittedLines = toLines.filter((t) => t.kitted).length
+
+    return {
+      exists: true,
+      kitData: {
+        kitPoNumber: firstRecord.kit_po_number,
+        // `kit_serial_number` is the globally unique PK on
+        // `RR_Kitting_DATA` (format `KIT-YYYYMMDD-NNN`) and is what
+        // downstream Build Kit mutations now scope by so multi-kit POs
+        // do not cross-link. May be null on legacy rows predating
+        // `createKitBuildPlan`; callers fall back to PO-only behaviour
+        // when it is missing.
+        kitSerialNumber: firstRecord.kit_serial_number ?? null,
+        kitBuildNumber: firstRecord.kit_build_number,
+        kitNumber: firstRecord.kit_number,
+        engineProgram: firstRecord.engine_program,
+        deliverToPlant: firstRecord.deliver_to_plant,
+        dueDate: firstRecord.due_date || null,
+        status: firstRecord.kit_build_status || 'pending',
+        totalLines: toLines.length,
+        kittedLines,
+        toLines,
+      },
     }
   }
 
@@ -2756,11 +3613,17 @@ export class RRKittingDataService {
       } = await supabase.auth.getUser()
       const userId = user?.id
 
-      // First, get the kit_po_number for this line so we can sync the kanban task
+      // Read both kit_po_number and kit_serial_number for this line so
+      // we can route the kanban sync through the per-serial path. This
+      // mirrors the picking-side convention in
+      // `markLinePicked` / `syncKitProgressFromSerial` and avoids
+      // collapsing sibling kits sharing a PO into one kanban card.
       const { data: lineData, error: lineError } = await (
-        db.from(this.TABLE_NAME) as ReturnType<(typeof supabase)['from']>
+        db.from(this.TABLE_NAME) as unknown as ReturnType<
+          (typeof supabase)['from']
+        >
       )
-        .select('kit_po_number')
+        .select('kit_po_number, kit_serial_number')
         .eq('id', lineId)
         .single()
 
@@ -2769,10 +3632,16 @@ export class RRKittingDataService {
         return { success: false, error: 'Could not find the TO line' }
       }
 
-      const kitPoNumber = (lineData as { kit_po_number: string }).kit_po_number
+      const { kit_po_number: kitPoNumber, kit_serial_number: kitSerialNumber } =
+        lineData as unknown as {
+          kit_po_number: string
+          kit_serial_number: string | null
+        }
 
       const { error } = await (
-        db.from(this.TABLE_NAME) as ReturnType<(typeof supabase)['from']>
+        db.from(this.TABLE_NAME) as unknown as ReturnType<
+          (typeof supabase)['from']
+        >
       )
         .update({
           kit_to_line_kitted_by_user: userId || null,
@@ -2788,8 +3657,12 @@ export class RRKittingDataService {
 
       logger.log(`[BuildKit] Marked line ${lineId} as kitted by user ${userId}`)
 
-      // Sync progress to the kanban board
-      await KitKanbanService.syncKitProgressFromData(kitPoNumber)
+      if (kitSerialNumber) {
+        await KitKanbanService.syncKitProgressFromSerial(kitSerialNumber)
+      } else {
+        // Legacy fallback for rows that predate the serial backfill.
+        await KitKanbanService.syncKitProgressFromData(kitPoNumber)
+      }
 
       return { success: true }
     } catch (err) {
@@ -2810,11 +3683,12 @@ export class RRKittingDataService {
     lineId: string
   ): Promise<{ success: boolean; error?: string }> {
     try {
-      // First, get the kit_po_number for this line so we can sync the kanban task
       const { data: lineData, error: lineError } = await (
-        db.from(this.TABLE_NAME) as ReturnType<(typeof supabase)['from']>
+        db.from(this.TABLE_NAME) as unknown as ReturnType<
+          (typeof supabase)['from']
+        >
       )
-        .select('kit_po_number')
+        .select('kit_po_number, kit_serial_number')
         .eq('id', lineId)
         .single()
 
@@ -2823,10 +3697,16 @@ export class RRKittingDataService {
         return { success: false, error: 'Could not find the TO line' }
       }
 
-      const kitPoNumber = (lineData as { kit_po_number: string }).kit_po_number
+      const { kit_po_number: kitPoNumber, kit_serial_number: kitSerialNumber } =
+        lineData as unknown as {
+          kit_po_number: string
+          kit_serial_number: string | null
+        }
 
       const { error } = await (
-        db.from(this.TABLE_NAME) as ReturnType<(typeof supabase)['from']>
+        db.from(this.TABLE_NAME) as unknown as ReturnType<
+          (typeof supabase)['from']
+        >
       )
         .update({
           kit_to_line_kitted_by_user: null,
@@ -2842,8 +3722,11 @@ export class RRKittingDataService {
 
       logger.log(`[BuildKit] Unmarked line ${lineId} as kitted`)
 
-      // Sync progress to the kanban board
-      await KitKanbanService.syncKitProgressFromData(kitPoNumber)
+      if (kitSerialNumber) {
+        await KitKanbanService.syncKitProgressFromSerial(kitSerialNumber)
+      } else {
+        await KitKanbanService.syncKitProgressFromData(kitPoNumber)
+      }
 
       return { success: true }
     } catch (err) {
@@ -2865,7 +3748,8 @@ export class RRKittingDataService {
   static async kitMaterial(
     kitPoNumber: string,
     material: string,
-    quantity: number
+    quantity: number,
+    kitSerialNumber?: string | null
   ): Promise<{
     success: boolean
     kittedLine?: {
@@ -2879,30 +3763,51 @@ export class RRKittingDataService {
     error?: string
   }> {
     try {
-      // Find the TO line for this material that hasn't been kitted yet
-      const { data, error: fetchError } = await (
-        db.from(this.TABLE_NAME) as ReturnType<(typeof supabase)['from']>
+      // Scope by `kit_serial_number` when the caller supplied one — this
+      // prevents the lookup from grabbing a same-material row that
+      // belongs to a sibling kit sharing the PO (see
+      // `Debug/Fix-Build-Kit-Completion-Multi-Kit-PO.md`). The PO
+      // filter is retained for defence in depth + index reuse.
+      const scopedSerial = kitSerialNumber?.trim() || null
+      const trimmedMaterial = material.trim()
+
+      let unkittedBuilder = (
+        db.from(this.TABLE_NAME) as unknown as ReturnType<
+          (typeof supabase)['from']
+        >
       )
         .select('*')
         .eq('kit_po_number', kitPoNumber)
-        .eq('material', material.trim())
+        .eq('material', trimmedMaterial)
+      if (scopedSerial) {
+        unkittedBuilder = unkittedBuilder.eq('kit_serial_number', scopedSerial)
+      }
+      const { data, error: fetchError } = await unkittedBuilder
         .is('kit_to_line_kitted_date_time', null)
         .limit(1)
         .single()
 
       if (fetchError || !data) {
-        // Check if all lines for this material are already kitted
-        const { data: kittedData } = await (
-          db.from(this.TABLE_NAME) as ReturnType<(typeof supabase)['from']>
+        let kittedBuilder = (
+          db.from(this.TABLE_NAME) as unknown as ReturnType<
+            (typeof supabase)['from']
+          >
         )
           .select('*')
           .eq('kit_po_number', kitPoNumber)
-          .eq('material', material.trim())
+          .eq('material', trimmedMaterial)
+        if (scopedSerial) {
+          kittedBuilder = kittedBuilder.eq('kit_serial_number', scopedSerial)
+        }
+        const { data: kittedData } = await kittedBuilder
 
-        if (kittedData && (kittedData as RRKittingDataRecord[]).length > 0) {
-          const allKitted = (kittedData as RRKittingDataRecord[]).every(
-            (r) => r.kit_to_line_kitted_date_time !== null
-          )
+        if (
+          kittedData &&
+          (kittedData as unknown as RRKittingDataRecord[]).length > 0
+        ) {
+          const allKitted = (
+            kittedData as unknown as RRKittingDataRecord[]
+          ).every((r) => r.kit_to_line_kitted_date_time !== null)
           if (allKitted) {
             return {
               success: false,
@@ -2917,9 +3822,8 @@ export class RRKittingDataService {
         }
       }
 
-      const record = data as RRKittingDataRecord
+      const record = data as unknown as RRKittingDataRecord
 
-      // Verify quantity matches (with tolerance for string parsing)
       const expectedQty = parseFloat(record.source_target_qty || '0')
       if (Math.abs(expectedQty - quantity) > 0.01) {
         return {
@@ -2928,25 +3832,40 @@ export class RRKittingDataService {
         }
       }
 
-      // Mark the line as kitted
       const markResult = await this.markLineAsKitted(record.id!)
       if (!markResult.success) {
         return { success: false, error: markResult.error }
       }
 
-      // Check if all lines for this kit are now kitted
-      const { data: allLines } = await (
-        db.from(this.TABLE_NAME) as ReturnType<(typeof supabase)['from']>
+      // `allLinesKitted` must be evaluated against the same kit-scope
+      // the caller passed in — otherwise sibling kits sharing a PO
+      // would suppress the auto-advance to the Complete screen, or
+      // (worse) trigger it prematurely if the sibling happened to be
+      // fully kitted.
+      let allLinesBuilder = (
+        db.from(this.TABLE_NAME) as unknown as ReturnType<
+          (typeof supabase)['from']
+        >
       )
         .select('kit_to_line_kitted_date_time')
         .eq('kit_po_number', kitPoNumber)
-        .not('transfer_order_number', 'is', null)
+      if (scopedSerial) {
+        allLinesBuilder = allLinesBuilder.eq('kit_serial_number', scopedSerial)
+      }
+      const { data: allLines } = await allLinesBuilder.not(
+        'transfer_order_number',
+        'is',
+        null
+      )
 
-      const allLinesKitted =
+      const allLinesKitted = Boolean(
         allLines &&
         (
-          allLines as Array<{ kit_to_line_kitted_date_time: string | null }>
+          allLines as unknown as Array<{
+            kit_to_line_kitted_date_time: string | null
+          }>
         ).every((line) => line.kit_to_line_kitted_date_time !== null)
+      )
 
       return {
         success: true,
@@ -2969,27 +3888,60 @@ export class RRKittingDataService {
   }
 
   /**
-   * Complete the kit build - sets status to 'kit_built'
+   * Complete the kit build - sets status to 'kit_built'.
+   *
+   * THE FIX (see `Debug/Fix-Build-Kit-Completion-Multi-Kit-PO.md`):
+   * when the caller supplies a `kitSerialNumber`, both the
+   * "all lines kitted?" pre-check and the final status UPDATE are
+   * scoped to that serial. Otherwise the PO-only behaviour is
+   * preserved verbatim for backward compatibility with single-kit POs
+   * and legacy callers. Operators scanning a serial on the RF form
+   * (the common case post 2026-05-17 `verifyKitForBuildBySerialNumber`
+   * roll-out) always have a serial in `kitData` — so the regression
+   * that blocked the Complete button on PO `2010102616` (two kits,
+   * `KIT-20260515-001` fully kitted, `KIT-20260515-002` partly
+   * kitted) cannot recur.
+   *
    * @param kitPoNumber - The Kit PO number to complete
+   * @param kitSerialNumber - Optional kit serial — when present,
+   *   restricts both the verification check and the status update to
+   *   that single kit.
    * @returns Success status
    */
   static async completeKitBuild(
-    kitPoNumber: string
-  ): Promise<{ success: boolean; error?: string }> {
+    kitPoNumber: string,
+    kitSerialNumber?: string | null,
+    options?: { skipInspection?: boolean }
+  ): Promise<{
+    success: boolean
+    error?: string
+    skippedInspection?: boolean
+  }> {
     try {
-      // First verify all lines are kitted
-      const { data: allLines, error: fetchError } = await (
-        db.from(this.TABLE_NAME) as ReturnType<(typeof supabase)['from']>
+      const scopedSerial = kitSerialNumber?.trim() || null
+      const skipInspection = options?.skipInspection === true
+
+      let verifyBuilder = (
+        db.from(this.TABLE_NAME) as unknown as ReturnType<
+          (typeof supabase)['from']
+        >
       )
         .select('kit_to_line_kitted_date_time, transfer_order_number')
         .eq('kit_po_number', kitPoNumber)
-        .not('transfer_order_number', 'is', null)
+      if (scopedSerial) {
+        verifyBuilder = verifyBuilder.eq('kit_serial_number', scopedSerial)
+      }
+      const { data: allLines, error: fetchError } = await verifyBuilder.not(
+        'transfer_order_number',
+        'is',
+        null
+      )
 
       if (fetchError) {
         return { success: false, error: fetchError.message }
       }
 
-      const lines = allLines as Array<{
+      const lines = allLines as unknown as Array<{
         kit_to_line_kitted_date_time: string | null
         transfer_order_number: string
       }>
@@ -3004,21 +3956,48 @@ export class RRKittingDataService {
         }
       }
 
-      // Get current user
       const {
         data: { user },
       } = await supabase.auth.getUser()
       const userId = user?.id
 
-      // Update all records for this kit to 'kit_built' status
-      const { error } = await (
-        db.from(this.TABLE_NAME) as ReturnType<(typeof supabase)['from']>
+      // When the org has the kit_inspection_required workflow flag
+      // OFF, the Inspection stage is bypassed and the kit lands on
+      // status `kit_inspected` directly. The actual on-dock stamp
+      // (`kit_ready_on_dock_*` + `kit_dock_location`) is now ALWAYS
+      // captured by the RF Dock Staging flow regardless of inspection
+      // mode — see
+      // `memorybank/OmniFrame/Implementations/RF-Dock-Staging-Flow.md`
+      // for the correction (decouples on-dock from the inspection
+      // bypass that originally co-stamped them in
+      // [[Optional-Kit-Inspection-Toggle]]). We still stamp the
+      // inspection-completion columns here so the production-tracker
+      // stage calculator stays coherent if an admin later flips the
+      // workflow flag back on.
+      const nowIso = new Date().toISOString()
+      const updatePayload: Record<string, unknown> = skipInspection
+        ? {
+            kit_build_status: 'kit_inspected',
+            kit_inspection_by_user: userId ?? null,
+            kit_inspection_completion_date_time: nowIso,
+            updated_at: nowIso,
+          }
+        : {
+            kit_build_status: 'kit_built',
+            updated_at: nowIso,
+          }
+
+      let updateBuilder = (
+        db.from(this.TABLE_NAME) as unknown as ReturnType<
+          (typeof supabase)['from']
+        >
       )
-        .update({
-          kit_build_status: 'kit_built',
-          updated_at: new Date().toISOString(),
-        } as Record<string, unknown>)
+        .update(updatePayload)
         .eq('kit_po_number', kitPoNumber)
+      if (scopedSerial) {
+        updateBuilder = updateBuilder.eq('kit_serial_number', scopedSerial)
+      }
+      const { error } = await updateBuilder
 
       if (error) {
         logger.error('[BuildKit] Error completing kit build:', error)
@@ -3026,9 +4005,11 @@ export class RRKittingDataService {
       }
 
       logger.log(
-        `[BuildKit] Completed kit build for ${kitPoNumber} by user ${userId}`
+        `[BuildKit] Completed kit build for ${kitPoNumber}${
+          scopedSerial ? ` (serial ${scopedSerial})` : ''
+        } by user ${userId}${skipInspection ? ' (inspection bypassed; awaiting RF Dock Staging)' : ''}`
       )
-      return { success: true }
+      return { success: true, skippedInspection: skipInspection }
     } catch (err) {
       logger.error('[BuildKit] Error completing kit build:', err)
       return {
@@ -3039,32 +4020,377 @@ export class RRKittingDataService {
   }
 
   /**
-   * Set kit status to in_progress when building starts
+   * Set kit status to in_progress when building starts.
+   *
+   * When `kitSerialNumber` is supplied, the UPDATE is scoped to that
+   * serial so flipping one kit to `in_progress` cannot drag a sibling
+   * kit sharing the PO into the same status. The PO-only fallback is
+   * retained for backward compatibility with single-kit POs and
+   * pre-serial legacy callers — see
+   * `Debug/Fix-Build-Kit-Completion-Multi-Kit-PO.md` for context.
+   *
    * @param kitPoNumber - The Kit PO number
+   * @param kitSerialNumber - Optional kit serial — restricts the
+   *   status flip to a single kit when present.
    * @returns Success status
    */
   static async startKitBuild(
-    kitPoNumber: string
+    kitPoNumber: string,
+    kitSerialNumber?: string | null
   ): Promise<{ success: boolean; error?: string }> {
     try {
-      const { error } = await (
-        db.from(this.TABLE_NAME) as ReturnType<(typeof supabase)['from']>
+      const scopedSerial = kitSerialNumber?.trim() || null
+
+      let updateBuilder = (
+        db.from(this.TABLE_NAME) as unknown as ReturnType<
+          (typeof supabase)['from']
+        >
       )
         .update({
           kit_build_status: 'in_progress',
           updated_at: new Date().toISOString(),
         } as Record<string, unknown>)
         .eq('kit_po_number', kitPoNumber)
+      if (scopedSerial) {
+        updateBuilder = updateBuilder.eq('kit_serial_number', scopedSerial)
+      }
+      const { error } = await updateBuilder
 
       if (error) {
         logger.error('[BuildKit] Error starting kit build:', error)
         return { success: false, error: error.message }
       }
 
-      logger.log(`[BuildKit] Started kit build for ${kitPoNumber}`)
+      logger.log(
+        `[BuildKit] Started kit build for ${kitPoNumber}${
+          scopedSerial ? ` (serial ${scopedSerial})` : ''
+        }`
+      )
       return { success: true }
     } catch (err) {
       logger.error('[BuildKit] Error starting kit build:', err)
+      return {
+        success: false,
+        error: err instanceof Error ? err.message : 'Unknown error',
+      }
+    }
+  }
+
+  // ==================== DOCK STAGING TOOL METHODS ====================
+
+  /**
+   * Verify a kit is ready to be staged on a dock.
+   *
+   * Dock-ready predicate:
+   * - When the org has `kit_inspection_required = TRUE`, the kit must
+   *   carry `kit_inspection_completion_date_time` (an inspector signed
+   *   it off).
+   * - When `kit_inspection_required = FALSE`, the kit must carry
+   *   `kit_built_date_time` — i.e. all materials are kitted (the
+   *   skip-inspection branch in {@link completeKitBuild} stamps
+   *   `kit_inspection_completion_date_time` on the same UPDATE so this
+   *   predicate is uniform across both modes; the on-dock stamp itself
+   *   is now the responsibility of {@link stageKitToDock}).
+   * - In both cases `kit_ready_on_dock_date_time` must NOT be set —
+   *   re-staging an already-staged kit returns a friendly error
+   *   pointing the operator at the existing dock location.
+   *
+   * Identification mirrors the picking/build entry points: pass either
+   * `kitSerialNumber` for a direct PK lookup, or `kitPoNumber` for the
+   * legacy PO path. When both are absent the call is rejected. When a
+   * PO is supplied without a serial AND the PO covers more than one
+   * dock-ready kit, the caller receives the same `kits` disambiguation
+   * payload the picking flow uses so the form can render a picker.
+   */
+  static async verifyKitForDockStaging(input: {
+    kitSerialNumber?: string | null
+    kitPoNumber?: string | null
+    kitInspectionRequired: boolean
+  }): Promise<{
+    success: boolean
+    error?: string
+    kitData?: {
+      kitPoNumber: string
+      kitSerialNumber: string
+      kitBuildNumber: string
+      kitNumber: string
+      engineProgram: string
+      deliverToPlant: string
+      dueDate: string | null
+      status: string
+      kitDockLocation: string | null
+    }
+    kits?: Array<{
+      kit_serial_number: string
+      kit_number: string
+      kit_build_status: string
+      kit_build_number: string | null
+    }>
+  }> {
+    try {
+      const trimmedSerial = input.kitSerialNumber?.trim() || null
+      const trimmedPo = input.kitPoNumber?.trim() || null
+
+      if (!trimmedSerial && !trimmedPo) {
+        return {
+          success: false,
+          error: 'Provide a kit serial number or kit PO number',
+        }
+      }
+
+      // Resolve to a single serial (handle multi-kit-per-PO).
+      let resolvedSerial = trimmedSerial
+
+      if (!resolvedSerial && trimmedPo) {
+        const { data: poRows, error: poError } = await (
+          db.from(this.TABLE_NAME) as unknown as ReturnType<
+            (typeof supabase)['from']
+          >
+        )
+          .select(
+            'kit_serial_number, kit_number, kit_build_status, kit_build_number'
+          )
+          .eq('kit_po_number', trimmedPo)
+
+        if (poError) {
+          return { success: false, error: poError.message }
+        }
+
+        const rows = (
+          (poRows ?? []) as unknown as Array<{
+            kit_serial_number: string | null
+            kit_number: string | null
+            kit_build_status: string | null
+            kit_build_number: string | null
+          }>
+        ).filter((r) => r.kit_serial_number)
+
+        if (rows.length === 0) {
+          return { success: false, error: `Kit PO ${trimmedPo} not found` }
+        }
+
+        // Dedupe by serial — multiple TO rows per kit.
+        const perSerial = new Map<
+          string,
+          {
+            kit_serial_number: string
+            kit_number: string
+            kit_build_status: string
+            kit_build_number: string | null
+          }
+        >()
+        for (const r of rows) {
+          if (!r.kit_serial_number || perSerial.has(r.kit_serial_number))
+            continue
+          perSerial.set(r.kit_serial_number, {
+            kit_serial_number: r.kit_serial_number,
+            kit_number: r.kit_number ?? '',
+            kit_build_status: r.kit_build_status ?? '',
+            kit_build_number: r.kit_build_number,
+          })
+        }
+
+        if (perSerial.size > 1) {
+          return {
+            success: false,
+            kits: Array.from(perSerial.values()),
+          }
+        }
+
+        resolvedSerial = Array.from(perSerial.keys())[0] ?? null
+      }
+
+      if (!resolvedSerial) {
+        return { success: false, error: 'Could not resolve kit serial number' }
+      }
+
+      const { data: rows, error } = await (
+        db.from(this.TABLE_NAME) as unknown as ReturnType<
+          (typeof supabase)['from']
+        >
+      )
+        .select(
+          'kit_po_number, kit_serial_number, kit_build_number, kit_number, engine_program, deliver_to_plant, due_date, kit_build_status, kit_inspection_completion_date_time, kit_to_line_kitted_date_time, kit_ready_on_dock_date_time, kit_dock_location, transfer_order_number'
+        )
+        .eq('kit_serial_number', resolvedSerial)
+        .order('created_at', { ascending: true })
+
+      if (error) {
+        logger.error('[DockStaging] Error verifying kit:', error)
+        return { success: false, error: error.message }
+      }
+
+      const records = (rows ?? []) as unknown as Array<{
+        kit_po_number: string
+        kit_serial_number: string
+        kit_build_number: string
+        kit_number: string
+        engine_program: string
+        deliver_to_plant: string
+        due_date: string | null
+        kit_build_status: string | null
+        kit_inspection_completion_date_time: string | null
+        kit_to_line_kitted_date_time: string | null
+        kit_ready_on_dock_date_time: string | null
+        kit_dock_location: string | null
+        transfer_order_number: string | null
+      }>
+
+      if (records.length === 0) {
+        return {
+          success: false,
+          error: `Kit serial ${resolvedSerial} not found`,
+        }
+      }
+
+      const first = records[0]
+
+      if (first.kit_ready_on_dock_date_time) {
+        const where = first.kit_dock_location
+          ? `at ${first.kit_dock_location}`
+          : 'on the dock'
+        return {
+          success: false,
+          error: `Kit ${resolvedSerial} is already staged ${where}`,
+        }
+      }
+
+      // Dock-ready predicate.
+      if (input.kitInspectionRequired) {
+        if (!first.kit_inspection_completion_date_time) {
+          return {
+            success: false,
+            error: `Kit ${resolvedSerial} is not ready for dock staging — inspection has not been completed.`,
+          }
+        }
+      } else {
+        // Inspection bypassed for this org — require build completion
+        // (every TO line kitted). The skip-inspection branch in
+        // completeKitBuild stamps `kit_inspection_completion_date_time`
+        // alongside `kit_inspected` status, so checking the inspection
+        // column is also a sufficient proxy. We check both for
+        // robustness against legacy rows.
+        const linesWithTo = records.filter((r) => r.transfer_order_number)
+        const hasUnkittedLine = linesWithTo.some(
+          (r) => !r.kit_to_line_kitted_date_time
+        )
+        const buildComplete =
+          !!first.kit_inspection_completion_date_time ||
+          (linesWithTo.length > 0 && !hasUnkittedLine)
+        if (!buildComplete) {
+          return {
+            success: false,
+            error: `Kit ${resolvedSerial} is not ready for dock staging — build is not complete.`,
+          }
+        }
+      }
+
+      return {
+        success: true,
+        kitData: {
+          kitPoNumber: first.kit_po_number,
+          kitSerialNumber: first.kit_serial_number,
+          kitBuildNumber: first.kit_build_number,
+          kitNumber: first.kit_number,
+          engineProgram: first.engine_program,
+          deliverToPlant: first.deliver_to_plant,
+          dueDate: first.due_date,
+          status: first.kit_build_status ?? '',
+          kitDockLocation: first.kit_dock_location,
+        },
+      }
+    } catch (err) {
+      logger.error('[DockStaging] Unexpected error verifying kit:', err)
+      return {
+        success: false,
+        error: err instanceof Error ? err.message : 'Unknown error',
+      }
+    }
+  }
+
+  /**
+   * Stage a kit to a dock location.
+   *
+   * Single-kit-scoped UPDATE — keys on `kit_serial_number` PK so the
+   * multi-kit-per-PO scoping fix from
+   * `Debug/Fix-Build-Kit-Completion-Multi-Kit-PO.md` is preserved
+   * (a PO-only UPDATE would stamp every sibling kit sharing the PO).
+   *
+   * Stamps `kit_ready_on_dock_date_time = NOW()`,
+   * `kit_ready_on_dock_by_user = auth.uid()`,
+   * `kit_dock_location = <scanned>`, and flips `kit_build_status` to
+   * `'completed'` so "on dock = done" is the canonical invariant for
+   * downstream consumers (the Kit Assembly Board lane derivation in
+   * particular — see
+   * [[Implementations/Kit-Kanban-Inspection-Aware-Progress-And-Dock-Completion]]).
+   * After the UPDATE succeeds we kick the kanban sync helper so the
+   * card immediately drops into the Completed lane on every open
+   * board client (the kanban subscribes to postgres_changes on
+   * `kit_kanban_tasks`, which is grandfathered by the Realtime Policy).
+   *
+   * Returns success or a typed error.
+   */
+  static async stageKitToDock(
+    kitSerialNumber: string,
+    dockLocation: string
+  ): Promise<{ success: boolean; error?: string }> {
+    try {
+      const serial = kitSerialNumber.trim()
+      const location = dockLocation.trim()
+      if (!serial) {
+        return { success: false, error: 'Kit serial number is required' }
+      }
+      if (!location) {
+        return { success: false, error: 'Dock location is required' }
+      }
+
+      const {
+        data: { user },
+      } = await supabase.auth.getUser()
+      const userId = user?.id ?? null
+
+      const nowIso = new Date().toISOString()
+      const { error } = await (
+        db.from(this.TABLE_NAME) as unknown as ReturnType<
+          (typeof supabase)['from']
+        >
+      )
+        .update({
+          kit_ready_on_dock_by_user: userId,
+          kit_ready_on_dock_date_time: nowIso,
+          kit_dock_location: location,
+          kit_build_status: 'completed',
+          updated_at: nowIso,
+        } as Record<string, unknown>)
+        .eq('kit_serial_number', serial)
+
+      if (error) {
+        logger.error('[DockStaging] Error staging kit to dock:', error)
+        return { success: false, error: error.message }
+      }
+
+      logger.log(
+        `[DockStaging] Staged kit ${serial} to dock ${location} by user ${userId}`
+      )
+
+      // Push the kanban card into the Completed lane immediately. The
+      // sync helper is idempotent and serial-scoped — it never collapses
+      // sibling kits sharing a PO (per
+      // [[Fix-Build-Kit-Completion-Multi-Kit-PO]]).
+      try {
+        await KitKanbanService.syncKitProgressFromSerial(serial)
+      } catch (syncErr) {
+        // Non-fatal: the next `syncAllInProgressTasks` on board load will
+        // catch up. Operator-visible state is already correct in the DB.
+        logger.warn(
+          '[DockStaging] kanban sync after stage failed (non-fatal):',
+          syncErr
+        )
+      }
+
+      return { success: true }
+    } catch (err) {
+      logger.error('[DockStaging] Unexpected error staging kit:', err)
       return {
         success: false,
         error: err instanceof Error ? err.message : 'Unknown error',
@@ -3112,7 +4438,9 @@ export class RRKittingDataService {
   }> {
     try {
       const { data, error } = await (
-        db.from(this.TABLE_NAME) as ReturnType<(typeof supabase)['from']>
+        db.from(this.TABLE_NAME) as unknown as ReturnType<
+          (typeof supabase)['from']
+        >
       )
         .select('*')
         .eq('kit_po_number', kitPoNumber.trim())
@@ -3123,11 +4451,11 @@ export class RRKittingDataService {
         return { exists: false, error: error.message }
       }
 
-      if (!data || (data as RRKittingDataRecord[]).length === 0) {
+      if (!data || (data as unknown as RRKittingDataRecord[]).length === 0) {
         return { exists: false, error: 'Kit PO Number not found' }
       }
 
-      const records = data as RRKittingDataRecord[]
+      const records = data as unknown as RRKittingDataRecord[]
       const firstRecord = records[0]
 
       // Check if kit is in a valid status for inspection (kit_built)
@@ -3239,7 +4567,9 @@ export class RRKittingDataService {
       const userId = user?.id
 
       const { error } = await (
-        db.from(this.TABLE_NAME) as ReturnType<(typeof supabase)['from']>
+        db.from(this.TABLE_NAME) as unknown as ReturnType<
+          (typeof supabase)['from']
+        >
       )
         .update({
           kit_inspection_by_user: userId || null,
@@ -3276,7 +4606,9 @@ export class RRKittingDataService {
   ): Promise<{ success: boolean; error?: string }> {
     try {
       const { error } = await (
-        db.from(this.TABLE_NAME) as ReturnType<(typeof supabase)['from']>
+        db.from(this.TABLE_NAME) as unknown as ReturnType<
+          (typeof supabase)['from']
+        >
       )
         .update({
           kit_inspection_by_user: null,
@@ -3313,7 +4645,9 @@ export class RRKittingDataService {
     try {
       // First verify all lines are inspected
       const { data: allLines, error: fetchError } = await (
-        db.from(this.TABLE_NAME) as ReturnType<(typeof supabase)['from']>
+        db.from(this.TABLE_NAME) as unknown as ReturnType<
+          (typeof supabase)['from']
+        >
       )
         .select('kit_inspection_completion_date_time, transfer_order_number')
         .eq('kit_po_number', kitPoNumber)
@@ -3323,7 +4657,7 @@ export class RRKittingDataService {
         return { success: false, error: fetchError.message }
       }
 
-      const lines = allLines as Array<{
+      const lines = allLines as unknown as Array<{
         kit_inspection_completion_date_time: string | null
         transfer_order_number: string
       }>
@@ -3346,7 +4680,9 @@ export class RRKittingDataService {
 
       // Update all records for this kit to 'kit_inspected' status
       const { error } = await (
-        db.from(this.TABLE_NAME) as ReturnType<(typeof supabase)['from']>
+        db.from(this.TABLE_NAME) as unknown as ReturnType<
+          (typeof supabase)['from']
+        >
       )
         .update({
           kit_build_status: 'kit_inspected',
@@ -3382,7 +4718,9 @@ export class RRKittingDataService {
   ): Promise<{ success: boolean; error?: string }> {
     try {
       const { error } = await (
-        db.from(this.TABLE_NAME) as ReturnType<(typeof supabase)['from']>
+        db.from(this.TABLE_NAME) as unknown as ReturnType<
+          (typeof supabase)['from']
+        >
       )
         .update({
           kit_build_status: 'inspection_in_progress',
@@ -3409,16 +4747,217 @@ export class RRKittingDataService {
   // ==================== BOM COVERAGE HELPERS ====================
 
   /**
+   * Returns the structured list of BOM components that are currently
+   * driving the Black Hat for a kit — i.e., not yet covered by an
+   * imported TO row, INCORA item, or Authorized-to-Ship-Short entry.
+   *
+   * Used by the inline Black-Hat ship-short authorization panel inside
+   * the Kit Build Audit Trail (Quick View) so the operator can see, and
+   * authorize, each blocked component line by line instead of having to
+   * read the comma-separated list off the flag's notes string.
+   *
+   * Mirrors the matching logic in `recheckBomCoverageBySerial` (the
+   * function that *mutates* the flag) but does not write — pure read.
+   * If they ever diverge, this is the bug.
+   *
+   * Resolves `kit_definition_id` from any TO row of the kit so the
+   * caller only needs the kit's serial number. Returns an empty list
+   * (with success=true) when the kit has no linked definition — there
+   * is nothing to be Black-Hat about in that case.
+   */
+  static async getMissingBomComponentsBySerial(
+    kitSerialNumber: string
+  ): Promise<{
+    success: boolean
+    components: Array<{
+      materialNumber: string
+      materialDescription: string
+      componentType: 'material' | 'incora_sub_kit' | 'incora_component'
+      incoraReference: string | null
+    }>
+    kitDefinitionId: string | null
+    error?: string
+  }> {
+    try {
+      if (!kitSerialNumber.trim()) {
+        return {
+          success: false,
+          components: [],
+          kitDefinitionId: null,
+          error: 'Kit serial number is required',
+        }
+      }
+
+      const { data: kitRows, error: kitError } = await (
+        db.from(this.TABLE_NAME) as unknown as ReturnType<
+          (typeof supabase)['from']
+        >
+      )
+        .select(
+          'material, incora_items, authorized_ship_short_items, kit_definition_id'
+        )
+        .eq('kit_serial_number', kitSerialNumber)
+
+      if (kitError) {
+        return {
+          success: false,
+          components: [],
+          kitDefinitionId: null,
+          error: kitError.message,
+        }
+      }
+
+      const allRows = (kitRows ?? []) as unknown as Array<{
+        material: string | null
+        incora_items: Array<{ lineNumber: number; value: string }> | null
+        authorized_ship_short_items: Array<{
+          lineNumber: number
+          partNumber: string
+          description: string
+        }> | null
+        kit_definition_id: string | null
+      }>
+
+      const firstRow = allRows[0]
+      const kitDefinitionId = firstRow?.kit_definition_id ?? null
+
+      if (!kitDefinitionId) {
+        // No linked BOM — nothing to be Black-Hat about.
+        return { success: true, components: [], kitDefinitionId: null }
+      }
+
+      const { data: defData, error: defError } = await (
+        db.from('kit_definitions') as ReturnType<(typeof supabase)['from']>
+      )
+        .select('required_components')
+        .eq('id', kitDefinitionId)
+        .single()
+
+      if (defError || !defData) {
+        return {
+          success: false,
+          components: [],
+          kitDefinitionId,
+          error: 'Kit definition not found',
+        }
+      }
+
+      const bom = ((defData as unknown as { required_components: unknown })
+        .required_components ?? []) as Array<{
+        componentType?: string
+        coverageMode?: string
+        materialNumber: string
+        materialDescription: string
+        requiredQuantity: number
+        incoraReference?: string
+        deviations?: Array<{
+          substituteMaterialNumber: string
+          substituteMaterialDescription: string
+          notes?: string
+        }>
+      }>
+
+      if (bom.length === 0) {
+        return { success: true, components: [], kitDefinitionId }
+      }
+
+      const toMaterials = new Set(
+        allRows
+          .map((r) => (r.material ?? '').trim().toUpperCase())
+          .filter(Boolean)
+      )
+
+      const incoraValues = new Set(
+        (firstRow?.incora_items ?? [])
+          .map((item) => (item.value ?? '').trim().toUpperCase())
+          .filter(Boolean)
+      )
+
+      const shipShortPartNumbers = new Set(
+        (firstRow?.authorized_ship_short_items ?? [])
+          .map((item) => (item.partNumber ?? '').trim().toUpperCase())
+          .filter(Boolean)
+      )
+
+      const unmatched = bom.filter((c) => {
+        if (c.coverageMode === 'informational') return false
+
+        if (c.componentType === 'incora_sub_kit') {
+          const ref = (c.incoraReference ?? '').trim().toUpperCase()
+          return !ref || !incoraValues.has(ref)
+        }
+
+        if (c.componentType === 'incora_component') {
+          const primary = c.materialNumber.trim().toUpperCase()
+          const ref = (c.incoraReference ?? '').trim().toUpperCase()
+          const deviationNums = (c.deviations ?? []).map((d) =>
+            d.substituteMaterialNumber.trim().toUpperCase()
+          )
+          const matAccept = [primary, ...deviationNums].filter(Boolean)
+          const matMatch = matAccept.some((num) => toMaterials.has(num))
+          const refMatch = !!ref && incoraValues.has(ref)
+          const shipShortMatch = matAccept.some((num) =>
+            shipShortPartNumbers.has(num)
+          )
+          return !(matMatch || refMatch || shipShortMatch)
+        }
+
+        const primary = c.materialNumber.trim().toUpperCase()
+        const deviationNums = (c.deviations ?? []).map((d) =>
+          d.substituteMaterialNumber.trim().toUpperCase()
+        )
+        const allAcceptable = [primary, ...deviationNums].filter(Boolean)
+        const toMatch = allAcceptable.some((num) => toMaterials.has(num))
+        const shipShortMatch = allAcceptable.some((num) =>
+          shipShortPartNumbers.has(num)
+        )
+        return !(toMatch || shipShortMatch)
+      })
+
+      return {
+        success: true,
+        kitDefinitionId,
+        components: unmatched.map((c) => ({
+          materialNumber: c.materialNumber,
+          materialDescription: c.materialDescription,
+          componentType:
+            (c.componentType as
+              | 'material'
+              | 'incora_sub_kit'
+              | 'incora_component'
+              | undefined) ?? 'material',
+          incoraReference: c.incoraReference ?? null,
+        })),
+      }
+    } catch (err) {
+      logger.error(
+        '[KittingService] getMissingBomComponentsBySerial error:',
+        err
+      )
+      return {
+        success: false,
+        components: [],
+        kitDefinitionId: null,
+        error: err instanceof Error ? err.message : 'Unknown error',
+      }
+    }
+  }
+
+  /**
    * Recheck BOM coverage for an existing kit and auto-manage Black Hat flag.
    * Queries all TO rows for the kit, compares against the linked kit_definition BOM,
    * and sets or clears the Black Hat flag accordingly.
+   *
+   * Coverage rules:
+   * - Informational rows are always treated as covered.
+   * - Material rows match on primary materialNumber OR any deviation substitute.
+   * - INCORA sub-kit rows match against runtime incora_items values.
    */
-  static async recheckBomCoverage(
-    kitPoNumber: string,
+  static async recheckBomCoverageBySerial(
+    kitSerialNumber: string,
     kitDefinitionId: string
   ): Promise<{ success: boolean; isComplete: boolean; error?: string }> {
     try {
-      // Load BOM from kit_definitions
       const { data: defData, error: defError } = await (
         db.from('kit_definitions') as ReturnType<(typeof supabase)['from']>
       )
@@ -3434,54 +4973,206 @@ export class RRKittingDataService {
         }
       }
 
-      const bom = ((defData as { required_components: unknown })
+      const bom = ((defData as unknown as { required_components: unknown })
         .required_components ?? []) as Array<{
+        componentType?: string
+        coverageMode?: string
         materialNumber: string
         materialDescription: string
         requiredQuantity: number
+        incoraReference?: string
+        deviations?: Array<{
+          substituteMaterialNumber: string
+          substituteMaterialDescription: string
+          notes?: string
+        }>
       }>
 
       if (bom.length === 0) {
         return { success: true, isComplete: true }
       }
 
-      // Load all TO material numbers for this kit
+      // Scope by kit_serial_number — the prior PO-scoped query merged
+      // both kits' material lists when two kits shared a PO, so a Gear
+      // Box 1 missing part was masked by a Gear Box 2 row that
+      // happened to carry that material.
       const { data: kitRows, error: kitError } = await (
-        db.from(this.TABLE_NAME) as ReturnType<(typeof supabase)['from']>
+        db.from(this.TABLE_NAME) as unknown as ReturnType<
+          (typeof supabase)['from']
+        >
       )
-        .select('material')
-        .eq('kit_po_number', kitPoNumber)
-        .not('transfer_order_number', 'is', null)
+        .select(
+          'material, incora_items, authorized_ship_short_items, cancelled'
+        )
+        .eq('kit_serial_number', kitSerialNumber)
 
       if (kitError) {
         return { success: false, isComplete: false, error: kitError.message }
       }
 
+      const allRows = (kitRows ?? []) as unknown as Array<{
+        material: string | null
+        incora_items: Array<{ lineNumber: number; value: string }> | null
+        authorized_ship_short_items: Array<{
+          lineNumber: number
+          partNumber: string
+          description: string
+        }> | null
+        cancelled: boolean | null
+      }>
+
+      // Cancelled lines do not deliver their material to the kit, so
+      // they're excluded from the coverage set. Cancelling the only TO
+      // for a required BOM material correctly leaves it uncovered (the
+      // operator then has to re-add a TO via [[Add-TO-To-Clear-Black-Hat]]
+      // or authorise it via [[Edit-Ship-Short-Post-Creation-Flow]]).
       const toMaterials = new Set(
-        ((kitRows ?? []) as { material: string | null }[])
+        allRows
+          .filter((r) => !r.cancelled)
           .map((r) => (r.material ?? '').trim().toUpperCase())
           .filter(Boolean)
       )
 
-      const unmatched = bom.filter(
-        (c) => !toMaterials.has(c.materialNumber.trim().toUpperCase())
+      const firstRow = allRows[0]
+      const incoraValues = new Set(
+        (firstRow?.incora_items ?? [])
+          .map((item) => (item.value ?? '').trim().toUpperCase())
+          .filter(Boolean)
       )
+      // "Authorized to Ship Short" entries on the kit explicitly negate the
+      // Black Hat for that BOM line — see add-kit-build-plan-dialog.tsx for
+      // the matching frontend logic. Match on partNumber against BOM
+      // primary materialNumber or any deviation substitute. Does not
+      // apply to incora_sub_kit (no material number on those rows).
+      const shipShortPartNumbers = new Set(
+        (firstRow?.authorized_ship_short_items ?? [])
+          .map((item) => (item.partNumber ?? '').trim().toUpperCase())
+          .filter(Boolean)
+      )
+
+      const unmatched = bom.filter((c) => {
+        if (c.coverageMode === 'informational') return false
+
+        if (c.componentType === 'incora_sub_kit') {
+          const ref = (c.incoraReference ?? '').trim().toUpperCase()
+          return !ref || !incoraValues.has(ref)
+        }
+
+        if (c.componentType === 'incora_component') {
+          const primary = c.materialNumber.trim().toUpperCase()
+          const ref = (c.incoraReference ?? '').trim().toUpperCase()
+          const deviationNums = (c.deviations ?? []).map((d) =>
+            d.substituteMaterialNumber.trim().toUpperCase()
+          )
+          const matAccept = [primary, ...deviationNums].filter(Boolean)
+          const matMatch = matAccept.some((num) => toMaterials.has(num))
+          const refMatch = !!ref && incoraValues.has(ref)
+          const shipShortMatch = matAccept.some((num) =>
+            shipShortPartNumbers.has(num)
+          )
+          return !(matMatch || refMatch || shipShortMatch)
+        }
+
+        const primary = c.materialNumber.trim().toUpperCase()
+        const deviationNums = (c.deviations ?? []).map((d) =>
+          d.substituteMaterialNumber.trim().toUpperCase()
+        )
+        const allAcceptable = [primary, ...deviationNums].filter(Boolean)
+        const toMatch = allAcceptable.some((num) => toMaterials.has(num))
+        const shipShortMatch = allAcceptable.some((num) =>
+          shipShortPartNumbers.has(num)
+        )
+        return !(toMatch || shipShortMatch)
+      })
 
       if (unmatched.length > 0) {
         const missingList = unmatched
-          .map((m) => `${m.materialNumber} (${m.materialDescription})`)
+          .map((m) =>
+            formatBomCoverageLabel({
+              componentType: m.componentType as
+                | 'material'
+                | 'incora_sub_kit'
+                | 'incora_component'
+                | undefined,
+              materialNumber: m.materialNumber,
+              materialDescription: m.materialDescription,
+              incoraReference: m.incoraReference,
+            })
+          )
           .join(', ')
-        await this.addFlag(
-          kitPoNumber,
+        await this.addFlagBySerialNumber(
+          kitSerialNumber,
           'black',
-          `Auto-flagged: Missing BOM materials — ${missingList}`
+          `Auto-flagged: Missing BOM components — ${missingList}`
         )
         return { success: true, isComplete: false }
       } else {
-        // All covered — clear Black Hat if active
-        await this.clearFlagByType(kitPoNumber, 'black')
+        await this.clearFlagByTypeBySerialNumber(kitSerialNumber, 'black')
         return { success: true, isComplete: true }
       }
+    } catch (err) {
+      logger.error('[KittingService] recheckBomCoverageBySerial error:', err)
+      return {
+        success: false,
+        isComplete: false,
+        error: err instanceof Error ? err.message : 'Unknown error',
+      }
+    }
+  }
+
+  /**
+   * Recheck BOM coverage scoped by Kit PO Number.
+   *
+   * @deprecated Use {@link recheckBomCoverageBySerial}. When a single PO
+   * maps to multiple kit serials this fans out per-serial, but the call
+   * graph should pass the serial directly so coverage state and Black
+   * Hat fan-out stay per-kit.
+   */
+  static async recheckBomCoverage(
+    kitPoNumber: string,
+    kitDefinitionId: string
+  ): Promise<{ success: boolean; isComplete: boolean; error?: string }> {
+    try {
+      const { data: rows, error } = await (
+        db.from(this.TABLE_NAME) as unknown as ReturnType<
+          (typeof supabase)['from']
+        >
+      )
+        .select('kit_serial_number')
+        .eq('kit_po_number', kitPoNumber)
+        .not('kit_serial_number', 'is', null)
+
+      if (error) {
+        return { success: false, isComplete: false, error: error.message }
+      }
+
+      const serials = Array.from(
+        new Set(
+          ((rows ?? []) as unknown as { kit_serial_number: string | null }[])
+            .map((r) => r.kit_serial_number)
+            .filter((s): s is string => !!s)
+        )
+      )
+
+      if (serials.length === 0) {
+        return { success: true, isComplete: true }
+      }
+
+      let allComplete = true
+      for (const serial of serials) {
+        const result = await this.recheckBomCoverageBySerial(
+          serial,
+          kitDefinitionId
+        )
+        if (!result.success) {
+          return result
+        }
+        if (!result.isComplete) {
+          allComplete = false
+        }
+      }
+
+      return { success: true, isComplete: allComplete }
     } catch (err) {
       logger.error('[KittingService] recheckBomCoverage error:', err)
       return {
@@ -3493,10 +5184,14 @@ export class RRKittingDataService {
   }
 
   /**
-   * Append additional TOs to an existing kit build plan, then recheck BOM coverage.
+   * Append additional TOs to an existing kit build plan, then recheck BOM
+   * coverage. Identification is by kit_serial_number (the unique kit
+   * identity); a Kit PO Number is no longer sufficient because two
+   * separate kits can share a PO (regression fix: 2026-05-12 KIT-001 /
+   * KIT-002 cross-link).
    */
   static async appendTOsToKit(
-    kitPoNumber: string,
+    kitSerialNumber: string,
     importedTOs: Array<{
       destStorageBin: string
       transferOrderNumber: string
@@ -3525,18 +5220,27 @@ export class RRKittingDataService {
     error?: string
   }> {
     try {
+      if (!kitSerialNumber.trim()) {
+        return {
+          success: false,
+          insertedCount: 0,
+          error: 'Kit serial number is required',
+        }
+      }
+
       if (importedTOs.length === 0) {
         return { success: false, insertedCount: 0, error: 'No TOs provided' }
       }
 
-      // Get existing kit metadata
       const { data: existingData, error: existingError } = await (
-        db.from(this.TABLE_NAME) as ReturnType<(typeof supabase)['from']>
+        db.from(this.TABLE_NAME) as unknown as ReturnType<
+          (typeof supabase)['from']
+        >
       )
         .select(
-          'kit_build_number, kit_number, engine_program, deliver_to_plant, due_date, kit_serial_number, kit_priority, kit_definition_id, kit_added_by_user, incora_items, authorized_ship_short_items, kanban_task_id'
+          'kit_build_number, kit_number, engine_program, deliver_to_plant, due_date, kit_po_number, kit_priority, kit_definition_id, kit_added_by_user, incora_items, authorized_ship_short_items, kanban_task_id, kit_container_type, charge_code'
         )
-        .eq('kit_po_number', kitPoNumber)
+        .eq('kit_serial_number', kitSerialNumber)
         .limit(1)
 
       if (
@@ -3547,20 +5251,25 @@ export class RRKittingDataService {
         return { success: false, insertedCount: 0, error: 'Kit not found' }
       }
 
-      const first = (existingData as Record<string, unknown>[])[0]
+      const first = (existingData as unknown as Record<string, unknown>[])[0]
+      const kitPoNumber = first.kit_po_number as string
 
-      // Get existing TO numbers to skip duplicates
+      // Skip TOs that this specific kit already has. Two kits sharing a
+      // PO can each carry the same TO from SAP independently — duplicate
+      // detection MUST stay scoped to the serial.
       const { data: existingTOs } = await (
-        db.from(this.TABLE_NAME) as ReturnType<(typeof supabase)['from']>
+        db.from(this.TABLE_NAME) as unknown as ReturnType<
+          (typeof supabase)['from']
+        >
       )
         .select('transfer_order_number')
-        .eq('kit_po_number', kitPoNumber)
+        .eq('kit_serial_number', kitSerialNumber)
         .not('transfer_order_number', 'is', null)
 
       const existingTONumbers = new Set(
-        ((existingTOs ?? []) as { transfer_order_number: string }[]).map(
-          (r) => r.transfer_order_number
-        )
+        (
+          (existingTOs ?? []) as unknown as { transfer_order_number: string }[]
+        ).map((r) => r.transfer_order_number)
       )
 
       const newTOs = importedTOs.filter(
@@ -3581,7 +5290,7 @@ export class RRKittingDataService {
         kit_number: first.kit_number,
         deliver_to_plant: first.deliver_to_plant,
         due_date: first.due_date,
-        kit_serial_number: first.kit_serial_number,
+        kit_serial_number: kitSerialNumber,
         kit_priority: first.kit_priority,
         kit_definition_id: first.kit_definition_id,
         kit_added_by_user: first.kit_added_by_user,
@@ -3591,6 +5300,8 @@ export class RRKittingDataService {
         incora_items: first.incora_items ?? [],
         authorized_ship_short_items: first.authorized_ship_short_items ?? [],
         kanban_task_id: first.kanban_task_id,
+        kit_container_type: first.kit_container_type ?? null,
+        charge_code: first.charge_code ?? null,
         dest_storage_bin: to.destStorageBin,
         transfer_order_number: to.transferOrderNumber,
         source_storage_type: to.sourceStorageType,
@@ -3613,8 +5324,10 @@ export class RRKittingDataService {
       }))
 
       const { error: insertError } = await (
-        db.from(this.TABLE_NAME) as ReturnType<(typeof supabase)['from']>
-      ).insert(records as unknown[])
+        db.from(this.TABLE_NAME) as unknown as ReturnType<
+          (typeof supabase)['from']
+        >
+      ).insert(records as never[])
 
       if (insertError) {
         logger.error(
@@ -3624,14 +5337,16 @@ export class RRKittingDataService {
         return { success: false, insertedCount: 0, error: insertError.message }
       }
 
-      // Resync kanban totals
-      await KitKanbanService.syncKitProgressFromData(kitPoNumber)
+      // Resync kanban totals for the specific kit, not the PO group.
+      await KitKanbanService.syncKitProgressFromSerial(kitSerialNumber)
 
-      // Recheck BOM coverage if linked to a definition
       let bomCoverageComplete: boolean | undefined
       const defId = first.kit_definition_id as string | null
       if (defId) {
-        const coverageResult = await this.recheckBomCoverage(kitPoNumber, defId)
+        const coverageResult = await this.recheckBomCoverageBySerial(
+          kitSerialNumber,
+          defId
+        )
         bomCoverageComplete = coverageResult.isComplete
       }
 
@@ -3649,5 +5364,621 @@ export class RRKittingDataService {
       }
     }
   }
+
+  /**
+   * Lookup helper: every active kit serial currently registered against
+   * a Kit PO Number. Used by the Kitting Data Manager when an admin
+   * action (e.g. Append TOs) is invoked with a PO and the UI needs to
+   * disambiguate before calling a serial-scoped service method.
+   */
+  static async findKitSerialsByPoNumber(kitPoNumber: string): Promise<
+    Array<{
+      kitSerialNumber: string
+      kitNumber: string | null
+      kitBuildNumber: string | null
+      kitBuildStatus: string | null
+    }>
+  > {
+    try {
+      const { data, error } = await (
+        db.from(this.TABLE_NAME) as unknown as ReturnType<
+          (typeof supabase)['from']
+        >
+      )
+        .select(
+          'kit_serial_number, kit_number, kit_build_number, kit_build_status'
+        )
+        .eq('kit_po_number', kitPoNumber)
+        .not('kit_serial_number', 'is', null)
+
+      if (error) {
+        logger.error('[KittingService] findKitSerialsByPoNumber error:', error)
+        return []
+      }
+
+      const rows =
+        (data as unknown as Array<{
+          kit_serial_number: string | null
+          kit_number: string | null
+          kit_build_number: string | null
+          kit_build_status: string | null
+        }>) ?? []
+
+      const seen = new Map<
+        string,
+        {
+          kitSerialNumber: string
+          kitNumber: string | null
+          kitBuildNumber: string | null
+          kitBuildStatus: string | null
+        }
+      >()
+      for (const row of rows) {
+        if (!row.kit_serial_number) continue
+        if (seen.has(row.kit_serial_number)) continue
+        seen.set(row.kit_serial_number, {
+          kitSerialNumber: row.kit_serial_number,
+          kitNumber: row.kit_number,
+          kitBuildNumber: row.kit_build_number,
+          kitBuildStatus: row.kit_build_status,
+        })
+      }
+
+      return Array.from(seen.values())
+    } catch (err) {
+      logger.error('[KittingService] findKitSerialsByPoNumber error:', err)
+      return []
+    }
+  }
+
+  /**
+   * Replace the `Authorized to Ship Short` list on an existing kit.
+   *
+   * - Writes the new array to **every** RR_Kitting_DATA row for the kit
+   *   (the value is denormalised onto each TO row — see
+   *   `appendTOsToKit` line ~4010 where new rows inherit it).
+   * - Re-runs `recheckBomCoverage` if the kit is linked to a kit
+   *   definition. Because authorized ship-short part numbers are now
+   *   honoured by `recheckBomCoverage`, this can self-clear an
+   *   auto-Black-Hat that was previously blocking RF picking.
+   *
+   * Items are sanitised: empty part numbers are dropped, line numbers
+   * are renumbered 1..N, and the list is capped at 7 to match the
+   * dialog input limit.
+   */
+  static async updateAuthorizedShipShortItems(
+    kitSerialNumber: string,
+    items: Array<{ partNumber: string; description?: string }>
+  ): Promise<{
+    success: boolean
+    bomCoverageComplete?: boolean
+    flagCleared?: boolean
+    error?: string
+  }> {
+    try {
+      if (!kitSerialNumber.trim()) {
+        return { success: false, error: 'Kit serial number is required' }
+      }
+
+      // Sanitise + renumber + cap at 7 (matches dialog limit).
+      const sanitised = items
+        .map((item) => ({
+          partNumber: item.partNumber.trim(),
+          description: (item.description ?? '').trim(),
+        }))
+        .filter((item) => item.partNumber.length > 0)
+        .slice(0, 7)
+        .map((item, idx) => ({
+          lineNumber: idx + 1,
+          partNumber: item.partNumber,
+          description: item.description,
+        }))
+
+      // Look up kit_po_number + kit_definition_id from any row for this
+      // kit (the columns are snapshot-replicated across every row).
+      const { data: existing, error: existingErr } = await (
+        db.from(this.TABLE_NAME) as unknown as ReturnType<
+          (typeof supabase)['from']
+        >
+      )
+        .select('kit_po_number, kit_definition_id, authorized_ship_short_items')
+        .eq('kit_serial_number', kitSerialNumber)
+        .limit(1)
+
+      if (existingErr || !existing || (existing as unknown[]).length === 0) {
+        return {
+          success: false,
+          error: existingErr?.message || 'Kit not found',
+        }
+      }
+
+      const meta = (
+        existing as unknown as Array<{
+          kit_po_number: string
+          kit_definition_id: string | null
+          authorized_ship_short_items: Array<{
+            partNumber?: string
+            authorizedBy?: string | null
+          }> | null
+        }>
+      )[0]
+
+      // Stamp the authorizer. Preserve the original authorizer for parts that
+      // were already on the list (so editing the list doesn't reattribute
+      // someone else's authorization); stamp the current operator for any
+      // newly-added parts.
+      const priorAuthorizers = new Map<string, string | null>()
+      for (const prior of meta.authorized_ship_short_items ?? []) {
+        if (prior.partNumber?.trim()) {
+          priorAuthorizers.set(
+            prior.partNumber.trim().toLowerCase(),
+            prior.authorizedBy ?? null
+          )
+        }
+      }
+      const currentAuthorizer = await this.getCurrentUserDisplayName()
+      const sanitisedWithAuthorizer = sanitised.map((item) => ({
+        ...item,
+        authorizedBy:
+          priorAuthorizers.get(item.partNumber.toLowerCase()) ??
+          currentAuthorizer ??
+          null,
+      }))
+
+      // Was a black-hat flag active before we did anything? Scope the
+      // before/after probes by kit_serial_number — sibling kits sharing a
+      // PO each carry their own flag now (post 303).
+      const blackHatBefore = await (
+        db.from('kit_build_flags') as ReturnType<(typeof supabase)['from']>
+      )
+        .select('id')
+        .eq('kit_serial_number', kitSerialNumber)
+        .eq('flag_type', 'black')
+        .eq('is_active', true)
+        .limit(1)
+
+      const { error: updateErr } = await (
+        db.from(this.TABLE_NAME) as unknown as ReturnType<
+          (typeof supabase)['from']
+        >
+      )
+        .update({
+          authorized_ship_short_items: sanitisedWithAuthorizer,
+        } as Record<string, unknown>)
+        .eq('kit_serial_number', kitSerialNumber)
+
+      if (updateErr) {
+        logger.error(
+          '[KittingService] updateAuthorizedShipShortItems update error:',
+          updateErr
+        )
+        return { success: false, error: updateErr.message }
+      }
+
+      let bomCoverageComplete: boolean | undefined
+      if (meta.kit_definition_id) {
+        const coverageResult = await this.recheckBomCoverageBySerial(
+          kitSerialNumber,
+          meta.kit_definition_id
+        )
+        bomCoverageComplete = coverageResult.isComplete
+      }
+
+      const blackHatAfter = await (
+        db.from('kit_build_flags') as ReturnType<(typeof supabase)['from']>
+      )
+        .select('id')
+        .eq('kit_serial_number', kitSerialNumber)
+        .eq('flag_type', 'black')
+        .eq('is_active', true)
+        .limit(1)
+
+      const flagCleared = (blackHatBefore.data as { id: string }[] | null)
+        ?.length
+        ? !(blackHatAfter.data as { id: string }[] | null)?.length
+        : false
+
+      logger.log(
+        `[KittingService] Updated ship-short for kit ${kitSerialNumber}: ${sanitised.length} item(s)`
+      )
+
+      return {
+        success: true,
+        bomCoverageComplete,
+        flagCleared,
+      }
+    } catch (err) {
+      logger.error(
+        '[KittingService] updateAuthorizedShipShortItems error:',
+        err
+      )
+      return {
+        success: false,
+        error: err instanceof Error ? err.message : 'Unknown error',
+      }
+    }
+  }
+
+  /**
+   * Add a single expedite line to the kit build plan.
+   *
+   * Two modes:
+   * - **Append to existing kit:** If `kitPoNumber` matches a kit, the expedite
+   *   row inherits that kit's serial number / build number / kit number /
+   *   kit_definition_id / kanban_task_id and is shown alongside its TO lines.
+   * - **Stand-alone expedite:** If no `kitPoNumber` provided (or it does not
+   *   match an existing kit), a new RR_Kitting_DATA row is created with its
+   *   own kit serial number and a fresh kanban card so the expedite is still
+   *   tracked on the Kit Assembly Board.
+   */
+  static async addExpediteToKit(input: {
+    kitPoNumber?: string
+    partNumber: string
+    description?: string
+    quantity?: number
+    deliveryTime: ExpediteDeliveryTime
+    reasonCode?: string
+    requestedByDate?: Date
+    // Optional source Transfer Order number (set when the expedite is created
+    // from an imported TO row) — stored for traceability.
+    transferOrderNumber?: string
+  }): Promise<{
+    success: boolean
+    recordId?: string
+    error?: string
+  }> {
+    try {
+      if (!input.partNumber.trim()) {
+        return { success: false, error: 'Part number is required' }
+      }
+      if (!input.deliveryTime) {
+        return { success: false, error: 'Delivery time is required' }
+      }
+
+      const {
+        data: { user },
+      } = await supabase.auth.getUser()
+      const userId = user?.id ?? null
+
+      const formattedRequestedDate = input.requestedByDate
+        ? input.requestedByDate.toISOString().split('T')[0]
+        : null
+
+      const expediteFields: Record<string, unknown> = {
+        part_expedite_part_number: input.partNumber.trim(),
+        part_expedite_description: input.description?.trim() || null,
+        part_expedite_quantity:
+          input.quantity != null && Number.isFinite(input.quantity)
+            ? input.quantity
+            : null,
+        part_expedite_delivery_time: input.deliveryTime,
+        part_expedite_request_reason_code: input.reasonCode?.trim() || null,
+        part_expedite_request_by_user: userId,
+        part_expedite_request_create_date_time: new Date().toISOString(),
+        part_expedite_requested_by_date: formattedRequestedDate,
+      }
+
+      const targetKitPo = input.kitPoNumber?.trim() || ''
+
+      // Mode 1: Append to existing kit if PO is provided and exists
+      if (targetKitPo) {
+        const { data: existingData, error: existingError } = await (
+          db.from(this.TABLE_NAME) as unknown as ReturnType<
+            (typeof supabase)['from']
+          >
+        )
+          .select(
+            'kit_build_number, kit_number, engine_program, deliver_to_plant, due_date, kit_serial_number, kit_priority, kit_definition_id, kanban_task_id, kit_container_type, charge_code, kit_cart_color'
+          )
+          .eq('kit_po_number', targetKitPo)
+          .limit(1)
+
+        if (existingError) {
+          logger.error(
+            '[KittingService] addExpediteToKit lookup error:',
+            existingError
+          )
+          return { success: false, error: existingError.message }
+        }
+
+        const existingRows =
+          (existingData as unknown as Record<string, unknown>[] | null) ?? []
+
+        if (existingRows.length > 0) {
+          const first = existingRows[0]
+
+          const record: Record<string, unknown> = {
+            kit_build_number: first.kit_build_number,
+            kit_po_number: targetKitPo,
+            engine_program: first.engine_program,
+            kit_number: first.kit_number,
+            deliver_to_plant: first.deliver_to_plant,
+            due_date: first.due_date,
+            kit_serial_number: first.kit_serial_number,
+            kit_priority: first.kit_priority,
+            kit_definition_id: first.kit_definition_id,
+            kanban_task_id: first.kanban_task_id,
+            kit_container_type: first.kit_container_type ?? null,
+            charge_code: first.charge_code ?? null,
+            kit_cart_color: first.kit_cart_color ?? null,
+            kit_added_by_user: userId,
+            kit_added_create_date_time: new Date().toISOString(),
+            kit_build_status: 'pending',
+            kit_priority_change_count: 0,
+            material: input.partNumber.trim(),
+            material_description: input.description?.trim() || null,
+            source_target_qty:
+              input.quantity != null && Number.isFinite(input.quantity)
+                ? String(input.quantity)
+                : null,
+            ...expediteFields,
+          }
+
+          const { data, error } = await (
+            db.from(this.TABLE_NAME) as unknown as ReturnType<
+              (typeof supabase)['from']
+            >
+          )
+            .insert([record] as never[])
+            .select('id')
+            .single()
+
+          if (error) {
+            logger.error(
+              '[KittingService] addExpediteToKit insert error:',
+              error
+            )
+            return { success: false, error: error.message }
+          }
+
+          await KitKanbanService.syncKitProgressFromData(targetKitPo)
+
+          return {
+            success: true,
+            recordId: (data as unknown as { id: string } | null)?.id,
+          }
+        }
+      }
+
+      // Mode 2: Stand-alone expedite (no matching kit, or no PO supplied).
+      // Create a self-contained RR_Kitting_DATA row + kanban card.
+      const kitSerialNumber = await this.generateKitSerialNumber()
+      const nextPriority = await this.getNextPriority()
+      const standalonePoNumber = targetKitPo || `EXP-${kitSerialNumber}`
+      const standaloneBuildNumber = `EXP-${kitSerialNumber}`
+      const standaloneKitNumber = input.partNumber.trim()
+
+      const standaloneRecord: Record<string, unknown> = {
+        kit_build_number: standaloneBuildNumber,
+        kit_po_number: standalonePoNumber,
+        engine_program: 'EXPEDITE',
+        kit_number: standaloneKitNumber,
+        deliver_to_plant: 'Expedite Queue',
+        due_date: formattedRequestedDate,
+        kit_serial_number: kitSerialNumber,
+        kit_priority: nextPriority,
+        kit_priority_change_count: 0,
+        kit_added_by_user: userId,
+        kit_added_create_date_time: new Date().toISOString(),
+        kit_build_status: 'pending',
+        material: input.partNumber.trim(),
+        material_description: input.description?.trim() || null,
+        transfer_order_number: input.transferOrderNumber?.trim() || null,
+        source_target_qty:
+          input.quantity != null && Number.isFinite(input.quantity)
+            ? String(input.quantity)
+            : null,
+        incora_items: [],
+        authorized_ship_short_items: [],
+        ...expediteFields,
+      }
+
+      const { data: insertedData, error: insertError } = await (
+        db.from(this.TABLE_NAME) as unknown as ReturnType<
+          (typeof supabase)['from']
+        >
+      )
+        .insert([standaloneRecord] as never[])
+        .select('id')
+        .single()
+
+      if (insertError) {
+        logger.error(
+          '[KittingService] addExpediteToKit standalone insert error:',
+          insertError
+        )
+        return { success: false, error: insertError.message }
+      }
+
+      const insertedId =
+        (insertedData as unknown as { id: string } | null)?.id ?? ''
+
+      const kanbanResult = await KitKanbanService.createTask({
+        kitSerialNumber,
+        kitPoNumber: standalonePoNumber,
+        kitNumber: standaloneKitNumber,
+        kitBuildNumber: standaloneBuildNumber,
+        kitBuildPlanId: insertedId,
+        priority: nextPriority,
+        totalToLines: 1,
+        dueDate: formattedRequestedDate || undefined,
+      })
+
+      if (kanbanResult.success && kanbanResult.taskId && insertedId) {
+        await (
+          db.from(this.TABLE_NAME) as unknown as ReturnType<
+            (typeof supabase)['from']
+          >
+        )
+          .update({ kanban_task_id: kanbanResult.taskId } as Record<
+            string,
+            unknown
+          >)
+          .eq('id', insertedId)
+      }
+
+      return { success: true, recordId: insertedId }
+    } catch (err) {
+      logger.error('[KittingService] addExpediteToKit error:', err)
+      return {
+        success: false,
+        error: err instanceof Error ? err.message : 'Unknown error',
+      }
+    }
+  }
+
+  /**
+   * Create one STAND-ALONE expedite per imported Transfer Order row. Each TO
+   * row becomes its own expedite part (material → part number, qty → quantity,
+   * TO number stored for traceability), sharing the same delivery-time
+   * priority / reason / requested-by date. Used by the "Add Expedite Part"
+   * dialog's TO-import flow.
+   *
+   * Reuses `addExpediteToKit` per row (sequentially, so each call's serial
+   * generation sees the prior insert). Returns counts so the caller can toast
+   * a summary.
+   */
+  static async addExpeditePartsFromTOs(
+    records: Array<{
+      material?: string
+      materialDescription?: string
+      sourceTargetQty?: string
+      transferOrderNumber?: string
+    }>,
+    shared: {
+      deliveryTime: ExpediteDeliveryTime
+      reasonCode?: string
+      requestedByDate?: Date
+    }
+  ): Promise<{
+    success: boolean
+    created: number
+    failed: number
+    error?: string
+  }> {
+    let created = 0
+    let failed = 0
+    let firstError: string | undefined
+
+    for (const record of records) {
+      const partNumber = record.material?.trim()
+      if (!partNumber) {
+        failed++
+        continue
+      }
+
+      const parsedQty = record.sourceTargetQty
+        ? Number(record.sourceTargetQty)
+        : undefined
+      const quantity =
+        parsedQty != null && Number.isFinite(parsedQty) ? parsedQty : undefined
+
+      const result = await this.addExpediteToKit({
+        partNumber,
+        description: record.materialDescription?.trim() || undefined,
+        quantity,
+        deliveryTime: shared.deliveryTime,
+        reasonCode: shared.reasonCode,
+        requestedByDate: shared.requestedByDate,
+        transferOrderNumber: record.transferOrderNumber?.trim() || undefined,
+      })
+
+      if (result.success) {
+        created++
+      } else {
+        failed++
+        firstError = firstError ?? result.error
+      }
+    }
+
+    return {
+      success: created > 0,
+      created,
+      failed,
+      error: created === 0 ? firstError : undefined,
+    }
+  }
+
+  /**
+   * Cancel a single Transfer Order line on a kit. Marks the row with
+   * `cancelled = true` plus the operator's actor / timestamp / reason
+   * so the audit-trail dialog can render the cancellation visibly and
+   * the stage-gating + BOM coverage paths can exclude it.
+   *
+   * The DB CHECK constraint `rr_kitting_data_cancellation_invariants`
+   * requires all four cancellation columns be populated together with a
+   * non-empty reason — this method enforces that contract on the
+   * client side too so a missing-reason call fails fast with a useful
+   * error rather than the constraint violation message.
+   *
+   * Caller is responsible for:
+   *   1. Stamping a `kit_notes` system note (event_kind =
+   *      'to_line_cancelled') so the cancellation appears in the audit
+   *      trail thread. The Kit Build Audit Trail dialog wires this via
+   *      its `addSystemNote` hook to keep the message surface
+   *      consistent with the existing flag / ship-short events.
+   *   2. Re-running BOM coverage / kanban progress sync (caller can
+   *      invoke `recheckBomCoverageBySerial` + `KitKanbanService.syncKitProgressFromData`).
+   *      Both are intentionally NOT called here so the dialog can decide
+   *      whether to surface "Black Hat re-raised because cancelled
+   *      material was the only TO" feedback.
+   *
+   * See migration 325 + [[Cancel-Kit-TO-Line]].
+   */
+  static async cancelTOLine(
+    toLineId: string,
+    reason: string
+  ): Promise<{ success: boolean; error?: string }> {
+    const trimmed = reason.trim()
+    if (!toLineId) {
+      return { success: false, error: 'Missing TO line id' }
+    }
+    if (!trimmed) {
+      return {
+        success: false,
+        error: 'A cancellation reason is required',
+      }
+    }
+
+    try {
+      const {
+        data: { user },
+      } = await supabase.auth.getUser()
+
+      if (!user) {
+        return { success: false, error: 'Not authenticated' }
+      }
+
+      // Cast through `unknown` so the new columns (added by migration
+      // 325 — not yet in `database.types.ts`) type-check. Same pattern
+      // used elsewhere in this service for `missing_part_flag` etc.
+      const { error } = await (
+        db.from(this.TABLE_NAME) as unknown as ReturnType<
+          (typeof supabase)['from']
+        >
+      )
+        .update({
+          cancelled: true,
+          cancelled_at: new Date().toISOString(),
+          cancelled_by_user: user.id,
+          cancelled_reason: trimmed,
+        } as unknown as Record<string, unknown>)
+        .eq('id', toLineId)
+
+      if (error) {
+        logger.error('[KittingService] cancelTOLine error:', error)
+        return { success: false, error: error.message }
+      }
+
+      return { success: true }
+    } catch (err) {
+      logger.error('[KittingService] cancelTOLine exception:', err)
+      return {
+        success: false,
+        error: err instanceof Error ? err.message : 'Unknown error',
+      }
+    }
+  }
 }
-// Developer and Creator: Jai Singh
+
+// Created and developed by Jai Singh

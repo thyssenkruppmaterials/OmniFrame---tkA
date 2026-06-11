@@ -1,3 +1,4 @@
+// Created and developed by Jai Singh
 import { QueryClient } from '@tanstack/react-query'
 import { createRootRouteWithContext, Outlet } from '@tanstack/react-router'
 import { ReactQueryDevtools } from '@tanstack/react-query-devtools'
@@ -9,6 +10,7 @@ import { AppUpdateBanner } from '@/components/app-update-banner'
 import { NavigationProgress } from '@/components/navigation-progress'
 import GeneralError from '@/features/errors/general-error'
 import NotFoundError from '@/features/errors/not-found-error'
+import { OmniBeltHost } from '@/features/omnibelt'
 
 export const Route = createRootRouteWithContext<{
   queryClient: QueryClient
@@ -20,6 +22,11 @@ export const Route = createRootRouteWithContext<{
           <AppUpdateBanner />
           <NavigationProgress />
           <Outlet />
+          {/* P3 — OmniBelt site-wide launcher. Mounted INSIDE
+              <SearchProvider> so any tool shell can read the
+              command-menu context, and as a sibling of <Outlet />
+              so it survives route transitions. */}
+          <OmniBeltHost />
           <Toaster />
           {import.meta.env.MODE === 'development' && (
             <>
@@ -34,4 +41,5 @@ export const Route = createRootRouteWithContext<{
   notFoundComponent: NotFoundError,
   errorComponent: GeneralError,
 })
-// Developer and Creator: Jai Singh
+
+// Created and developed by Jai Singh

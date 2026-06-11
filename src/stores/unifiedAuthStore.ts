@@ -1,3 +1,4 @@
+// Created and developed by Jai Singh
 /**
  * Unified Authentication Store
  * Enterprise-grade authentication state management with Redis caching
@@ -309,6 +310,7 @@ export const useUnifiedAuth = create<UnifiedAuthState>()(
             set({ isLoading: true, error: null })
 
             try {
+              const { getAppUrl } = await import('@/lib/utils/app-url')
               const { data, error } = await singletonAuthManager
                 .getSupabaseClient()
                 .auth.signUp({
@@ -316,7 +318,7 @@ export const useUnifiedAuth = create<UnifiedAuthState>()(
                   password,
                   options: {
                     data: metadata,
-                    emailRedirectTo: `${window.location.origin}/auth/callback`,
+                    emailRedirectTo: `${getAppUrl()}/auth/callback`,
                   },
                 })
 
@@ -425,10 +427,11 @@ export const useUnifiedAuth = create<UnifiedAuthState>()(
           },
 
           resetPassword: async (email: string) => {
+            const { getAppUrl } = await import('@/lib/utils/app-url')
             const { error } = await singletonAuthManager
               .getSupabaseClient()
               .auth.resetPasswordForEmail(email, {
-                redirectTo: `${window.location.origin}/auth/reset-password`,
+                redirectTo: `${getAppUrl()}/auth/reset-password`,
               })
             if (error) throw error
           },
@@ -1404,3 +1407,5 @@ rbacCacheManager.registerCacheLayer('unified-auth-navigation', () => {
 
 // Export the store instance for direct access if needed
 export default useUnifiedAuth
+
+// Created and developed by Jai Singh

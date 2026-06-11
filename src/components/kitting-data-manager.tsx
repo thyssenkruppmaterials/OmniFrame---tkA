@@ -1,3 +1,4 @@
+// Created and developed by Jai Singh
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
   CheckCircle2,
@@ -10,15 +11,27 @@ import {
   RefreshCw,
   Scan,
   Search,
+  Zap,
 } from 'lucide-react'
 import { toast } from 'sonner'
+import {
+  detectNonWarehouseBins,
+  type NonWarehouseBinDetection,
+} from '@/lib/kitting/non-warehouse-bins'
 import { RRKittingDataService } from '@/lib/supabase/rr-kitting-data.service'
 import { logger } from '@/lib/utils/logger'
+import { useKitUnreadNotes } from '@/hooks/use-kit-unread-notes'
+import { useNonWarehouseBinPatterns } from '@/hooks/use-kitting-workflow-settings'
+import {
+  AddExpediteDialog,
+  type ExpediteFormData,
+} from '@/components/ui/add-expedite-dialog'
 import {
   AddKitBuildPlanDialog,
   type KitBuildPlanFormData,
   type TransferOrderRecord,
 } from '@/components/ui/add-kit-build-plan-dialog'
+import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import {
@@ -32,12 +45,30 @@ import {
   KittingDataGrid,
   type KittingGridRow,
 } from '@/components/ui/kitting-data-grid'
+import { KpiGrid } from '@/components/ui/kpi-grid'
 import { Separator } from '@/components/ui/separator'
+import { StatTile } from '@/components/ui/stat-tile'
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { KitProductionTrackerDialog } from '@/components/kitting/kit-production-tracker'
+import { NonWarehouseBinConfirmDialog } from '@/components/kitting/non-warehouse-bin-confirm-dialog'
 
 interface KittingDataManagerProps {
   enableRealtime?: boolean
 }
+
+// Stand-alone single-part expedites are stamped engine_program = 'EXPEDITE'
+// (see RRKittingDataService.addExpediteToKit mode 2). They get their own tab
+// so they don't mix into the kit queues.
+const isExpediteRow = (row: KittingGridRow) =>
+  row.engine_program?.toUpperCase() === 'EXPEDITE'
+// "Completed" must match what the Status column shows: the DERIVED stage
+// (kit_stage_status), which treats on-dock as done — the canonical "on dock =
+// done" invariant. Keying off the raw kit_build_status alone misses kits that
+// reached the dock but whose stored status was never flipped to 'completed'
+// (e.g. legacy rows left at 'printed'), so they'd show "Completed" yet stay in
+// Open Work. Fall back to the raw status when no derived stage is present.
+const isCompletedRow = (row: KittingGridRow) =>
+  (row.kit_stage_status ?? row.kit_build_status)?.toLowerCase() === 'completed'
 
 const KittingDataManager: React.FC<KittingDataManagerProps> = React.memo(
   ({ enableRealtime = true }) => {
@@ -48,25 +79,67 @@ const KittingDataManager: React.FC<KittingDataManagerProps> = React.memo(
     const [selectedKitPoNumber, setSelectedKitPoNumber] = useState<
       string | null
     >(null)
+    // Position-based priority (#n) of the clicked row, forwarded to the audit
+    // trail so its header matches the grid instead of the raw kit_priority.
+    const [selectedDisplayPriority, setSelectedDisplayPriority] = useState<
+      number | null
+    >(null)
     const [isDetailsDialogOpen, setIsDetailsDialogOpen] = useState(false)
     const [localSearchQuery, setLocalSearchQuery] = useState('')
+    // Which queue is shown:
+    //   'open'      — active kit build plans (not completed, not expedites)
+    //   'completed' — kits that have reached the dock (kit_build_status = 'completed')
+    //   'expedites' — stand-alone single-part expedites (engine_program = 'EXPEDITE')
+    // Splitting them keeps each queue uncluttered. See [[Kit-Build-Plan-Completed-Tab]].
+    const [activeKitTab, setActiveKitTab] = useState<
+      'open' | 'completed' | 'expedites'
+    >('open')
     const [isLoading, setIsLoading] = useState(true)
     const [isAddPlanDialogOpen, setIsAddPlanDialogOpen] = useState(false)
+    const [isAddExpediteDialogOpen, setIsAddExpediteDialogOpen] =
+      useState(false)
     const [gridData, setGridData] = useState<KittingGridRow[]>([])
     const [statistics, setStatistics] = useState({
       totalRecords: 0,
       pendingCount: 0,
       inProgressCount: 0,
       completedCount: 0,
+      completedTodayCount: 0,
+      completedYesterdayCount: 0,
+      completedThisWeekCount: 0,
     })
     const componentRef = useRef<HTMLDivElement>(null)
 
+    // Configured non-warehouse bin patterns (org-level, default {NEEDBIN}).
+    // Used by `handleAppendTOs` below to gate the append behind an ack
+    // dialog when any clipboard-imported row references an external
+    // plant bin. See migration 314 + [[Non-Warehouse-Bin-Acknowledgment]].
+    const nonWarehouseBinPatterns = useNonWarehouseBinPatterns()
+
+    // Per-user unread Kit Notes — drives the "New message" indicator column.
+    // Mark-read happens when the audit trail opens (in KitProductionTracker).
+    const { unreadSerials } = useKitUnreadNotes()
+
+    // Pending-append state — when set, the confirm dialog is open and
+    // the operator must tick the ack before the actual append runs.
+    const [pendingAppend, setPendingAppend] = useState<{
+      targetSerial: string
+      targetLabel: string
+      records: TransferOrderRecord[]
+      detection: NonWarehouseBinDetection<TransferOrderRecord>
+    } | null>(null)
+    const [appendSubmitting, setAppendSubmitting] = useState(false)
+
     // Row click handler for viewing kit audit trail dialog
-    const handleRowClick = useCallback((row: KittingGridRow) => {
-      setSelectedKitSerialNumber(row.kit_serial_number) // Use kit_serial_number as unique identifier
-      setSelectedKitPoNumber(row.kit_po_number) // Keep PO for display purposes
-      setIsDetailsDialogOpen(true)
-    }, [])
+    const handleRowClick = useCallback(
+      (row: KittingGridRow, displayPriority: number) => {
+        setSelectedKitSerialNumber(row.kit_serial_number) // Use kit_serial_number as unique identifier
+        setSelectedKitPoNumber(row.kit_po_number) // Keep PO for display purposes
+        setSelectedDisplayPriority(displayPriority) // Match the grid's #n in the dialog
+        setIsDetailsDialogOpen(true)
+      },
+      []
+    )
 
     // Fetch data from database
     const fetchData = useCallback(async () => {
@@ -136,6 +209,7 @@ const KittingDataManager: React.FC<KittingDataManagerProps> = React.memo(
           item.kit_number?.toLowerCase().includes(searchLower) ||
           String(item.kit_priority).includes(searchLower) ||
           item.kit_build_status?.toLowerCase().includes(searchLower) ||
+          item.kit_stage_status?.toLowerCase().includes(searchLower) ||
           item.kit_flag_type?.toLowerCase().includes(searchLower) ||
           // Search through multiple active flags
           item.active_flags?.some((flag) =>
@@ -144,16 +218,49 @@ const KittingDataManager: React.FC<KittingDataManagerProps> = React.memo(
       )
     }, [gridData, localSearchQuery])
 
-    // Handler for priority changes when rows are reordered
+    // Three queues, kept in separate tabs so each stays uncluttered:
+    //   - Expedites: stand-alone single-part expedites (engine_program =
+    //     'EXPEDITE', created by the Add Expedite flow without a matching kit).
+    //   - Completed Kits: kits at the dock (kit_build_status = 'completed').
+    //   - Open Work Kits: everything else (active build plans).
+    // Expedites are excluded from both kit tabs regardless of status.
+    const expediteData = useMemo(
+      () => filteredData.filter((row) => isExpediteRow(row)),
+      [filteredData]
+    )
+    const openWorkData = useMemo(
+      () =>
+        filteredData.filter(
+          (row) => !isExpediteRow(row) && !isCompletedRow(row)
+        ),
+      [filteredData]
+    )
+    const completedData = useMemo(
+      () =>
+        filteredData.filter(
+          (row) => !isExpediteRow(row) && isCompletedRow(row)
+        ),
+      [filteredData]
+    )
+
+    // Handler for priority changes when rows are reordered.
+    // `reorderedRows` is the OPEN-WORK subset only (completed kits and
+    // expedites live in separate read-only tabs and can't be reordered), so we
+    // merge the reordered rows back with every other row by id — this keeps
+    // the completed kits AND the expedites in local state instead of dropping
+    // them before the next fetch.
     const handlePriorityChange = useCallback(
       async (reorderedRows: KittingGridRow[]) => {
         // Update local grid data optimistically for smooth UI
-        setGridData(
-          reorderedRows.map((row, index) => ({
-            ...row,
-            kit_priority: index + 1,
-          }))
-        )
+        const reorderedWithPriority = reorderedRows.map((row, index) => ({
+          ...row,
+          kit_priority: index + 1,
+        }))
+        setGridData((prev) => {
+          const reorderedIds = new Set(reorderedRows.map((row) => row.id))
+          const untouchedRows = prev.filter((row) => !reorderedIds.has(row.id))
+          return [...reorderedWithPriority, ...untouchedRows]
+        })
 
         const result =
           await RRKittingDataService.updatePrioritiesSimple(reorderedRows)
@@ -190,6 +297,9 @@ const KittingDataManager: React.FC<KittingDataManagerProps> = React.memo(
           authorizedShipShortItems: formData.authorizedShipShortItems,
           kitDefinitionId: formData.kitDefinitionId,
           bomCoverage: formData.bomCoverage,
+          kitCartColor: formData.kitCartColor,
+          kitContainerType: formData.kitContainerType,
+          chargeCode: formData.chargeCode,
         })
 
         if (result.success) {
@@ -209,6 +319,45 @@ const KittingDataManager: React.FC<KittingDataManagerProps> = React.memo(
           fetchData() // Refresh data
         } else {
           toast.error('Failed to save kit build plan', {
+            description: result.error || 'An unexpected error occurred.',
+          })
+        }
+      },
+      [fetchData]
+    )
+
+    // Handler for Add Expedite Part dialog submission. Each imported TO row
+    // becomes one stand-alone expedite part (Expedites tab).
+    const handleAddExpedite = useCallback(
+      async (formData: ExpediteFormData) => {
+        const result = await RRKittingDataService.addExpeditePartsFromTOs(
+          formData.importedTOs.map((to) => ({
+            material: to.material,
+            materialDescription: to.materialDescription,
+            sourceTargetQty: to.sourceTargetQty,
+            transferOrderNumber: to.transferOrderNumber,
+          })),
+          {
+            deliveryTime: formData.deliveryTime,
+            reasonCode: formData.reasonCode || undefined,
+            requestedByDate: formData.requestedByDate,
+          }
+        )
+
+        if (result.success) {
+          toast.success(
+            `Added ${result.created} expedite part${result.created === 1 ? '' : 's'}`,
+            {
+              description:
+                result.failed > 0
+                  ? `${result.failed} row${result.failed === 1 ? ' was' : 's were'} skipped (missing part number).`
+                  : 'Each imported TO row was added to the Expedites tab.',
+            }
+          )
+          setIsAddExpediteDialogOpen(false)
+          fetchData()
+        } else {
+          toast.error('Failed to add expedite parts', {
             description: result.error || 'An unexpected error occurred.',
           })
         }
@@ -249,7 +398,7 @@ const KittingDataManager: React.FC<KittingDataManagerProps> = React.memo(
           row.due_date || '',
           row.kit_added_by_user || '',
           row.kit_added_create_date_time || '',
-          row.kit_build_status || '',
+          row.kit_stage_status || row.kit_build_status || '',
           flagList,
         ]
       })
@@ -273,6 +422,54 @@ const KittingDataManager: React.FC<KittingDataManagerProps> = React.memo(
       toast.success('Data refreshed')
     }, [fetchData])
 
+    /**
+     * Run the actual append once detection / acknowledgement (if any)
+     * is resolved. Split out from `handleAppendTOs` so the confirm
+     * dialog's `onConfirm` can reuse the same code path without
+     * re-parsing the clipboard.
+     */
+    const runAppendTOs = useCallback(
+      async (
+        targetSerial: string,
+        records: TransferOrderRecord[]
+      ): Promise<boolean> => {
+        try {
+          const result = await RRKittingDataService.appendTOsToKit(
+            targetSerial,
+            records
+          )
+          if (result.success) {
+            if (result.insertedCount === 0) {
+              toast.info('All TOs already exist for this kit')
+            } else {
+              toast.success(
+                `Appended ${result.insertedCount} TO(s) to ${targetSerial}`,
+                {
+                  description:
+                    result.bomCoverageComplete === true
+                      ? 'BOM coverage is now complete — Black Hat cleared.'
+                      : result.bomCoverageComplete === false
+                        ? 'BOM coverage still incomplete — Black Hat remains.'
+                        : undefined,
+                }
+              )
+            }
+            fetchData()
+            return true
+          }
+          toast.error('Failed to append TOs', {
+            description: result.error,
+          })
+          return false
+        } catch (err) {
+          logger.error('[KittingDataManager] runAppendTOs error:', err)
+          toast.error('Failed to append TOs')
+          return false
+        }
+      },
+      [fetchData]
+    )
+
     const handleAppendTOs = useCallback(
       async (kitPoNumber: string) => {
         try {
@@ -292,38 +489,67 @@ const KittingDataManager: React.FC<KittingDataManagerProps> = React.memo(
             return
           }
 
-          const result = await RRKittingDataService.appendTOsToKit(
-            kitPoNumber,
-            records
-          )
-          if (result.success) {
-            if (result.insertedCount === 0) {
-              toast.info('All TOs already exist for this kit')
-            } else {
-              toast.success(
-                `Appended ${result.insertedCount} TO(s) to ${kitPoNumber}`,
-                {
-                  description:
-                    result.bomCoverageComplete === true
-                      ? 'BOM coverage is now complete — Black Hat cleared.'
-                      : result.bomCoverageComplete === false
-                        ? 'BOM coverage still incomplete — Black Hat remains.'
-                        : undefined,
-                }
-              )
+          // appendTOsToKit is now serial-scoped. If the operator selected
+          // a kit row first (handleRowClick), prefer that serial. Otherwise
+          // resolve the typed PO to a single kit serial — bail out with a
+          // user-readable message when the PO maps to multiple kits so we
+          // never silently attach TOs to the wrong kit.
+          let targetSerial = selectedKitSerialNumber || ''
+          if (!targetSerial) {
+            const candidates =
+              await RRKittingDataService.findKitSerialsByPoNumber(kitPoNumber)
+            if (candidates.length === 0) {
+              toast.error(`Kit PO ${kitPoNumber} not found`)
+              return
             }
-            fetchData()
-          } else {
-            toast.error('Failed to append TOs', {
-              description: result.error,
-            })
+            if (candidates.length === 1) {
+              targetSerial = candidates[0].kitSerialNumber
+            } else {
+              const promptMessage = candidates
+                .map(
+                  (c, i) =>
+                    `${i + 1}. ${c.kitSerialNumber} — ${c.kitNumber || '(no kit number)'}`
+                )
+                .join('\n')
+              const choice = window.prompt(
+                `Kit PO ${kitPoNumber} has multiple kits. Type the kit serial number to append TOs to:\n\n${promptMessage}`
+              )
+              const chosen = candidates.find(
+                (c) => c.kitSerialNumber === choice?.trim()
+              )
+              if (!chosen) {
+                toast.warning('Append cancelled — no matching kit serial.')
+                return
+              }
+              targetSerial = chosen.kitSerialNumber
+            }
           }
+
+          // External-plant-bin detection — if any of the clipboard-imported
+          // TO rows reference a configured non-warehouse pattern, stash
+          // the resolved targetSerial + records and open the confirm
+          // dialog. The dialog's onConfirm dispatches `runAppendTOs`.
+          const detection = detectNonWarehouseBins(
+            records,
+            nonWarehouseBinPatterns
+          )
+          if (detection.hasMatches) {
+            setPendingAppend({
+              targetSerial,
+              targetLabel: `Append to ${targetSerial}`,
+              records,
+              detection,
+            })
+            return
+          }
+
+          await runAppendTOs(targetSerial, records)
         } catch (err) {
           logger.error('[KittingDataManager] appendTOs error:', err)
           toast.error('Failed to read clipboard')
         }
       },
-      [fetchData]
+      [nonWarehouseBinPatterns, runAppendTOs, selectedKitSerialNumber]
     )
 
     // Memoized statistics cards
@@ -386,16 +612,46 @@ const KittingDataManager: React.FC<KittingDataManagerProps> = React.memo(
             </CardContent>
           </Card>
 
-          <Card>
-            <CardHeader className='flex flex-row items-center justify-between space-y-0 pb-2'>
-              <CardTitle className='text-sm font-medium'>Completed</CardTitle>
-              <CheckCircle2 className='text-muted-foreground h-4 w-4' />
+          {/* Completed — outbound-data-manager-style card: EST date-scoped
+              Today / Yesterday / Last-7-days tiles (KpiGrid + StatTile),
+              with the all-time total kept in the header. */}
+          <Card className='group border-border/50 bg-card/50 relative overflow-hidden backdrop-blur-sm transition-all duration-300 hover:shadow-lg hover:shadow-black/5 dark:hover:shadow-black/20'>
+            <div className='absolute inset-0 bg-linear-to-br from-emerald-500/5 to-emerald-500/0 opacity-0 transition-opacity duration-300 group-hover:opacity-100' />
+            <CardHeader className='relative flex flex-row items-center justify-between space-y-0 pb-2'>
+              <CardTitle className='text-muted-foreground flex items-center gap-2 text-xs font-medium tracking-wide uppercase'>
+                <div className='flex h-6 w-6 items-center justify-center rounded-md bg-emerald-500/15 dark:bg-emerald-500/10'>
+                  <CheckCircle2 className='h-3.5 w-3.5 text-emerald-600 dark:text-emerald-400' />
+                </div>
+                Completed
+              </CardTitle>
+              <span
+                className='text-muted-foreground/60 text-[10px] font-medium tracking-wider uppercase'
+                title='Kits completed all-time'
+              >
+                {statistics.completedCount.toLocaleString()} all-time
+              </span>
             </CardHeader>
-            <CardContent>
-              <div className='text-2xl font-bold'>
-                {statistics.completedCount}
-              </div>
-              <p className='text-muted-foreground text-xs'>Kits completed</p>
+            <CardContent className='relative pt-1 pb-4'>
+              <KpiGrid columns={3} density='compact'>
+                <StatTile
+                  label='Today'
+                  value={statistics.completedTodayCount}
+                  accent='emerald'
+                  valueTitle='Kits completed today'
+                />
+                <StatTile
+                  label='Yesterday'
+                  value={statistics.completedYesterdayCount}
+                  accent='default'
+                  valueTitle='Kits completed yesterday'
+                />
+                <StatTile
+                  label='This Week'
+                  value={statistics.completedThisWeekCount}
+                  accent='sky'
+                  valueTitle='Kits completed in the last 7 days'
+                />
+              </KpiGrid>
             </CardContent>
           </Card>
         </div>
@@ -440,6 +696,16 @@ const KittingDataManager: React.FC<KittingDataManagerProps> = React.memo(
                     >
                       <ClipboardPlus className='mr-2 h-4 w-4' />
                       Add to Kit Build Plan
+                    </Button>
+
+                    <Button
+                      variant='outline'
+                      size='sm'
+                      onClick={() => setIsAddExpediteDialogOpen(true)}
+                      className='border-border hover:bg-accent'
+                    >
+                      <Zap className='mr-2 h-4 w-4' />
+                      Add Expedite Part
                     </Button>
 
                     <DropdownMenu>
@@ -501,12 +767,66 @@ const KittingDataManager: React.FC<KittingDataManagerProps> = React.memo(
             </CardHeader>
 
             <CardContent>
-              <KittingDataGrid
-                data={filteredData}
-                isLoading={isLoading}
-                onRowClick={handleRowClick}
-                onPriorityChange={handlePriorityChange}
-              />
+              <Tabs
+                value={activeKitTab}
+                onValueChange={(value) =>
+                  setActiveKitTab(value as 'open' | 'completed' | 'expedites')
+                }
+              >
+                <TabsList className='mb-4'>
+                  <TabsTrigger value='open'>
+                    Open Work Kits
+                    <Badge variant='secondary' className='ml-2'>
+                      {openWorkData.length}
+                    </Badge>
+                  </TabsTrigger>
+                  <TabsTrigger value='completed'>
+                    Completed Kits
+                    <Badge variant='secondary' className='ml-2'>
+                      {completedData.length}
+                    </Badge>
+                  </TabsTrigger>
+                  <TabsTrigger value='expedites'>
+                    Expedites
+                    <Badge variant='secondary' className='ml-2'>
+                      {expediteData.length}
+                    </Badge>
+                  </TabsTrigger>
+                </TabsList>
+
+                <TabsContent value='open'>
+                  <KittingDataGrid
+                    data={openWorkData}
+                    isLoading={isLoading}
+                    unreadKitSerials={unreadSerials}
+                    onRowClick={handleRowClick}
+                    onPriorityChange={handlePriorityChange}
+                    emptyMessage='No open kit build plans. Click "Add to Kit Build Plan" to create one.'
+                  />
+                </TabsContent>
+
+                <TabsContent value='completed'>
+                  <KittingDataGrid
+                    data={completedData}
+                    isLoading={isLoading}
+                    unreadKitSerials={unreadSerials}
+                    onRowClick={handleRowClick}
+                    reorderable={false}
+                    emptyMessage='No completed kits yet. Kits move here once they reach the dock.'
+                  />
+                </TabsContent>
+
+                <TabsContent value='expedites'>
+                  <KittingDataGrid
+                    data={expediteData}
+                    isLoading={isLoading}
+                    unreadKitSerials={unreadSerials}
+                    onRowClick={handleRowClick}
+                    reorderable={false}
+                    emptyMessage='No expedite parts yet. Click "Add Expedite Part" to import Transfer Orders as expedites.'
+                  />
+                </TabsContent>
+              </Tabs>
 
               {!isLoading &&
                 filteredData.length > 0 &&
@@ -529,12 +849,57 @@ const KittingDataManager: React.FC<KittingDataManagerProps> = React.memo(
           onSubmit={handleAddToKitBuildPlan}
         />
 
+        {/* Add Expedite Part Dialog */}
+        <AddExpediteDialog
+          isOpen={isAddExpediteDialogOpen}
+          onOpenChange={setIsAddExpediteDialogOpen}
+          onSubmit={handleAddExpedite}
+        />
+
         {/* Kit Build Audit Trail Dialog */}
         <KitProductionTrackerDialog
           open={isDetailsDialogOpen}
           onOpenChange={setIsDetailsDialogOpen}
           kitSerialNumber={selectedKitSerialNumber}
           kitPoNumber={selectedKitPoNumber}
+          displayPriority={selectedDisplayPriority}
+          onKitDeleted={fetchData}
+        />
+
+        {/* External-plant-bin acknowledgement dialog — opens when the
+            clipboard-imported TO rows include a non-warehouse bin. */}
+        <NonWarehouseBinConfirmDialog
+          isOpen={!!pendingAppend}
+          onOpenChange={(open) => {
+            if (!open) setPendingAppend(null)
+          }}
+          detection={
+            pendingAppend?.detection ?? {
+              matches: [],
+              patternsTriggered: [],
+              binsTriggered: [],
+              hasMatches: false,
+            }
+          }
+          contextLabel={pendingAppend?.targetLabel}
+          isSubmitting={appendSubmitting}
+          onCancel={() => {
+            toast.warning('Append cancelled — acknowledgement required.')
+            setPendingAppend(null)
+          }}
+          onConfirm={async () => {
+            if (!pendingAppend) return
+            setAppendSubmitting(true)
+            try {
+              await runAppendTOs(
+                pendingAppend.targetSerial,
+                pendingAppend.records
+              )
+            } finally {
+              setAppendSubmitting(false)
+              setPendingAppend(null)
+            }
+          }}
         />
       </div>
     )
@@ -544,3 +909,5 @@ const KittingDataManager: React.FC<KittingDataManagerProps> = React.memo(
 KittingDataManager.displayName = 'KittingDataManager'
 
 export default KittingDataManager
+
+// Created and developed by Jai Singh

@@ -1,3 +1,4 @@
+// Created and developed by Jai Singh
 /**
  * Session Activity Logger
  *
@@ -116,3 +117,5 @@ class SessionActivityLoggerService {
 }
 
 export const sessionActivityLogger = new SessionActivityLoggerService()
+
+// Created and developed by Jai Singh

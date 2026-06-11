@@ -1,3 +1,4 @@
+// Created and developed by Jai Singh
 /**
  * Labor Standards Tab Component
  * Management interface for labor productivity and quality standards
@@ -493,3 +494,5 @@ export function LaborStandardsTab() {
     </div>
   )
 }
+
+// Created and developed by Jai Singh

@@ -1,3 +1,4 @@
+// Created and developed by Jai Singh
 /**
  * FLIP Animation Hook for Labor Board
  * Tracks card positions across React renders and animates movement with anime.js springs
@@ -182,3 +183,5 @@ export function useAnimeFlip(options: UseAnimeFlipOptions = {}) {
     capturePositions,
   }
 }
+
+// Created and developed by Jai Singh

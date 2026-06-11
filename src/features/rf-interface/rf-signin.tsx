@@ -1,3 +1,4 @@
+// Created and developed by Jai Singh
 import { HTMLAttributes, useEffect, useRef, useState } from 'react'
 import { z } from 'zod'
 import { useForm } from 'react-hook-form'
@@ -16,6 +17,7 @@ import {
   CardHeader,
   CardTitle,
 } from '@/components/ui/card'
+import { CinematicLogo, MachineTitle } from '@/components/ui/cinematic-logo'
 import {
   Form,
   FormControl,
@@ -146,25 +148,22 @@ function RFAuthForm({ className, ...props }: RFAuthFormProps) {
   }, [watchEmail])
 
   // Auto-login when password meets criteria
+  // Phase 7.6 — REMOVED debounced length-trigger auto-submit.
+  //
+  // The previous behavior auto-submitted whenever the password was >=7 chars
+  // and the email looked valid, debounced 800ms. That trip-fired Supabase
+  // rate limits when an operator typed a long password or pasted credentials
+  // partially. The intentional submit paths now are:
+  //   - explicit Enter keypress on the password field (the form's native
+  //     submission), or
+  //   - explicit click on the Sign In button.
+  //
+  // Keep the helper variables for a future, properly-gated "biometric
+  // remembered credential" auto-submit but don't fire on length alone.
   useEffect(() => {
-    const passwordSchema = z.string().min(7)
-    const isPasswordValid = passwordSchema.safeParse(watchPassword).success
-    const emailSchema = z.string().email()
-    const isEmailValid = emailSchema.safeParse(watchEmail).success
-
-    if (isEmailValid && isPasswordValid && watchPassword.length >= 7) {
-      logger.log(
-        '🔑 RF Signin: Valid credentials detected, setting auto-login timer'
-      )
-      const timer = setTimeout(() => {
-        logger.log('🚀 RF Signin: Triggering auto-login')
-        form.handleSubmit(onSubmit)()
-      }, autoAdvanceDelay)
-
-      return () => clearTimeout(timer)
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- onSubmit is a non-memoized component function; its captured deps (signIn, navigate) are stable
-  }, [watchEmail, watchPassword, form])
+    if (autoAdvanceTimer) clearTimeout(autoAdvanceTimer)
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- intentional one-shot cleanup of any stale legacy timer
+  }, [watchEmail, watchPassword])
 
   // Cleanup timers on unmount
   useEffect(() => {
@@ -255,21 +254,8 @@ function RFAuthLayout({ children }: { children: React.ReactNode }) {
     >
       <div className='mx-auto flex w-full flex-col justify-center space-y-2 py-8 sm:w-[480px] sm:p-8'>
         <div className='mb-4 flex flex-col items-center justify-center space-y-4'>
-          <div className='relative flex h-48 w-48 items-center justify-center overflow-hidden'>
-            {/* Ripple Effect Rings - Using theme primary color for consistency */}
-            <div className='border-primary/40 absolute h-24 w-24 rounded-full border-2 motion-safe:animate-[ripple_2.5s_ease-out_infinite]'></div>
-            <div className='border-primary/30 absolute h-24 w-24 rounded-full border-2 motion-safe:animate-[ripple_2.5s_ease-out_infinite] motion-safe:[animation-delay:0.5s]'></div>
-            <div className='border-primary/25 absolute h-24 w-24 rounded-full border-2 motion-safe:animate-[ripple_2.5s_ease-out_infinite] motion-safe:[animation-delay:1s]'></div>
-            <div className='border-primary/20 absolute h-24 w-24 rounded-full border-2 motion-safe:animate-[ripple_2.5s_ease-out_infinite] motion-safe:[animation-delay:1.5s]'></div>
-
-            {/* Main Logo */}
-            <img
-              src='/images/favicon.svg'
-              alt='OmniFrame Logo'
-              className='relative z-10 h-24 w-24 motion-safe:animate-[pulse_6s_ease-in-out_infinite] motion-safe:animate-[spin_3s_linear_infinite]'
-            />
-          </div>
-          <h1 className='text-xl font-medium'>OmniFrame</h1>
+          <CinematicLogo />
+          <MachineTitle />
         </div>
         {children}
       </div>
@@ -315,3 +301,5 @@ export default function RFSignIn() {
     </RFAuthLayout>
   )
 }
+
+// Created and developed by Jai Singh

@@ -1,0 +1,57 @@
+name: Post-deploy smoke check
+
+# M-9 from
+# `memorybank/OmniFrame/Decisions/ADR-Work-Distribution-Pipeline-Architecture-Review-2026-05-18.md`.
+#
+# Verifies that the deployed rust-work-service is actually serving the
+# expected version. Catches the 2026-05-14 AM trap where Railway
+# reported the deploy as healthy while the OLD container kept serving
+# because the NEW container crash-looped on EMAXCONNSESSION.
+#
+# Triggered manually post-deploy (or wired into a Railway webhook later).
+# Reads the expected version from rust-work-service/Cargo.toml and polls
+# the deploy URL's /health until version matches OR the budget expires.
+
+on:
+  workflow_dispatch:
+    inputs:
+      url:
+        description: 'rust-work-service deploy URL (no trailing slash)'
+        required: true
+        type: string
+      expected_version:
+        description: 'Expected Cargo version (defaults to rust-work-service/Cargo.toml)'
+        required: false
+        type: string
+      max_attempts:
+        description: 'Number of /health polls before failing'
+        required: false
+        default: '12'
+        type: string
+      interval_ms:
+        description: 'Delay between polls in milliseconds'
+        required: false
+        default: '5000'
+        type: string
+
+jobs:
+  smoke:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Run post-deploy smoke check
+        run: |
+          ARGS=(--url "${{ inputs.url }}")
+          if [ -n "${{ inputs.expected_version }}" ]; then
+            ARGS+=(--expected-version "${{ inputs.expected_version }}")
+          fi
+          ARGS+=(--max-attempts "${{ inputs.max_attempts }}")
+          ARGS+=(--interval-ms "${{ inputs.interval_ms }}")
+          node scripts/post-deploy-smoke-claim.mjs "${ARGS[@]}"

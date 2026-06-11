@@ -1,3 +1,4 @@
+// Created and developed by Jai Singh
 /**
  * RF Task Claim Component
  * Mobile-optimized interface for claiming available work queue tasks in RF interface
@@ -7,7 +8,6 @@ import React, { useCallback, useEffect, useState } from 'react'
 import {
   AlertCircle,
   CheckSquare,
-  ChevronLeft,
   Clock,
   Filter,
   Loader2,
@@ -26,6 +26,7 @@ import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 import { Checkbox } from '@/components/ui/checkbox'
 import { Input } from '@/components/ui/input'
+import { RFScreenHeader } from '@/features/rf-interface/_shell'
 
 // Temporary stub services until types are resolved
 const simpleWorkQueueService = {
@@ -375,28 +376,21 @@ const RFTaskClaim: React.FC<RFTaskClaimProps> = ({
   return (
     <div className='flex flex-1 flex-col space-y-4'>
       {/* Header */}
-      <div className='flex items-center'>
-        {onBack && (
-          <Button variant='ghost' size='sm' onClick={onBack}>
-            <ChevronLeft className='mr-1 h-4 w-4' />
-            Back
+      <RFScreenHeader
+        title='Claim Tasks'
+        subtitle='Pick up tasks'
+        onBack={onBack}
+        right={
+          <Button
+            variant='outline'
+            size='sm'
+            onClick={() => setShowFilters(!showFilters)}
+            className='h-9 w-9 shrink-0 p-0'
+          >
+            <Filter className='h-4 w-4' />
           </Button>
-        )}
-        <div className='flex-1 text-center'>
-          <h2 className='text-lg font-bold'>Available Tasks</h2>
-          <p className='text-muted-foreground text-sm'>
-            Claim tasks to add to your work queue
-          </p>
-        </div>
-        <Button
-          variant='outline'
-          size='sm'
-          onClick={() => setShowFilters(!showFilters)}
-          className='shrink-0'
-        >
-          <Filter className='h-4 w-4' />
-        </Button>
-      </div>
+        }
+      />
 
       {/* Capacity Status */}
       {workerCapacity && (
@@ -521,3 +515,5 @@ const RFTaskClaim: React.FC<RFTaskClaimProps> = ({
 }
 
 export default RFTaskClaim
+
+// Created and developed by Jai Singh

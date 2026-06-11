@@ -1,3 +1,4 @@
+// Created and developed by Jai Singh
 /**
  * Unified Authentication Service
  * Single source of truth for all authentication and authorization operations
@@ -195,6 +196,7 @@ export class AuthService {
     metadata: Record<string, unknown> = {}
   ): Promise<AuthState> {
     try {
+      const { getAppUrl } = await import('@/lib/utils/app-url')
       const { data, error } = await singletonAuthManager
         .getSupabaseClient()
         .auth.signUp({
@@ -202,7 +204,7 @@ export class AuthService {
           password,
           options: {
             data: metadata,
-            emailRedirectTo: `${window.location.origin}/auth/callback`,
+            emailRedirectTo: `${getAppUrl()}/auth/callback`,
           },
         })
 
@@ -237,7 +239,7 @@ export class AuthService {
 
         // Clear local storage
         localStorage.removeItem('supabase-auth-token')
-        localStorage.removeItem('omniframe-auth-token')
+        localStorage.removeItem('onebox-auth-token')
       }
 
       // Sign out from Supabase
@@ -257,10 +259,11 @@ export class AuthService {
    * Reset password
    */
   async resetPassword(email: string): Promise<void> {
+    const { getAppUrl } = await import('@/lib/utils/app-url')
     const { error } = await singletonAuthManager
       .getSupabaseClient()
       .auth.resetPasswordForEmail(email, {
-        redirectTo: `${window.location.origin}/auth/reset-password`,
+        redirectTo: `${getAppUrl()}/auth/reset-password`,
       })
     if (error) throw error
   }
@@ -856,4 +859,5 @@ export const authService = AuthService.getInstance()
 
 // Export types
 export type { AuthConfig }
-// Developer and Creator: Jai Singh
+
+// Created and developed by Jai Singh

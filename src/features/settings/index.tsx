@@ -1,3 +1,4 @@
+// Created and developed by Jai Singh
 import { Outlet } from '@tanstack/react-router'
 import {
   IconBrowserCheck,
@@ -49,7 +50,7 @@ export default function Settings() {
           <aside className='top-0 z-0 lg:sticky lg:w-1/5'>
             <SidebarNav items={getSidebarNavItems(canAccessOrgSettings)} />
           </aside>
-          <div className='relative z-10 flex w-full min-h-0 overflow-y-auto p-1 pl-4'>
+          <div className='relative z-10 flex min-h-0 w-full overflow-y-auto p-1 pl-4'>
             <Outlet />
           </div>
         </div>
@@ -103,3 +104,5 @@ const getSidebarNavItems = (canAccessOrgSettings: boolean) => {
 
   return items
 }
+
+// Created and developed by Jai Singh

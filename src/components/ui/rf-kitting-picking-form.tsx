@@ -1,3 +1,4 @@
+// Created and developed by Jai Singh
 'use client'
 
 /**
@@ -38,6 +39,9 @@ import { toast } from 'sonner'
 import {
   rfKittingPickingService,
   validateKitPoNumber,
+  cleanScannedPartNumber,
+  isPotentialKitSerialNumber,
+  type KitDisambiguationOption,
   type KittingPickData,
   type KittingPickItem,
 } from '@/lib/supabase/rf-kitting-picking.service'
@@ -50,10 +54,12 @@ import { Label } from '@/components/ui/label'
 import { Progress } from '@/components/ui/progress'
 import { ScannerInput } from '@/components/ui/scanner-input'
 import { Textarea } from '@/components/ui/textarea'
+import { RFScreenHeader } from '@/features/rf-interface/_shell'
 
 // Step definitions
 type PickingStep =
   | 'kit_scan' // Step 1: Scan Kit PO Number
+  | 'kit_select' // Step 1b: Disambiguation picker when PO maps to multiple kits
   | 'pick_type' // Step 2: Select Floor or Rack
   | 'go_to_bin' // Step 3: Navigate to next bin
   | 'scan_location' // Step 4: Confirm bin location
@@ -67,6 +73,18 @@ type PickingStep =
 interface PickingFormState {
   currentStep: PickingStep
   kitData: KittingPickData | null
+  /**
+   * Populated when the scanned Kit PO maps to two or more active kits.
+   * Drives the in-app `kit_select` picker step. Once the operator
+   * commits to one, this is cleared and we proceed straight to
+   * `pick_type` with the chosen kit's data loaded.
+   */
+  kitOptions: KitDisambiguationOption[] | null
+  /**
+   * Last Kit PO that the operator scanned. Retained so the picker can
+   * call verifyKitForPicking again with the chosen serial.
+   */
+  lastScannedKitPo: string
   pickType: 'floor' | 'rack' | null
   currentItem: KittingPickItem | null
   currentItemIndex: number
@@ -177,6 +195,157 @@ const QuantityKeypad = ({
   )
 }
 
+// ---------------------------------------------------------------------------
+// Floor-pick visual confirmation helpers
+// ---------------------------------------------------------------------------
+//
+// Floor bins (K/S prefix) have NO printed barcode — the operator cannot scan
+// to confirm they're at the right pick location. Rack bins (R prefix) DO have
+// barcodes. The service classifies bins identically (see
+// `rf-kitting-picking.service.ts` ~line 478). We mirror the same single-char
+// prefix check here so the UI branches consistently. An empty / non-K/S/R
+// prefix falls through to the existing scan UI (defensive — the service today
+// would have dropped such rows from both `floor_pick_items` and
+// `rack_pick_items`, so the form should never see them).
+const FLOOR_BIN_PREFIXES = new Set(['K', 'S'])
+const isFloorBin = (sourceStorageBin: string | null | undefined): boolean => {
+  if (!sourceStorageBin) return false
+  return FLOOR_BIN_PREFIXES.has(sourceStorageBin.charAt(0).toUpperCase())
+}
+
+// Press-and-hold duration for the floor-pick visual confirmation gesture.
+// Same value as `autoAdvanceDelay` (800ms) — kept in lockstep so the
+// "deliberate confirmation" timing across this form stays consistent.
+const HOLD_TO_CONFIRM_MS = 800
+
+/**
+ * Hold-to-confirm button. The operator must press AND HOLD for
+ * `HOLD_TO_CONFIRM_MS` (~800ms) before `onConfirm` fires. A progress bar
+ * fills the button surface during the hold so the gesture feedback is
+ * obvious. Releasing early (mouseup, touchend, pointerleave) cancels.
+ *
+ * Used by the floor-pick `Confirm Location` step where no barcode exists
+ * and a single tap is too easy to misfire on a glove-knock or accidental
+ * scanner trigger. The intentional `~1s` press is the safeguard.
+ */
+const HoldToConfirmButton = ({
+  onConfirm,
+  disabled,
+  label = 'Hold to Confirm',
+  holdingLabel = 'Hold…',
+  doneLabel = 'Confirmed',
+  className,
+}: {
+  onConfirm: () => void
+  disabled?: boolean
+  label?: string
+  holdingLabel?: string
+  doneLabel?: string
+  className?: string
+}) => {
+  const [progress, setProgress] = useState(0)
+  const [isHolding, setIsHolding] = useState(false)
+  const [isDone, setIsDone] = useState(false)
+  const rafRef = useRef<number | null>(null)
+  const startRef = useRef<number | null>(null)
+
+  const cancelHold = useCallback(() => {
+    if (rafRef.current !== null) {
+      cancelAnimationFrame(rafRef.current)
+      rafRef.current = null
+    }
+    startRef.current = null
+    setIsHolding(false)
+    setProgress(0)
+  }, [])
+
+  useEffect(() => {
+    return () => {
+      if (rafRef.current !== null) cancelAnimationFrame(rafRef.current)
+    }
+  }, [])
+
+  const tick = useCallback(
+    (now: number) => {
+      if (startRef.current === null) return
+      const elapsed = now - startRef.current
+      const pct = Math.min(100, (elapsed / HOLD_TO_CONFIRM_MS) * 100)
+      setProgress(pct)
+      if (elapsed >= HOLD_TO_CONFIRM_MS) {
+        rafRef.current = null
+        startRef.current = null
+        setIsHolding(false)
+        setIsDone(true)
+        // Defer the confirm so the filled bar paints once before the parent
+        // swaps to the next step.
+        setTimeout(() => onConfirm(), 30)
+        return
+      }
+      rafRef.current = requestAnimationFrame(tick)
+    },
+    [onConfirm]
+  )
+
+  const startHold = useCallback(() => {
+    if (disabled || isDone) return
+    if (startRef.current !== null) return
+    setIsHolding(true)
+    startRef.current = performance.now()
+    rafRef.current = requestAnimationFrame(tick)
+  }, [disabled, isDone, tick])
+
+  const buttonLabel = isDone ? doneLabel : isHolding ? holdingLabel : label
+
+  return (
+    <button
+      type='button'
+      disabled={disabled || isDone}
+      onPointerDown={startHold}
+      onPointerUp={cancelHold}
+      onPointerLeave={cancelHold}
+      onPointerCancel={cancelHold}
+      onKeyDown={(e) => {
+        if ((e.key === ' ' || e.key === 'Enter') && !e.repeat) {
+          e.preventDefault()
+          startHold()
+        }
+      }}
+      onKeyUp={(e) => {
+        if (e.key === ' ' || e.key === 'Enter') {
+          e.preventDefault()
+          cancelHold()
+        }
+      }}
+      onContextMenu={(e) => e.preventDefault()}
+      className={cn(
+        'relative h-16 w-full overflow-hidden rounded-md border-2 font-semibold transition-colors',
+        'touch-none select-none',
+        'focus-visible:ring-ring focus-visible:ring-2 focus-visible:outline-none',
+        disabled || isDone
+          ? 'cursor-not-allowed border-green-500 bg-green-500 text-white'
+          : 'border-primary bg-primary text-primary-foreground active:scale-[0.99]',
+        className
+      )}
+      aria-label={label}
+    >
+      {/* Fill bar grows left-to-right while held */}
+      <span
+        className='bg-primary-foreground/20 pointer-events-none absolute inset-y-0 left-0 transition-[width] duration-75 ease-linear'
+        style={{ width: `${progress}%` }}
+        aria-hidden='true'
+      />
+      <span className='relative z-10 flex items-center justify-center gap-2'>
+        {isDone ? (
+          <CheckCircle className='h-5 w-5' />
+        ) : (
+          <Eye className='h-5 w-5' />
+        )}
+        <span className='text-base'>{buttonLabel}</span>
+      </span>
+    </button>
+  )
+}
+
 // Pick Type Selection Card
 const PickTypeCard = ({
   type: _type,
@@ -191,7 +360,7 @@ const PickTypeCard = ({
   type: 'floor' | 'rack'
   title: string
   description: string
-  icon: React.ElementType
+  icon: React.ComponentType<{ className?: string }>
   count: number
   pickedCount: number
   onClick: () => void
@@ -257,7 +426,14 @@ const PickTypeCard = ({
 // Main RF Kitting Picking Form Component
 interface RFKittingPickingFormProps {
   onBack?: () => void
-  initialKitPoNumber?: string // Optional: if passed from picking form detection
+  /**
+   * Pre-fill the Scan step. Accepts EITHER a `kit_serial_number`
+   * (`KIT-YYYYMMDD-NNN`) OR a `kit_po_number`; the form's
+   * `handleKitPoValidation` smart-detects which path to take. The
+   * prop name is kept for backward compatibility with the existing
+   * RF Picking handoff in `rf-picking-form.tsx`.
+   */
+  initialKitPoNumber?: string
 }
 
 const RFKittingPickingForm: React.FC<RFKittingPickingFormProps> = ({
@@ -268,6 +444,8 @@ const RFKittingPickingForm: React.FC<RFKittingPickingFormProps> = ({
   const [state, setState] = useState<PickingFormState>({
     currentStep: 'kit_scan',
     kitData: null,
+    kitOptions: null,
+    lastScannedKitPo: '',
     pickType: null,
     currentItem: null,
     currentItemIndex: 0,
@@ -410,21 +588,106 @@ const RFKittingPickingForm: React.FC<RFKittingPickingFormProps> = ({
   )
 
   // Handlers
+  //
+  // The Scan step now accepts BOTH a `kit_serial_number`
+  // (`KIT-YYYYMMDD-NNN`, the canonical PK on `RR_Kitting_DATA`) and
+  // the legacy `kit_po_number`. Smart-detect:
+  //   - Input starts with `KIT-` (case-insensitive) → serial path
+  //     (`verifyKitForPickingBySerialNumber`). Drops the operator
+  //     straight into `pick_type` because the serial is globally
+  //     unique — no Select-a-Kit disambiguation.
+  //   - Otherwise → existing PO path (`verifyKitForPicking`). Still
+  //     renders the `kit_select` disambiguation step when the scanned
+  //     PO maps to multiple active kits.
+  // The optional `kitSerialNumber` arg is only used by the
+  // disambiguation picker — never by the new serial-first scan flow.
   const handleKitPoValidation = useCallback(
-    async (inputKitPo?: string) => {
-      const kitPo = (inputKitPo || kitPoNumber).trim()
+    async (inputKitIdentifier?: string, kitSerialNumber?: string) => {
+      const scanned = (inputKitIdentifier || kitPoNumber).trim()
 
-      const validation = validateKitPoNumber(kitPo)
+      const validation = validateKitPoNumber(scanned)
       if (!validation.isValid) {
         toast.error(validation.message)
         return
       }
 
+      // Disambiguation picker callback path — we always know the PO
+      // here and the operator has chosen a serial; stay on the
+      // PO-with-serial entry point so PO sanity-check logic runs.
+      if (kitSerialNumber) {
+        await runPoPathValidation(scanned, kitSerialNumber)
+        return
+      }
+
+      if (isPotentialKitSerialNumber(scanned)) {
+        await runSerialPathValidation(scanned)
+      } else {
+        await runPoPathValidation(scanned)
+      }
+    },
+    // runSerialPathValidation / runPoPathValidation are defined below
+    // with their own dep arrays and are stable for our purposes.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [kitPoNumber]
+  )
+
+  const runSerialPathValidation = useCallback(async (kitSerial: string) => {
+    setState((prev) => ({ ...prev, isProcessing: true }))
+    try {
+      const { data, error } =
+        await rfKittingPickingService.verifyKitForPickingBySerialNumber(
+          kitSerial
+        )
+
+      if (error || !data) {
+        toast.error(error || 'Kit not found')
+        setState((prev) => ({ ...prev, isProcessing: false }))
+        return
+      }
+
+      setState((prev) => ({
+        ...prev,
+        kitData: data,
+        kitOptions: null,
+        // Keep the PO around for downstream callers that still take a
+        // `kitPoNumber` arg (e.g. `reportMissingPart`).
+        lastScannedKitPo: data.kit_po_number,
+        currentStep: 'pick_type',
+        isProcessing: false,
+      }))
+
+      toast.success(
+        `Kit ${data.kit_serial_number} loaded — ${data.total_lines} items`
+      )
+    } catch (error: unknown) {
+      toast.error(error instanceof Error ? error.message : 'Failed to load kit')
+      setState((prev) => ({ ...prev, isProcessing: false }))
+    }
+  }, [])
+
+  const runPoPathValidation = useCallback(
+    async (kitPo: string, kitSerialNumber?: string) => {
       setState((prev) => ({ ...prev, isProcessing: true }))
 
       try {
-        const { data, error } =
-          await rfKittingPickingService.verifyKitForPicking(kitPo)
+        const { data, error, kits } =
+          await rfKittingPickingService.verifyKitForPicking(
+            kitPo,
+            kitSerialNumber
+          )
+
+        // Multi-kit case (legacy PO fallback only): present the picker.
+        if (!kitSerialNumber && kits && kits.length > 1) {
+          setState((prev) => ({
+            ...prev,
+            kitData: null,
+            kitOptions: kits,
+            lastScannedKitPo: kitPo,
+            currentStep: 'kit_select',
+            isProcessing: false,
+          }))
+          return
+        }
 
         if (error || !data) {
           toast.error(error || 'Kit not found')
@@ -435,11 +698,15 @@ const RFKittingPickingForm: React.FC<RFKittingPickingFormProps> = ({
         setState((prev) => ({
           ...prev,
           kitData: data,
+          kitOptions: null,
+          lastScannedKitPo: kitPo,
           currentStep: 'pick_type',
           isProcessing: false,
         }))
 
-        toast.success(`Kit ${kitPo} loaded - ${data.total_lines} items`)
+        toast.success(
+          `Kit ${data.kit_serial_number || kitPo} loaded — ${data.total_lines} items`
+        )
       } catch (error: unknown) {
         toast.error(
           error instanceof Error ? error.message : 'Failed to load kit'
@@ -447,8 +714,26 @@ const RFKittingPickingForm: React.FC<RFKittingPickingFormProps> = ({
         setState((prev) => ({ ...prev, isProcessing: false }))
       }
     },
-    [kitPoNumber]
+    []
   )
+
+  const handleKitSerialSelect = useCallback(
+    (option: KitDisambiguationOption) => {
+      handleKitPoValidation(state.lastScannedKitPo, option.kit_serial_number)
+    },
+    [handleKitPoValidation, state.lastScannedKitPo]
+  )
+
+  const handleCancelKitSelect = useCallback(() => {
+    setKitPoNumber('')
+    setState((prev) => ({
+      ...prev,
+      currentStep: 'kit_scan',
+      kitData: null,
+      kitOptions: null,
+      lastScannedKitPo: '',
+    }))
+  }, [])
 
   const handlePickTypeSelect = useCallback(
     (type: 'floor' | 'rack') => {
@@ -567,14 +852,18 @@ const RFKittingPickingForm: React.FC<RFKittingPickingFormProps> = ({
         return
       }
 
-      // Update kit status to in_progress if first pick
+      // Update kit status to in_progress if first pick. Per-kit-serial
+      // so a sibling kit on the same PO is not flipped along with us.
       await rfKittingPickingService.updateKitStatusToInProgress(
-        kitData.kit_po_number
+        kitData.kit_serial_number
       )
 
-      // Refresh kit data to get updated pick status
+      // Refresh kit data to get updated pick status (per-serial).
       const { data: refreshedData } =
-        await rfKittingPickingService.verifyKitForPicking(kitData.kit_po_number)
+        await rfKittingPickingService.verifyKitForPicking(
+          kitData.kit_po_number,
+          kitData.kit_serial_number
+        )
 
       if (!refreshedData) {
         toast.error('Failed to refresh kit data')
@@ -701,9 +990,12 @@ const RFKittingPickingForm: React.FC<RFKittingPickingFormProps> = ({
         return
       }
 
-      // Refresh kit data to get updated status
+      // Refresh kit data to get updated status (per-serial).
       const { data: refreshedData } =
-        await rfKittingPickingService.verifyKitForPicking(kitData.kit_po_number)
+        await rfKittingPickingService.verifyKitForPicking(
+          kitData.kit_po_number,
+          kitData.kit_serial_number
+        )
 
       if (!refreshedData) {
         toast.error('Failed to refresh kit data')
@@ -789,6 +1081,8 @@ const RFKittingPickingForm: React.FC<RFKittingPickingFormProps> = ({
     setState({
       currentStep: 'kit_scan',
       kitData: null,
+      kitOptions: null,
+      lastScannedKitPo: '',
       pickType: null,
       currentItem: null,
       currentItemIndex: 0,
@@ -818,23 +1112,15 @@ const RFKittingPickingForm: React.FC<RFKittingPickingFormProps> = ({
   return (
     <div className='mx-auto w-full max-w-md space-y-4 p-4'>
       {/* Header with back button */}
-      <div className='flex items-center'>
-        {onBack && (
-          <Button variant='ghost' size='sm' onClick={onBack}>
-            <ChevronLeft className='mr-1 h-4 w-4' />
-            Back
-          </Button>
-        )}
-        <div className='flex-1 text-center'>
-          <h2 className='text-lg font-bold'>Kit Picking</h2>
-          {state.kitData && (
-            <p className='text-muted-foreground text-xs'>
-              {state.kitData.kit_po_number} • {state.kitData.kit_number}
-            </p>
-          )}
-        </div>
-        {onBack && <div className='w-14 shrink-0' />}
-      </div>
+      <RFScreenHeader
+        title='Kit Picking'
+        subtitle={
+          state.kitData
+            ? `${state.kitData.kit_po_number} • ${state.kitData.kit_number}`
+            : 'Pick kit lines'
+        }
+        onBack={onBack}
+      />
 
       {/* Progress indicator */}
       {state.kitData &&
@@ -865,31 +1151,32 @@ const RFKittingPickingForm: React.FC<RFKittingPickingFormProps> = ({
               variants={contentVariants}
               className='space-y-4'
             >
-              {/* Step 1: Scan Kit PO Number */}
+              {/* Step 1: Scan Kit Serial Number or PO */}
               {state.currentStep === 'kit_scan' && (
                 <div className='space-y-4'>
                   <div className='space-y-2 text-center'>
                     <Package className='text-primary mx-auto h-12 w-12' />
                     <h3 className='text-lg font-semibold'>
-                      Scan Kit PO Number
+                      Scan Kit Serial Number
                     </h3>
                     <p className='text-muted-foreground text-sm'>
-                      Enter or scan the Kit PO number to begin picking
+                      Scan the kit serial number (
+                      <span className='font-mono'>KIT-…</span>) to drop straight
+                      into picking. Legacy Kit PO numbers are still accepted.
                     </p>
                   </div>
 
                   <div className='space-y-2'>
-                    <Label htmlFor='kit-po'>Kit PO Number</Label>
+                    <Label htmlFor='kit-po'>Kit Serial Number or PO</Label>
                     <ScannerInput
                       ref={kitPoRef}
                       id='kit-po'
                       type='text'
-                      placeholder='Scan or enter Kit PO number'
+                      placeholder='Scan KIT-YYYYMMDD-NNN or Kit PO'
                       value={kitPoNumber}
                       onChange={(e) => {
                         const value = e.target.value.toUpperCase()
                         setKitPoNumber(value)
-                        // Trigger auto-advance timer
                         handleAutoAdvance('kitPoNumber', value)
                       }}
                       onKeyDown={(e) => {
@@ -920,6 +1207,88 @@ const RFKittingPickingForm: React.FC<RFKittingPickingFormProps> = ({
                   </Button>
                 </div>
               )}
+
+              {/* Step 1b: Disambiguate when scanned PO maps to multiple kits */}
+              {state.currentStep === 'kit_select' &&
+                state.kitOptions &&
+                state.kitOptions.length > 0 && (
+                  <div className='space-y-4'>
+                    <div className='space-y-2 text-center'>
+                      <Layers className='text-primary mx-auto h-12 w-12' />
+                      <h3 className='text-lg font-semibold'>Select a Kit</h3>
+                      <p className='text-muted-foreground text-sm'>
+                        Kit PO{' '}
+                        <span className='font-mono'>
+                          {state.lastScannedKitPo}
+                        </span>{' '}
+                        covers {state.kitOptions.length} active kits. Pick the
+                        one you are working on.
+                      </p>
+                    </div>
+
+                    <div className='space-y-2'>
+                      {state.kitOptions.map((option) => {
+                        const total = option.total_lines || 0
+                        const picked = option.picked_count || 0
+                        const pct = total > 0 ? (picked / total) * 100 : 0
+                        return (
+                          <button
+                            key={option.kit_serial_number}
+                            type='button'
+                            onClick={() => handleKitSerialSelect(option)}
+                            disabled={state.isProcessing}
+                            className={cn(
+                              'border-border hover:bg-accent/40 w-full rounded-lg border p-3 text-left transition-colors disabled:opacity-50'
+                            )}
+                          >
+                            <div className='flex items-center justify-between'>
+                              <div className='space-y-0.5'>
+                                <div className='font-mono text-sm font-semibold'>
+                                  {option.kit_serial_number}
+                                </div>
+                                <div className='text-xs'>
+                                  {option.kit_number || 'Unnamed kit'}
+                                </div>
+                                <div className='text-muted-foreground text-[11px] capitalize'>
+                                  {option.kit_build_status}
+                                  {option.kit_build_number
+                                    ? ` • Build ${option.kit_build_number}`
+                                    : ''}
+                                </div>
+                              </div>
+                              <div className='text-right'>
+                                <div className='text-sm font-semibold'>
+                                  {picked} / {total}
+                                </div>
+                                <div className='text-muted-foreground text-[11px]'>
+                                  picked
+                                </div>
+                              </div>
+                            </div>
+                            <Progress value={pct} className='mt-2 h-1.5' />
+                          </button>
+                        )
+                      })}
+                    </div>
+
+                    <Button
+                      variant='outline'
+                      onClick={handleCancelKitSelect}
+                      disabled={state.isProcessing}
+                      className='h-11 w-full'
+                    >
+                      <ChevronLeft className='mr-2 h-4 w-4' />
+                      Cancel / Re-scan
+                    </Button>
+
+                    {state.isProcessing && (
+                      <div className='flex items-center justify-center py-2'>
+                        <Loader2 className='mr-2 h-5 w-5 animate-spin' />
+                        <span className='text-sm'>Loading kit…</span>
+                      </div>
+                    )}
+                  </div>
+                )}
 
               {/* Step 2: Select Pick Type */}
               {state.currentStep === 'pick_type' && state.kitData && (
@@ -1015,17 +1384,23 @@ const RFKittingPickingForm: React.FC<RFKittingPickingFormProps> = ({
                       <div className='text-primary font-mono text-3xl font-bold'>
                         {state.currentItem.source_storage_bin}
                       </div>
-                      <div className='text-sm'>
-                        <span className='text-muted-foreground'>Part:</span>
-                        <span className='ml-1 font-medium'>
-                          {state.currentItem.material}
-                        </span>
-                      </div>
-                      <div className='text-sm'>
-                        <span className='text-muted-foreground'>Qty:</span>
-                        <span className='ml-1 font-medium'>
-                          {state.currentItem.source_target_qty}
-                        </span>
+                      <div className='border-border/60 grid grid-cols-2 gap-4 border-t pt-3'>
+                        <div>
+                          <span className='text-muted-foreground block text-xs tracking-wide uppercase'>
+                            Part
+                          </span>
+                          <span className='text-foreground mt-1 block font-mono text-2xl font-bold break-all sm:text-3xl'>
+                            {state.currentItem.material}
+                          </span>
+                        </div>
+                        <div>
+                          <span className='text-muted-foreground block text-xs tracking-wide uppercase'>
+                            Qty
+                          </span>
+                          <span className='text-foreground mt-1 block text-2xl font-bold sm:text-3xl'>
+                            {state.currentItem.source_target_qty}
+                          </span>
+                        </div>
                       </div>
                       {state.currentItem.material_description && (
                         <div className='text-muted-foreground mt-2 border-t pt-2 text-xs'>
@@ -1059,76 +1434,175 @@ const RFKittingPickingForm: React.FC<RFKittingPickingFormProps> = ({
                 </div>
               )}
 
-              {/* Step 4: Scan Location */}
+              {/* Step 4: Confirm Location
+                  ---------------------------------------------------------
+                  Floor bins (K/S) have NO printed barcode — the operator
+                  cannot scan to confirm. Render a visual-confirm UI with a
+                  press-and-hold (~800ms) gesture as the deliberate
+                  safeguard (mirrors the existing no-barcode `visuallyVerified`
+                  pattern from the part step, scaled up to the bin step where
+                  visual recognition is the only correctness gate).
+
+                  Rack bins (R) DO have barcodes — keep the scan-to-confirm
+                  flow verbatim.
+
+                  Internal `currentStep` value is kept as `'scan_location'`
+                  for both branches so any downstream telemetry that ever
+                  ends up reading the step value sees no regression. */}
               {state.currentStep === 'scan_location' && state.currentItem && (
                 <div className='space-y-4'>
-                  <div className='space-y-2 text-center'>
-                    <MapPin className='text-primary mx-auto h-12 w-12' />
-                    <h3 className='text-lg font-semibold'>Confirm Location</h3>
-                    <p className='text-muted-foreground text-sm'>
-                      Scan the bin barcode to confirm
-                    </p>
-                    <p className='text-primary font-mono text-lg font-semibold'>
-                      {state.currentItem.source_storage_bin}
-                    </p>
-                  </div>
+                  {isFloorBin(state.currentItem.source_storage_bin) ? (
+                    <>
+                      <div className='space-y-2 text-center'>
+                        <MapPin className='text-primary mx-auto h-12 w-12' />
+                        <h3 className='text-lg font-semibold'>
+                          Confirm Location
+                        </h3>
+                        <p className='text-muted-foreground text-sm'>
+                          Floor bin — no barcode. Visually confirm you are at
+                          this bin.
+                        </p>
+                      </div>
 
-                  <div className='space-y-2'>
-                    <Label htmlFor='location'>Scan Location</Label>
-                    <ScannerInput
-                      ref={locationRef}
-                      id='location'
-                      type='text'
-                      placeholder='Scan bin location'
-                      value={state.scannedLocation}
-                      onChange={(e) => {
-                        const value = e.target.value.toUpperCase()
-                        setState((prev) => ({
-                          ...prev,
-                          scannedLocation: value,
-                        }))
-                        // Trigger auto-advance timer when location matches expected
-                        if (
-                          value.length > 0 &&
-                          value ===
-                            state.currentItem?.source_storage_bin.toUpperCase()
-                        ) {
-                          handleAutoAdvance('scannedLocation', value)
+                      {/* Giant bin label — visual recognition is the only
+                          safeguard, so this is the most prominent thing on
+                          the screen. */}
+                      <Card className='bg-primary/5 border-primary/30 border-2 p-5'>
+                        <div className='space-y-3 text-center'>
+                          <p className='text-muted-foreground text-xs font-medium tracking-widest uppercase'>
+                            You should be at
+                          </p>
+                          <p className='text-primary font-mono text-5xl leading-tight font-extrabold tracking-tight break-all sm:text-6xl'>
+                            {state.currentItem.source_storage_bin}
+                          </p>
+                          <div className='text-muted-foreground border-border/60 grid grid-cols-2 gap-4 border-t pt-3'>
+                            <div>
+                              <span className='block text-xs tracking-wide uppercase'>
+                                Part
+                              </span>
+                              <span className='text-foreground mt-1 block font-mono text-2xl font-bold break-all sm:text-3xl'>
+                                {state.currentItem.material}
+                              </span>
+                            </div>
+                            <div>
+                              <span className='block text-xs tracking-wide uppercase'>
+                                Qty
+                              </span>
+                              <span className='text-foreground mt-1 block text-2xl font-bold sm:text-3xl'>
+                                {state.currentItem.source_target_qty}
+                              </span>
+                            </div>
+                          </div>
+                        </div>
+                      </Card>
+
+                      <HoldToConfirmButton
+                        label={`Hold to Confirm — ${state.currentItem.source_storage_bin}`}
+                        holdingLabel='Keep Holding…'
+                        doneLabel='Location Confirmed'
+                        onConfirm={() => {
+                          // Floor bins have no barcode, so we bypass the
+                          // scan-validation path entirely and advance straight
+                          // to the part-scan step. The press-and-hold gesture
+                          // IS the verification — `validateLocation` would
+                          // fail without a scanned value here.
+                          setState((prev) => ({
+                            ...prev,
+                            currentStep: 'scan_part',
+                            scannedLocation: '',
+                          }))
+                          toast.success('Location confirmed (visual)')
+                        }}
+                      />
+
+                      <Button
+                        variant='outline'
+                        onClick={() =>
+                          setState((prev) => ({
+                            ...prev,
+                            currentStep: 'go_to_bin',
+                            scannedLocation: '',
+                          }))
                         }
-                      }}
-                      onKeyDown={(e) => {
-                        if (e.key === 'Enter') {
-                          e.preventDefault()
-                          handleLocationScan()
+                        className='w-full'
+                      >
+                        <ChevronLeft className='mr-2 h-4 w-4' />
+                        Back
+                      </Button>
+                    </>
+                  ) : (
+                    <>
+                      <div className='space-y-2 text-center'>
+                        <MapPin className='text-primary mx-auto h-12 w-12' />
+                        <h3 className='text-lg font-semibold'>
+                          Confirm Location
+                        </h3>
+                        <p className='text-muted-foreground text-sm'>
+                          Scan the bin barcode to confirm
+                        </p>
+                        <p className='text-primary font-mono text-lg font-semibold'>
+                          {state.currentItem.source_storage_bin}
+                        </p>
+                      </div>
+
+                      <div className='space-y-2'>
+                        <Label htmlFor='location'>Scan Location</Label>
+                        <ScannerInput
+                          ref={locationRef}
+                          id='location'
+                          type='text'
+                          placeholder='Scan bin location'
+                          value={state.scannedLocation}
+                          onChange={(e) => {
+                            const value = e.target.value.toUpperCase()
+                            setState((prev) => ({
+                              ...prev,
+                              scannedLocation: value,
+                            }))
+                            // Trigger auto-advance timer when location matches expected
+                            if (
+                              value.length > 0 &&
+                              value ===
+                                state.currentItem?.source_storage_bin.toUpperCase()
+                            ) {
+                              handleAutoAdvance('scannedLocation', value)
+                            }
+                          }}
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter') {
+                              e.preventDefault()
+                              handleLocationScan()
+                            }
+                          }}
+                          className='h-12 text-center font-mono text-lg'
+                        />
+                      </div>
+
+                      <Button
+                        onClick={handleLocationScan}
+                        disabled={!state.scannedLocation.trim()}
+                        className='h-12 w-full'
+                      >
+                        <Check className='mr-2 h-4 w-4' />
+                        Confirm Location
+                      </Button>
+
+                      <Button
+                        variant='outline'
+                        onClick={() =>
+                          setState((prev) => ({
+                            ...prev,
+                            currentStep: 'go_to_bin',
+                            scannedLocation: '',
+                          }))
                         }
-                      }}
-                      className='h-12 text-center font-mono text-lg'
-                    />
-                  </div>
-
-                  <Button
-                    onClick={handleLocationScan}
-                    disabled={!state.scannedLocation.trim()}
-                    className='h-12 w-full'
-                  >
-                    <Check className='mr-2 h-4 w-4' />
-                    Confirm Location
-                  </Button>
-
-                  <Button
-                    variant='outline'
-                    onClick={() =>
-                      setState((prev) => ({
-                        ...prev,
-                        currentStep: 'go_to_bin',
-                        scannedLocation: '',
-                      }))
-                    }
-                    className='w-full'
-                  >
-                    <ChevronLeft className='mr-2 h-4 w-4' />
-                    Back
-                  </Button>
+                        className='w-full'
+                      >
+                        <ChevronLeft className='mr-2 h-4 w-4' />
+                        Back
+                      </Button>
+                    </>
+                  )}
                 </div>
               )}
 
@@ -1220,10 +1694,13 @@ const RFKittingPickingForm: React.FC<RFKittingPickingFormProps> = ({
                             ...prev,
                             scannedMaterial: value,
                           }))
-                          // Trigger auto-advance timer when material matches expected
+                          // Clean barcode prefixes before comparing for auto-advance
+                          const cleaned =
+                            cleanScannedPartNumber(value).toUpperCase()
                           if (
-                            value.length > 0 &&
-                            value === state.currentItem?.material.toUpperCase()
+                            cleaned.length > 0 &&
+                            cleaned ===
+                              state.currentItem?.material.toUpperCase()
                           ) {
                             handleAutoAdvance('scannedMaterial', value)
                           }
@@ -1712,3 +2189,5 @@ const RFKittingPickingForm: React.FC<RFKittingPickingFormProps> = ({
 }
 
 export default RFKittingPickingForm
+
+// Created and developed by Jai Singh

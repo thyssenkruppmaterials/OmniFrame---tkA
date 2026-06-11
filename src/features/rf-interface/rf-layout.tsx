@@ -1,13 +1,29 @@
+// Created and developed by Jai Singh
 import { useEffect } from 'react'
 import { Outlet, useNavigate } from '@tanstack/react-router'
 import { useUnifiedAuth } from '@/lib/auth/unified-auth-provider'
 import { rfPWAManager } from '@/lib/pwa/rf-pwa-manager'
-import { supabase } from '@/lib/supabase/client'
-import { logger } from '@/lib/utils/logger'
+import { PresenceProvider } from '@/context/presence-context'
 
 /**
  * Standalone RF Interface Layout
- * Provides authentication check without main application UI components
+ *
+ * Auth validation is handled by the route's beforeLoad guard in
+ * src/routes/rf-interface.tsx — by the time this component renders,
+ * the session has already been verified. This layout only needs to
+ * initialise PWA features and provide the visual shell.
+ *
+ * **Presence (added 2026-05-07).** RF tabs are no longer kiosk-opted
+ * out (only `/rf-signin/` is — see `PRESENCE_KIOSK_ROUTE_PATTERNS`).
+ * They participate in the org-wide presence map via
+ * `<PresenceProvider>` so they (a) appear in `<LiveOperatorStatus>`
+ * Tab 2 ("In Building") on the supervisor's Inventory Counts panel,
+ * and (b) carry granular `rf_activity` telemetry surfaced by
+ * `useRfPresenceActivity` inside `<RFInterface>`. The provider sits
+ * between `RFLayout` and `<Outlet />` so RF children can
+ * `usePresence()` if needed (today none do; left in place for
+ * symmetry with the regular `<AuthenticatedLayout>` path). See
+ * `memorybank/OmniFrame/Decisions/ADR-RF-Activity-Telemetry.md`.
  */
 export function RFLayout() {
   const { authState } = useUnifiedAuth()
@@ -15,44 +31,20 @@ export function RFLayout() {
   const navigate = useNavigate()
 
   useEffect(() => {
-    // Initialize PWA for RF Interface
     rfPWAManager.initializeRFPWA()
-
-    const checkAuthentication = async () => {
-      try {
-        // Check if we have a valid authentication state
-        if (!user || !session) {
-          logger.log('No valid authentication found, redirecting to RF sign-in')
-          navigate({ to: '/rf-signin' })
-          return
-        }
-
-        // Additional session validation if needed
-        const {
-          data: { session: currentSession },
-          error,
-        } = await supabase.auth.getSession()
-
-        if (error || !currentSession) {
-          logger.error('Session validation failed:', error)
-          navigate({ to: '/rf-signin' })
-          return
-        }
-      } catch (error) {
-        logger.error('Unexpected error during RF authentication check:', error)
-        navigate({ to: '/rf-signin' })
-      }
-    }
-
-    checkAuthentication()
-
-    // Cleanup PWA when component unmounts
     return () => {
       rfPWAManager.cleanup()
     }
+  }, [])
+
+  // Safety net: if the session is lost while the user is on the page
+  // (e.g. token refresh failure, sign-out from another tab), redirect.
+  useEffect(() => {
+    if (!user || !session) {
+      navigate({ to: '/rf-signin' })
+    }
   }, [user, session, navigate])
 
-  // Show loading while checking authentication
   if (!user || !session) {
     return (
       <div
@@ -73,8 +65,12 @@ export function RFLayout() {
   }
 
   return (
-    <div className='bg-background min-h-screen'>
-      <Outlet />
-    </div>
+    <PresenceProvider>
+      <div className='bg-background min-h-screen'>
+        <Outlet />
+      </div>
+    </PresenceProvider>
   )
 }
+
+// Created and developed by Jai Singh

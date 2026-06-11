@@ -1,3 +1,4 @@
+// Created and developed by Jai Singh
 import { useState } from 'react'
 import {
   Loader2,
@@ -598,3 +599,5 @@ export function GoodsReceiptTab() {
     </div>
   )
 }
+
+// Created and developed by Jai Singh

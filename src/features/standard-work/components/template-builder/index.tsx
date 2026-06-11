@@ -1,3 +1,4 @@
+// Created and developed by Jai Singh
 /**
  * Template Builder - Main Entry
  * Visual drag-and-drop form builder for standard work templates
@@ -10,3 +11,5 @@ export { BuilderCanvas } from './canvas'
 export { PropertiesPanel } from './properties-panel'
 export { SectionEditor } from './section-editor'
 export * from './types'
+
+// Created and developed by Jai Singh

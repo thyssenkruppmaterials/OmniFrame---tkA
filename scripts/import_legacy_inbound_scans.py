@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# Created and developed by Jai Singh
 """
 Import legacy inbound scans from CSV into Supabase rr_inbound_scans table.
 
@@ -48,8 +49,8 @@ except UnicodeDecodeError:
         print("WARNING: Could not load .env file, will use system environment variables")
 
 # Configuration
-CSV_FILE_PATH = os.getenv("LEGACY_CSV_PATH", "./data/legacy_inbound_scans.csv")
-ORGANIZATION_ID = "c9d89a74-7179-4033-93ea-56267cf42a17"  # OmniFrame
+CSV_FILE_PATH = r"C:\Users\str8s\Downloads\inbound-scans-2025-10-04.csv"
+ORGANIZATION_ID = "c9d89a74-7179-4033-93ea-56267cf42a17"  # j.AI OneBox
 BATCH_SIZE = 100  # Import in batches to avoid timeouts
 DRY_RUN = False  # Set to True to test without actually importing
 
@@ -389,3 +390,5 @@ if __name__ == "__main__":
         import traceback
         traceback.print_exc()
         sys.exit(1)
+
+# Created and developed by Jai Singh

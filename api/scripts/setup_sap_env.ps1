@@ -1,11 +1,11 @@
-# OmniFrame - SAP Environment Setup Script for Windows
+# OneBox AI - SAP Environment Setup Script for Windows
 # Run this script to configure SAP NW RFC SDK environment variables
 
 param(
     [string]$SdkPath = "C:\SAP\nwrfcsdk"
 )
 
-Write-Host "🔧 OmniFrame - SAP Environment Setup" -ForegroundColor Cyan
+Write-Host "🔧 OneBox AI - SAP Environment Setup" -ForegroundColor Cyan
 Write-Host "=====================================" -ForegroundColor Cyan
 
 # Check if SDK exists at the specified path

@@ -1,3 +1,4 @@
+// Created and developed by Jai Singh
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { format, formatDistanceToNow } from 'date-fns'
 import {
@@ -1732,3 +1733,5 @@ const GRSDataManager: React.FC<GRSDataManagerProps> = React.memo(
 GRSDataManager.displayName = 'GRSDataManager'
 
 export default GRSDataManager
+
+// Created and developed by Jai Singh

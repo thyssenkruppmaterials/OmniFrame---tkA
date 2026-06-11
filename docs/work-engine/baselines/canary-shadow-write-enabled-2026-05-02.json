@@ -1,0 +1,430 @@
+{
+  "$schema_version": "1",
+  "phase": "11.1",
+  "task": "Work Engine canary shadow-write enable",
+  "status": "BLOCKED — trigger defect surfaced; flag rolled back to false",
+  "captured_at": "2026-05-02T21:27:37Z",
+  "captured_by": "subagent (Supabase MCP, project wncpqxwmbxjgxvrpcake)",
+  "canary_org": {
+    "id": "c9d89a74-7179-4033-93ea-56267cf42a17",
+    "name": "j.AI OneBox",
+    "is_only_org_in_project": true
+  },
+  "step_a_enable_shadow_write": {
+    "ran": true,
+    "pre_state": {
+      "work_tasks_shadow_write": false,
+      "work_tasks_read_shadow": false,
+      "work_tasks_read_primary": false,
+      "settings_updated_at": "2026-05-02T17:59:38.410418Z",
+      "all_other_flags": {
+        "signed_url_photos": false,
+        "work_engine_enabled": false,
+        "push_preflight_zone_check": true,
+        "worker_capability_required": false,
+        "work_tasks_rollback_to_legacy": false
+      }
+    },
+    "post_enable_state": {
+      "work_tasks_shadow_write": true,
+      "work_tasks_read_shadow": false,
+      "work_tasks_read_primary": false,
+      "settings_updated_at": "2026-05-02T21:24:49.07173Z"
+    },
+    "post_rollback_state": {
+      "work_tasks_shadow_write": false,
+      "work_tasks_read_shadow": false,
+      "work_tasks_read_primary": false,
+      "settings_updated_at": "2026-05-02T21:27:22.804554Z",
+      "rollback_reason": "Step F surfaced a trigger defect that would actively break live cycle-count UPDATEs while shadow_write=true. See defect_blocking_canary."
+    }
+  },
+  "step_b_pre_backfill_snapshot": {
+    "ran": true,
+    "captured_at": "2026-05-02T21:24Z",
+    "rr_cyclecount_data": {
+      "legacy_total": 8908,
+      "legacy_open": 4454
+    },
+    "work_tasks": {
+      "work_tasks_total": 0,
+      "work_tasks_open": 0
+    },
+    "interpretation": "Expected starting state — projection has never run because shadow_write was off until Step A. The drift view sees missing_in_shadow=8908 because every legacy row currently lacks a work_tasks projection. The other three drift dimensions (assignee/priority/status) are 0 since they are only computed over the intersection of rows present in both tables and that intersection is empty."
+  },
+  "step_c_backfill": {
+    "ran": false,
+    "reason_not_run": "(a) Service role key not present in repo .env files (only frontend anon key in .env.local); (b) trigger defect would have caused the script to fail on every chunk anyway — see defect_blocking_canary.",
+    "operator_command_for_local_run_AFTER_DEFECT_FIX": "SUPABASE_URL=https://wncpqxwmbxjgxvrpcake.supabase.co SUPABASE_SERVICE_KEY=<service-role-key-from-Supabase-dashboard-Settings>API> node /Users/jaisingh/Documents/Projects/OneBoxFullStack/scripts/backfill/work_tasks_from_cycle_count.mjs --org c9d89a74-7179-4033-93ea-56267cf42a17 --chunk-size 5000 --chunk-pause-ms 50",
+    "script_design_note": "The script bumps `updated_at` on each chunk to fire the AFTER UPDATE projection trigger. Inspection of the trigger function (sync_cycle_count_to_work_task) shows the UPDATE branch only updates *existing* work_tasks rows — for missing projections (which is the entire 8908-row backlog), the UPDATE matches zero rows and is a silent no-op. To project historical rows the trigger UPDATE branch would need to be changed to an UPSERT (INSERT … ON CONFLICT (id) DO UPDATE), or the backfill would need to issue a direct INSERT … SELECT mirroring the trigger's INSERT branch logic. This is a follow-up beyond the scope of this Phase 11.1 task. Surfacing it in this baseline so the operator does not run the script blindly and assume the silent no-op success means projection succeeded."
+  },
+  "step_d_drift_verification": {
+    "ran": "blocked",
+    "drift_view_snapshot_before_rollback": {
+      "organization_id": "c9d89a74-7179-4033-93ea-56267cf42a17",
+      "task_type": "cycle_count",
+      "missing_in_shadow": 8908,
+      "assignee_drift": 0,
+      "priority_drift": 0,
+      "status_drift": 0,
+      "calculated_at": "2026-05-02T21:24:57.23533Z"
+    },
+    "drift_view_snapshot_after_rollback": {
+      "organization_id": "c9d89a74-7179-4033-93ea-56267cf42a17",
+      "task_type": "cycle_count",
+      "missing_in_shadow": 8908,
+      "assignee_drift": 0,
+      "priority_drift": 0,
+      "status_drift": 0,
+      "calculated_at": "2026-05-02T21:27:37.001219Z"
+    },
+    "verdict": "BLOCKED — backfill did not run, defect must be patched first. After patch the operator should re-run Steps A–G and expect missing_in_shadow=0 (or whatever number reflects the post-backfill state)."
+  },
+  "step_e_spot_check": {
+    "ran": "blocked",
+    "reason": "No projection rows exist (work_tasks_total=0). LEFT JOIN to work_tasks would return wt.* = NULL for all three picks, which is not a meaningful match check.",
+    "rows_picked_for_post_backfill_recheck": [
+      {
+        "id": "e7532d59-54e5-466c-95ce-984f2854268d",
+        "count_number": "CC-20260421-4522",
+        "legacy_status": "completed",
+        "legacy_priority": "normal",
+        "expected_post_backfill_projection": {
+          "status": "completed",
+          "legacy_status": null,
+          "priority": "normal"
+        }
+      },
+      {
+        "id": "6663944d-7674-4057-8d8e-175587388d06",
+        "count_number": "CC-20260421-6029",
+        "legacy_status": "pending",
+        "legacy_priority": "normal",
+        "expected_post_backfill_projection": {
+          "status": "pending",
+          "legacy_status": null,
+          "priority": "normal"
+        }
+      },
+      {
+        "id": "e42c9043-5717-4ee4-95b1-354072a63e5d",
+        "count_number": "CC-20260421-5858",
+        "legacy_status": "pending",
+        "legacy_priority": "normal",
+        "expected_post_backfill_projection": {
+          "status": "pending",
+          "legacy_status": null,
+          "priority": "normal"
+        }
+      }
+    ]
+  },
+  "step_f_sync_loop_test": {
+    "ran": true,
+    "scenario": "While work_tasks_shadow_write=true, ran `UPDATE rr_cyclecount_data SET notes = COALESCE(notes,'') || ' [shadow test]' WHERE id = 'e7532d59-54e5-466c-95ce-984f2854268d'`.",
+    "result": "FAILED with PG error 42804 (COALESCE types cycle_count_priority and text cannot be matched).",
+    "interpretation": "The UPDATE rolled back atomically (notes column unchanged on retry). work_events_count = 0 before and after — but only because the trigger's whole UPDATE branch threw and the outer UPDATE was rolled back. So this is NOT a clean PASS for the no-loop check; it's a hard FAIL on a deeper class of bug — the trigger cannot run UPDATEs at all under the current schema mismatch.",
+    "verdict": "BLOCKED — trigger function defect is a precondition to even running the loop test."
+  },
+  "defect_blocking_canary": {
+    "name": "Trigger function `sync_cycle_count_to_work_task` UPDATE branch cannot resolve COALESCE between cycle_count_priority enum and text.",
+    "severity": "P0 — cannot enable shadow_write for any org without breaking all live UPDATEs on rr_cyclecount_data for that org.",
+    "scope": "Forward-projection trigger (rr_cyclecount_data → work_tasks) AFTER UPDATE branch only. INSERT branch uses `COALESCE(NEW.priority, 'normal')` which resolves through the enum input function and works via the implicit enum→text assignment cast on insert.",
+    "offending_line_in_db_function": "priority = COALESCE(NEW.priority, priority),",
+    "type_mismatch": {
+      "rr_cyclecount_data.priority": "cycle_count_priority (enum)",
+      "rr_cyclecount_data.status": "cycle_count_status (enum)",
+      "work_tasks.priority": "text",
+      "work_tasks.status": "text"
+    },
+    "exact_pg_error": "ERROR:  42804: COALESCE types cycle_count_priority and text cannot be matched",
+    "how_it_was_missed": "Migration 261's `work_engine_drift` view had the same class of bug and was patched in Pass 3 with `rcc.priority::text` (per session 2026-05-02 addendum). Migration 257's trigger function was *not* patched at the same time because it had not yet been exercised — `work_tasks_shadow_write` was false everywhere, so no trigger run had ever attempted the COALESCE.",
+    "recommended_fix": "In migration 257 (or a follow-up migration), CREATE OR REPLACE FUNCTION public.sync_cycle_count_to_work_task() with the UPDATE branch line changed to `priority = COALESCE(NEW.priority::text, priority),`. Defensively also cast `NEW.status::text` and `NEW.count_type::text` and `NEW.push_mode::text` if they end up being any non-text type, though only priority is strictly required to unblock. Mirror the same change in `sync_work_task_to_cycle_count` reverse trigger if it has analogous text→enum assignments (the reverse trigger sets `status = v_legacy_status` where v_legacy_status is text and rr_cyclecount_data.status is the enum — that direction *does* have an implicit text→enum assignment cast for enums whose label set contains the runtime value, so it would work for the documented mapping; but worth a follow-on hardening pass.).",
+    "secondary_followups_unblocked_by_fix": [
+      "Backfill mechanics: the script's UPDATE-fires-trigger model only refreshes existing projections. Historical rows need an UPSERT branch in the trigger or a direct INSERT … SELECT seeding pass before the script becomes useful for first-time backfill of an org. See step_c_backfill.script_design_note.",
+      "Reverse trigger sync_work_task_to_cycle_count needs a parallel review for any text→enum assignments before reads cut over."
+    ]
+  },
+  "next_operator_actions": [
+    "1. Patch migration 257's `sync_cycle_count_to_work_task` function (or write a follow-up migration 264_patch_cycle_count_projection_priority_cast.sql) that does a CREATE OR REPLACE FUNCTION with the UPDATE branch's `priority = COALESCE(NEW.priority::text, priority),` cast.",
+    "2. While at it, also fix the backfill mechanics: change the trigger UPDATE branch to an UPSERT (INSERT … ON CONFLICT (id) DO UPDATE) so that the chunked driver's `bump updated_at` call actually projects historical rows.",
+    "3. Re-run the canary kickoff (Steps A–G in this task) against j.AI OneBox after the patch lands.",
+    "4. Confirm the same pattern review covers reverse trigger sync_work_task_to_cycle_count (text→enum assignments).",
+    "5. Only after a clean Steps A–G pass with drift=0, hold the 8h soak window before flipping work_tasks_read_shadow per Phase 11.3."
+  ],
+  "rollback_audit_trail": [
+    {
+      "ts": "2026-05-02T21:24:49Z",
+      "action": "UPDATE work_engine_settings SET feature_flags || '{\"work_tasks_shadow_write\":true}' WHERE org=j.AI OneBox",
+      "result": "shadow_write=true"
+    },
+    {
+      "ts": "2026-05-02T21:26:xxZ",
+      "action": "UPDATE rr_cyclecount_data SET notes=… WHERE id=e7532d59… (Step F sync loop test)",
+      "result": "ROLLED BACK by PG (error 42804) — trigger defect surfaced"
+    },
+    {
+      "ts": "2026-05-02T21:27:22Z",
+      "action": "UPDATE work_engine_settings SET feature_flags || '{\"work_tasks_shadow_write\":false}' WHERE org=j.AI OneBox",
+      "result": "shadow_write=false (canary fully reverted to inert state)"
+    },
+    {
+      "ts": "2026-05-02T21:27:30Z",
+      "action": "UPDATE rr_cyclecount_data SET notes=… WHERE id=e7532d59… (rollback verify)",
+      "result": "SUCCESS — flag short-circuit confirmed; UPDATE on rr_cyclecount_data no longer attempts the broken projection"
+    },
+    {
+      "ts": "2026-05-02T21:27:35Z",
+      "action": "UPDATE rr_cyclecount_data SET notes = replace(notes, ' [shadow rollback verify]', '') WHERE id=e7532d59…",
+      "result": "test note removed; row content restored to pre-task baseline"
+    }
+  ],
+
+  "retry_2026_05_02_post_mig_265": {
+    "$retry_status": "SUCCESS",
+    "captured_at": "2026-05-02T21:53:37Z",
+    "captured_by": "subagent (Supabase MCP, project wncpqxwmbxjgxvrpcake)",
+    "context": "Re-execution of Phase 11.1 canary kickoff after migration ledger advanced to 264 (advisor cleanups), 265 (cycle_count→work_tasks projection priority cast + UPSERT + found_part_transfer exemption), and 266 (work_tasks zone exclusivity port). Trigger defect that blocked the prior attempt is fixed; the pre-cutover worker pre-verified the patch on the same canary row e7532d59 before handing back to this subagent.",
+    "migration_ledger_check": {
+      "264_fix_advisor_findings": {
+        "applied_at": "2026-05-02T21:34:59Z",
+        "version": "20260502213459",
+        "scope": "advisor follow-ups: SET search_path on priority_text_to_int / priority_int_to_text helpers; security_invoker on worker_capabilities view"
+      },
+      "265_found_part_transfer_projection_safety": {
+        "applied_at": "2026-05-02T21:43:27Z",
+        "version": "20260502214327",
+        "scope": "(A) NEW.priority::text cast in projection trigger; (B) UPDATE branch → INSERT…ON CONFLICT (id) DO UPDATE upsert; (C) reverse trigger writes status::cycle_count_status defensively; (D) count_type='found_part_transfer' exemption (forced requires_recount=false, clamped variance_review→completed/approved)"
+      },
+      "266_work_tasks_zone_exclusivity": {
+        "applied_at": "2026-05-02T21:38:18Z",
+        "version": "20260502213818",
+        "scope": "Port enforce_cycle_count_zone_exclusivity onto work_tasks bug-for-bug. New trigger trg_zzz_enforce_work_task_zone_exclusivity fires AFTER all maintenance triggers; honors both legacy (app.cycle_count_zone_lock_bypass) and new (app.work_zone_lock_bypass) GUC bypass; raises distinct ZONE_ASSIGNED / 'ZONE_LOCKED: active' / 'ZONE_LOCKED: reserved' errors."
+      },
+      "ordering_observation": "264 was authored against the prior 263-tip baseline and was applied before 266 even though the filename ordinal is lower than 265's. PostgreSQL has no constraint against this; the schema state is identical to the linear case because all three migrations are additive and disjoint."
+    },
+    "trigger_function_post_mig_265": {
+      "verified_via": "pg_get_functiondef on public.sync_cycle_count_to_work_task",
+      "key_lines_present": [
+        "COALESCE(NEW.priority::text, 'normal')",
+        "COALESCE(NEW.status::text, 'pending')",
+        "INSERT INTO public.work_tasks ... ON CONFLICT (id) DO UPDATE SET",
+        "IF NEW.count_type = 'found_part_transfer' THEN v_requires_recount := false; ... v_legacy_status := 'approved'; v_status := 'completed'"
+      ]
+    },
+
+    "step_a_enable_shadow_write": {
+      "ran": true,
+      "pre_state_for_retry": {
+        "work_tasks_shadow_write": false,
+        "work_tasks_read_shadow": false,
+        "work_tasks_read_primary": false,
+        "settings_updated_at": "2026-05-02T21:27:22.804554Z (final state from prior BLOCKED attempt; pre-cutover worker confirmed flag was rolled back to false after their own end-to-end patch verification)"
+      },
+      "post_enable_state": {
+        "work_tasks_shadow_write": true,
+        "work_tasks_read_shadow": false,
+        "work_tasks_read_primary": false,
+        "settings_updated_at": "2026-05-02T21:50:44.751408Z"
+      },
+      "left_on_at_end_of_task": true,
+      "rationale_for_leaving_on": "Per Phase 11.1 plan, shadow_write stays on for the canary org throughout the 8-hour soak window before read_shadow flips. NOT a rollback — intentional state."
+    },
+
+    "step_b_pre_synthetic_backfill_snapshot": {
+      "ran": true,
+      "captured_at": "2026-05-02T21:50:58Z",
+      "rr_cyclecount_data": {
+        "legacy_total": 8908,
+        "legacy_open": 4454
+      },
+      "work_tasks": {
+        "work_tasks_total": 0,
+        "work_tasks_open": 0
+      },
+      "drift": {
+        "missing_in_shadow": 8908,
+        "assignee_drift": 0,
+        "priority_drift": 0,
+        "status_drift": 0,
+        "calculated_at": "2026-05-02T21:50:58.139362Z"
+      },
+      "verdict": "Baseline identical to prior attempt's Step B (pre-cutover worker DELETE'd their verification artifact and reverted shadow_write). Safe to proceed — no field-level drift; missing_in_shadow=legacy_total is the natural pre-projection state."
+    },
+
+    "step_c_synthetic_micro_backfill": {
+      "ran": true,
+      "method": "Direct SQL via mcp__supabase__execute_sql — bumped updated_at on the three pre-picked canary rows. The patched trigger UPSERT branch now actually projects historical rows.",
+      "ts": "2026-05-02T21:51:09.114567Z",
+      "rows_bumped": [
+        "6663944d-7674-4057-8d8e-175587388d06",
+        "e42c9043-5717-4ee4-95b1-354072a63e5d",
+        "e7532d59-54e5-466c-95ce-984f2854268d"
+      ],
+      "operator_command_for_full_8908_row_run": "SUPABASE_URL=https://wncpqxwmbxjgxvrpcake.supabase.co SUPABASE_SERVICE_KEY=<service-role-key-from-Supabase-dashboard-Settings-API> node /Users/jaisingh/Documents/Projects/OneBoxFullStack/scripts/backfill/work_tasks_from_cycle_count.mjs --org c9d89a74-7179-4033-93ea-56267cf42a17 --chunk-size 5000 --chunk-pause-ms 50",
+      "operator_command_status": "Documented for local run; SUPABASE_SERVICE_KEY remains absent from any committed env file. The script is now mechanically correct against the patched trigger (UPSERT branch handles missing projections). Expected runtime: 8908 / 5000 chunks * (~50ms pause + chunk runtime) — approximately a few minutes wall clock for a quiescent org."
+    },
+
+    "step_d_drift_verification": {
+      "ran": true,
+      "drift_post_micro_backfill": {
+        "organization_id": "c9d89a74-7179-4033-93ea-56267cf42a17",
+        "task_type": "cycle_count",
+        "missing_in_shadow": 8905,
+        "assignee_drift": 0,
+        "priority_drift": 0,
+        "status_drift": 0,
+        "calculated_at": "2026-05-02T21:51:15.307508Z"
+      },
+      "drift_post_zone_smoke_and_cleanup": {
+        "organization_id": "c9d89a74-7179-4033-93ea-56267cf42a17",
+        "task_type": "cycle_count",
+        "missing_in_shadow": 8904,
+        "assignee_drift": 0,
+        "priority_drift": 0,
+        "status_drift": 0,
+        "calculated_at": "2026-05-02T21:53:37.7556Z",
+        "explanation": "Down by one more vs Step D's first reading because the zone smoke test added a 4th projection (row e83b8ef1-faa0-40b9-931d-e4e2de5297a6) into zone SC. work_tasks_total=4 at end of task."
+      },
+      "verdict": "PASS — every field-level drift dimension stays at 0 throughout the run; missing_in_shadow tracks 1:1 with the number of legacy rows we have not yet projected. Gate to Phase 11.3 is field-level drift = 0 over the projected set, which is satisfied."
+    },
+
+    "step_e_spot_check": {
+      "ran": true,
+      "ts": "2026-05-02T21:51:15Z",
+      "rows": [
+        {
+          "id": "6663944d-7674-4057-8d8e-175587388d06",
+          "count_number": "CC-20260421-6029",
+          "legacy_status": "pending",
+          "legacy_priority": "normal",
+          "wt_status": "pending",
+          "wt_priority": "normal",
+          "wt_legacy_status": null,
+          "wt_task_type": "cycle_count",
+          "wt_task_subtype": "part_verification",
+          "wt_source_table": "rr_cyclecount_data",
+          "wt_source_id": "6663944d-7674-4057-8d8e-175587388d06",
+          "verdict": "MATCH (pending → pending / null / normal)"
+        },
+        {
+          "id": "e42c9043-5717-4ee4-95b1-354072a63e5d",
+          "count_number": "CC-20260421-5858",
+          "legacy_status": "pending",
+          "legacy_priority": "normal",
+          "wt_status": "pending",
+          "wt_priority": "normal",
+          "wt_legacy_status": null,
+          "wt_task_type": "cycle_count",
+          "wt_task_subtype": "part_verification",
+          "wt_source_table": "rr_cyclecount_data",
+          "wt_source_id": "e42c9043-5717-4ee4-95b1-354072a63e5d",
+          "verdict": "MATCH (pending → pending / null / normal)"
+        },
+        {
+          "id": "e7532d59-54e5-466c-95ce-984f2854268d",
+          "count_number": "CC-20260421-4522",
+          "legacy_status": "completed",
+          "legacy_priority": "normal",
+          "wt_status": "completed",
+          "wt_priority": "normal",
+          "wt_legacy_status": null,
+          "wt_task_type": "cycle_count",
+          "wt_task_subtype": "part_verification",
+          "wt_source_table": "rr_cyclecount_data",
+          "wt_source_id": "e7532d59-54e5-466c-95ce-984f2854268d",
+          "verdict": "MATCH (completed → completed / null / normal)"
+        }
+      ]
+    },
+
+    "step_f_sync_loop_test": {
+      "ran": true,
+      "scenario": "While work_tasks_shadow_write=true, ran `UPDATE rr_cyclecount_data SET notes = COALESCE(notes,'') || ' [shadow test]' WHERE id = 'e7532d59-54e5-466c-95ce-984f2854268d'`.",
+      "result": "SUCCESS — UPDATE returned the row with notes appended (no 42804). Trigger fired exactly once; UPSERT branch updated the existing work_tasks projection's result_payload.notes to match the new legacy notes value.",
+      "work_events_before": 0,
+      "work_events_after": 0,
+      "work_events_delta": 0,
+      "interpretation": "Δ=0 confirms (a) no infinite loop between forward and reverse projection (the app.skip_sync GUC short-circuits the reverse trigger after the forward trigger sets it), and (b) the legacy UPDATE path does not write a work_events row directly — only dispatcher RPCs do. The projection's result_payload was observed mid-test as `[Part Verified] 23078036 confirmed at location. [shadow test]` (mirroring the legacy notes), then reverted along with the legacy notes column.",
+      "test_note_revert": "Confirmed both legacy and projection notes back to `[Part Verified] 23078036 confirmed at location.` (pre-task content).",
+      "verdict": "PASS"
+    },
+
+    "mig_266_zone_exclusivity_smoke": {
+      "ran": true,
+      "method": "Two-operator-same-zone test using actual projected rows (no synthetic test fixtures).",
+      "preconditions": {
+        "work_zone_rules": {
+          "enabled": true,
+          "policy": "one_counter_per_zone",
+          "zone_pattern": null,
+          "bypass_priorities": [],
+          "bypass_count_types": []
+        },
+        "work_zone_assignments_for_test_zones": "empty (zones SC/SB/RO have no admin user assignment, so no ZONE_ASSIGNED would pre-empt ZONE_LOCKED)"
+      },
+      "setup_extra_projection": {
+        "ran": true,
+        "method": "Bumped updated_at on rr_cyclecount_data row e83b8ef1-faa0-40b9-931d-e4e2de5297a6 (location=SC-14-D-03, status=pending) to project a 4th work_task into zone SC. Combined with the pre-existing 6663944d in zone SC, gives two pending/unassigned work_tasks rows in the same dispatch_zone for the test."
+      },
+      "phase_1_operator_a_claims_first_row": {
+        "row_id": "6663944d-7674-4057-8d8e-175587388d06",
+        "user_id": "8fe94172-0267-4b14-96bd-06f8691bb04c",
+        "user_email": "admin@j.ai (full_name='Jai Singh')",
+        "transition": "(pending, NULL) → (in_progress, 8fe94172…) at 2026-05-02T21:53:02.697285Z",
+        "verdict": "PASS — claim succeeded; reverse-projection trigger synced the change back to rr_cyclecount_data (legacy row 6663944d also showed status=in_progress, assigned_to=admin)"
+      },
+      "phase_2_operator_b_claims_second_row_same_zone": {
+        "row_id": "e83b8ef1-faa0-40b9-931d-e4e2de5297a6",
+        "user_id": "7237b45f-bb2a-45ef-9faa-77a32aecd7e5",
+        "user_email": "testerasdasdasd@icloud.com",
+        "expected_error": "ZONE_LOCKED: active",
+        "actual_error": "ERROR: P0001: ZONE_LOCKED: active — Zone \"SC\" is currently held by Jai Singh. Only one worker may hold a zone at a time. DETAIL: zone=SC;owner=8fe94172-0267-4b14-96bd-06f8691bb04c;state=active HINT: work_task_zone_lock CONTEXT: PL/pgSQL function enforce_work_task_zone_exclusivity() line 211 at RAISE",
+        "verdict": "PASS — error code, prefix, owner identity, and DETAIL/HINT all match the migration 266 trigger contract exactly. Mig 266 ported the invariant correctly."
+      },
+      "cleanup": {
+        "method": "UPDATE work_tasks SET assigned_to=NULL, assigned_at=NULL, status='pending', claimed_at=NULL WHERE id='6663944d…'",
+        "ts": "2026-05-02T21:53:30Z",
+        "result": "Operator A's claim reverted; reverse-projection trigger synced the unassign back to rr_cyclecount_data. Both rows e83b8ef1 and 6663944d on both sides ended at (pending, NULL) — full bi-directional state consistent."
+      }
+    },
+
+    "final_state": {
+      "feature_flags": {
+        "signed_url_photos": false,
+        "work_engine_enabled": false,
+        "work_tasks_read_shadow": false,
+        "work_tasks_read_primary": false,
+        "work_tasks_shadow_write": true,
+        "push_preflight_zone_check": true,
+        "worker_capability_required": false,
+        "work_tasks_rollback_to_legacy": false
+      },
+      "settings_updated_at": "2026-05-02T21:50:44.751408Z",
+      "intentional": "shadow_write left ON; all other flags at default. Per Phase 11.1 plan, this state is held throughout the 8h soak window before read_shadow flips.",
+      "work_tasks_total": 4,
+      "work_events_total": 0,
+      "drift_view": {
+        "missing_in_shadow": 8904,
+        "assignee_drift": 0,
+        "priority_drift": 0,
+        "status_drift": 0
+      },
+      "projected_rows_at_end": [
+        "6663944d-7674-4057-8d8e-175587388d06 (zone=SC, status=pending, unassigned)",
+        "e42c9043-5717-4ee4-95b1-354072a63e5d (zone=SB, status=pending, unassigned)",
+        "e7532d59-54e5-466c-95ce-984f2854268d (zone=RO, status=completed, assigned_to=c049b42a-…)",
+        "e83b8ef1-faa0-40b9-931d-e4e2de5297a6 (zone=SC, status=pending, unassigned)"
+      ],
+      "canary_row_notes_intact": true
+    },
+
+    "next_operator_actions": [
+      "1. Begin the Phase 11.3 8h soak watch on j.AI OneBox. Periodically poll work_engine_drift; alert on any (assignee_drift|priority_drift|status_drift) > 0 — those are the gating signals.",
+      "2. Drive ≥ 50 cycle-count lifecycle transitions during the window covering pull-claim, supervisor push, complete, release, photo/artifact, and signoff paths (per phase-11-rollout.md §11.3). If real volume is low, run the staging replay script (operator-driven; not in repo).",
+      "3. Optionally schedule the full 8908-row backfill via the documented operator command above to drive missing_in_shadow → 0 before read_shadow. Drift dashboard treats missing_in_shadow as the primary gate for the read flip; field drifts must remain 0.",
+      "4. After the soak window completes cleanly, flip work_tasks_read_shadow=true (NOT in this task's scope).",
+      "5. Phase 11.4a pre-read_primary checklist (in docs/work-engine/phase-11-rollout.md) still applies — the four deferred items (found-part-transfer projection branch, work_tasks zone exclusivity ✓ now done via mig 266, strategy registry → claim_next wiring, database types regen) need to land before flipping work_tasks_read_primary."
+    ]
+  }
+}

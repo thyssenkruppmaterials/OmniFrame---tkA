@@ -1,3 +1,4 @@
+// Created and developed by Jai Singh
 import { logger } from '@/lib/utils/logger'
 
 /**
@@ -174,7 +175,7 @@ export class CacheManager {
           .catch(() => resolve([]))
       } else {
         // Fallback for older browsers
-        const knownDBs = ['workbox-cache', 'OmniFrame', 'cache-api']
+        const knownDBs = ['workbox-cache', 'OneBoxAI', 'OmniFrame', 'cache-api']
         const clearPromises = knownDBs.map((db) => this.clearDatabase(db))
         Promise.all(clearPromises).then((results) => {
           const successfulClears = results.filter(
@@ -409,4 +410,5 @@ export const clearAllCaches = () => cacheManager.clearAllCaches()
 export const getCacheStatus = () => cacheManager.getCacheStatus()
 export const forceReload = () => cacheManager.forceReload()
 export const checkForPWAUpdate = () => cacheManager.checkForPWAUpdate()
-// Developer and Creator: Jai Singh
+
+// Created and developed by Jai Singh

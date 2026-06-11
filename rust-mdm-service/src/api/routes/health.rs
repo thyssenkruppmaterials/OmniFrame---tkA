@@ -1,3 +1,4 @@
+// Created and developed by Jai Singh
 use axum::{extract::State, Json};
 use std::sync::Arc;
 
@@ -62,3 +63,5 @@ mod tests {
         assert_eq!(result.0["service"], "rust-mdm-service");
     }
 }
+
+// Created and developed by Jai Singh

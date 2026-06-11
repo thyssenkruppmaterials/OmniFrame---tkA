@@ -1,3 +1,4 @@
+// Created and developed by Jai Singh
 import { useEffect } from 'react'
 import { z } from 'zod'
 import { useForm } from 'react-hook-form'
@@ -5,7 +6,6 @@ import { zodResolver } from '@hookform/resolvers/zod'
 import { AlertCircle } from 'lucide-react'
 import { useShiftProductivitySettings } from '@/hooks/use-shift-productivity-settings'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
-import { Button } from '@/components/ui/button'
 import {
   Card,
   CardContent,
@@ -34,6 +34,11 @@ import { Separator } from '@/components/ui/separator'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Switch } from '@/components/ui/switch'
 import ContentSection from '../components/content-section'
+import {
+  SettingsErrorState,
+  SettingsSaveBar,
+  SettingsStatusBadge,
+} from '../components/settings-primitives'
 
 const advancedSettingsSchema = z.object({
   dataRetentionDays: z.coerce.number().min(30).max(365).default(90),
@@ -54,10 +59,13 @@ export function AdvancedSettings() {
     advancedFormValues,
     updateAdvancedSettings,
     isUpdatingAdvanced,
+    error,
+    refetch,
+    organizationId,
   } = useShiftProductivitySettings()
 
   const form = useForm<AdvancedSettingsValues>({
-    resolver: zodResolver(advancedSettingsSchema),
+    resolver: zodResolver(advancedSettingsSchema) as never,
     defaultValues: advancedFormValues,
   })
 
@@ -87,13 +95,38 @@ export function AdvancedSettings() {
     )
   }
 
+  if (error || !organizationId) {
+    return (
+      <ContentSection
+        title='Advanced Controls'
+        desc='Tune retention, export defaults, calculation mode, and diagnostics.'
+      >
+        <SettingsErrorState
+          title={
+            !organizationId
+              ? 'Organization required'
+              : 'Unable to load settings'
+          }
+          description={
+            !organizationId
+              ? 'Advanced settings require an organization before they can be saved.'
+              : error instanceof Error
+                ? error.message
+                : 'Advanced settings failed to load.'
+          }
+          onRetry={organizationId ? () => void refetch() : undefined}
+        />
+      </ContentSection>
+    )
+  }
+
   return (
     <ContentSection
-      title='Advanced Settings'
-      desc='Configure advanced productivity tracking options and data management.'
+      title='Advanced Controls'
+      desc='Tune retention, export defaults, calculation mode, and diagnostics.'
     >
       <Form {...form}>
-        <form onSubmit={form.handleSubmit(onSubmit)} className='space-y-8'>
+        <form onSubmit={form.handleSubmit(onSubmit)} className='space-y-6'>
           <Alert>
             <AlertCircle className='h-4 w-4' />
             <AlertTitle>Advanced Configuration</AlertTitle>
@@ -136,8 +169,10 @@ export function AdvancedSettings() {
                     <div className='space-y-0.5'>
                       <FormLabel>Auto-Archive Old Data</FormLabel>
                       <FormDescription>
-                        Automatically archive data older than retention period.
+                        Stores the retention preference. A scheduled archive
+                        worker is required before data is moved automatically.
                       </FormDescription>
+                      <SettingsStatusBadge status='pending' />
                     </div>
                     <FormControl>
                       <Switch
@@ -155,10 +190,7 @@ export function AdvancedSettings() {
                 render={({ field }) => (
                   <FormItem>
                     <FormLabel>Default Export Format</FormLabel>
-                    <Select
-                      onValueChange={field.onChange}
-                      defaultValue={field.value}
-                    >
+                    <Select onValueChange={field.onChange} value={field.value}>
                       <FormControl>
                         <SelectTrigger>
                           <SelectValue placeholder='Select export format' />
@@ -196,10 +228,7 @@ export function AdvancedSettings() {
                 render={({ field }) => (
                   <FormItem>
                     <FormLabel>Productivity Calculation Method</FormLabel>
-                    <Select
-                      onValueChange={field.onChange}
-                      defaultValue={field.value}
-                    >
+                    <Select onValueChange={field.onChange} value={field.value}>
                       <FormControl>
                         <SelectTrigger>
                           <SelectValue placeholder='Select calculation method' />
@@ -264,8 +293,11 @@ export function AdvancedSettings() {
                     <div className='space-y-0.5'>
                       <FormLabel>Advanced Analytics</FormLabel>
                       <FormDescription>
-                        Enable experimental analytics and forecasting features.
+                        Store the preference for future forecasting and anomaly
+                        views. Analytics pipeline wiring is required before this
+                        changes dashboard outputs.
                       </FormDescription>
+                      <SettingsStatusBadge status='pending' />
                     </div>
                     <FormControl>
                       <Switch
@@ -279,11 +311,16 @@ export function AdvancedSettings() {
             </CardContent>
           </Card>
 
-          <Button type='submit' disabled={isUpdatingAdvanced}>
-            {isUpdatingAdvanced ? 'Saving...' : 'Save Advanced Settings'}
-          </Button>
+          <SettingsSaveBar
+            isDirty={form.formState.isDirty}
+            isSaving={isUpdatingAdvanced}
+            submitLabel='Save advanced settings'
+            savingLabel='Saving advanced settings...'
+          />
         </form>
       </Form>
     </ContentSection>
   )
 }
+
+// Created and developed by Jai Singh

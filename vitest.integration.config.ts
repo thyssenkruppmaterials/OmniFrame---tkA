@@ -1,3 +1,4 @@
+// Created and developed by Jai Singh
 /**
  * Vitest Integration Test Configuration
  *
@@ -41,3 +42,5 @@ export default defineConfig({
     },
   },
 })
+
+// Created and developed by Jai Singh

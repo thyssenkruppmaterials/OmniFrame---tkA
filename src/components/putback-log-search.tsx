@@ -1,3 +1,4 @@
+// Created and developed by Jai Singh
 /**
  * Putback Log Search Component - October 20, 2025
  *
@@ -733,3 +734,5 @@ const PutbackLogSearch: React.FC<PutbackLogSearchProps> = React.memo(
 PutbackLogSearch.displayName = 'PutbackLogSearch'
 
 export default PutbackLogSearch
+
+// Created and developed by Jai Singh

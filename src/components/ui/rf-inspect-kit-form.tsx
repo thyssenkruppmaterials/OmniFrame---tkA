@@ -1,3 +1,4 @@
+// Created and developed by Jai Singh
 'use client'
 
 /**
@@ -33,6 +34,7 @@ import { Card, CardContent } from '@/components/ui/card'
 import { Label } from '@/components/ui/label'
 import { Progress } from '@/components/ui/progress'
 import { ScannerInput } from '@/components/ui/scanner-input'
+import { RFScreenHeader } from '@/features/rf-interface/_shell'
 
 // Types
 interface TOLine {
@@ -295,23 +297,15 @@ const RFInspectKitForm: React.FC<RFInspectKitFormProps> = ({ onBack }) => {
   return (
     <div className='mx-auto w-full max-w-md space-y-4 p-4'>
       {/* Header with back button */}
-      <div className='flex items-center'>
-        {onBack && (
-          <Button variant='ghost' size='sm' onClick={onBack}>
-            <ChevronLeft className='mr-1 h-4 w-4' />
-            Back
-          </Button>
-        )}
-        <div className='flex-1 text-center'>
-          <h2 className='text-lg font-bold'>Inspect Kit</h2>
-          {state.kitData && (
-            <p className='text-muted-foreground text-xs'>
-              {state.kitData.kitPoNumber} • {state.kitData.kitNumber}
-            </p>
-          )}
-        </div>
-        {onBack && <div className='w-14 shrink-0' />}
-      </div>
+      <RFScreenHeader
+        title='Inspect Kit'
+        subtitle={
+          state.kitData
+            ? `${state.kitData.kitPoNumber} • ${state.kitData.kitNumber}`
+            : 'Quality check'
+        }
+        onBack={onBack}
+      />
 
       {/* Progress indicator */}
       {state.kitData && state.currentStep !== 'complete' && (
@@ -657,3 +651,5 @@ const RFInspectKitForm: React.FC<RFInspectKitFormProps> = ({ onBack }) => {
 }
 
 export default RFInspectKitForm
+
+// Created and developed by Jai Singh

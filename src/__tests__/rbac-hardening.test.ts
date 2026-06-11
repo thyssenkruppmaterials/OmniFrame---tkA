@@ -1,3 +1,4 @@
+// Created and developed by Jai Singh
 /**
  * RBAC Hardening Regression Tests
  * Validates that security guards added in the RBAC hardening initiative remain in place.
@@ -314,3 +315,5 @@ describe('Tab Permission Debug Surface', () => {
     expect(typeof isDev).toBe('boolean')
   })
 })
+
+// Created and developed by Jai Singh

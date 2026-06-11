@@ -1,3 +1,4 @@
+// Created and developed by Jai Singh
 /**
  * Team Performance Service
  * Aggregates productivity data across all team members by department and area
@@ -55,6 +56,7 @@ const DEFAULT_TIMEZONE = 'America/New_York'
 interface ProductivityCountsRow {
   user_id: string
   inbound_scans: number
+  cart_stows: number
   put_aways: number
   picking: number
   packed: number
@@ -63,6 +65,11 @@ interface ProductivityCountsRow {
   putbacks: number
   cycle_counts: number
   customer_responses: number
+  // Kit workflow stages — migration 310
+  kit_picking: number
+  kit_building: number
+  kit_inspection: number
+  kit_dock_staging: number
   total_tasks: number
 }
 
@@ -77,7 +84,7 @@ interface ActivityEventRow {
   activity_category?: string
 }
 
-interface ShiftAssignmentDetailRow {
+export interface ShiftAssignmentDetailRow {
   assignment_id: string
   user_id: string
   user_full_name: string | null
@@ -365,26 +372,116 @@ class TeamPerformanceService {
     startDate: string,
     endDate: string
   ): Promise<Map<string, ActivityEvent[]>> {
-    const { data, error } = await (supabase as any).rpc(
-      'get_team_activity_events',
-      {
-        p_organization_id: organizationId,
-        p_start_date: startDate,
-        p_end_date: endDate,
-      }
-    )
+    // IMPORTANT: this Supabase project has PostgREST configured with
+    // `db-max-rows = 1000`, a HARD server-side cap that the `Range` header
+    // cannot exceed (verified via live `curl` on this project's
+    // /rest/v1/rpc/...: both `Range: 0-49999` and no Range returned the
+    // same 1000-row body with `Content-Range: 0-999/1651`).
+    //
+    // PostgREST also handles Range differently for RPC calls by method:
+    //   POST /rpc/...  → returns rows 0..(PAGE_SIZE-1), Range OFFSET IGNORED
+    //                    (probe: Range: 1000-1999 still returned 0-999)
+    //   GET  /rpc/...  → honours Range as offset+limit
+    //                    (probe: Range: 1000-1999 returned 1000-1650/1651)
+    //
+    // The events RPC fans out across ~10 activity tables and a busy day
+    // for our largest tenant routinely emits >1000 rows. Without paging,
+    // the server silently truncates the tail (sorted by user_id) and the
+    // affected associates lose every Gantt block while still showing the
+    // correct row total — which comes from `get_team_productivity_counts`,
+    // a separate RPC that returns 1 row per user and stays well under
+    // the cap.
+    //
+    // Fix: switch to `{ get: true }` so PostgREST routes to GET /rpc/...
+    // (where Range paginates), and page through the response. First page
+    // uses `count: 'exact'` to learn the total row count from the
+    // Content-Range header; if the total exceeds one page, fan out the
+    // remaining pages in parallel.
+    const PAGE_SIZE = 1000
+    const SAFETY_CAP_ROWS = 50000
 
-    if (error) {
+    const firstPage = await (supabase as any)
+      .rpc(
+        'get_team_activity_events',
+        {
+          p_organization_id: organizationId,
+          p_start_date: startDate,
+          p_end_date: endDate,
+        },
+        { get: true, count: 'exact' }
+      )
+      .range(0, PAGE_SIZE - 1)
+
+    if (firstPage.error) {
       logger.error(
         '[TeamPerformance] Error fetching team activity events:',
-        error
+        firstPage.error
       )
       return new Map()
     }
 
+    const firstRows = (firstPage.data || []) as ActivityEventRow[]
+    const totalRows: number | null = firstPage.count ?? null
+    const rows: ActivityEventRow[] = [...firstRows]
+
+    // Issue additional pages if there are more rows than one page can return.
+    // `count` may be null (e.g. if the server omits the exact count); fall back
+    // to "keep paging while the last page was full" in that case.
+    const needsMorePages =
+      (totalRows !== null && totalRows > firstRows.length) ||
+      (totalRows === null && firstRows.length === PAGE_SIZE)
+
+    if (needsMorePages) {
+      const effectiveTotal = Math.min(
+        totalRows ?? SAFETY_CAP_ROWS,
+        SAFETY_CAP_ROWS
+      )
+      const pageRanges: Array<[number, number]> = []
+      for (let from = PAGE_SIZE; from < effectiveTotal; from += PAGE_SIZE) {
+        pageRanges.push([
+          from,
+          Math.min(from + PAGE_SIZE - 1, effectiveTotal - 1),
+        ])
+      }
+
+      const pages = await Promise.all(
+        pageRanges.map(([from, to]) =>
+          (supabase as any)
+            .rpc(
+              'get_team_activity_events',
+              {
+                p_organization_id: organizationId,
+                p_start_date: startDate,
+                p_end_date: endDate,
+              },
+              { get: true }
+            )
+            .range(from, to)
+        )
+      )
+
+      for (const page of pages) {
+        if (page.error) {
+          logger.error(
+            '[TeamPerformance] Error fetching activity events page:',
+            page.error
+          )
+          // Continue with the rows we already have rather than blanking the UI.
+          continue
+        }
+        const pageRows = (page.data || []) as ActivityEventRow[]
+        rows.push(...pageRows)
+      }
+
+      if (totalRows !== null && totalRows > SAFETY_CAP_ROWS) {
+        logger.warn(
+          `[TeamPerformance] Activity events for window exceeded safety cap (${totalRows} > ${SAFETY_CAP_ROWS}); truncating remaining rows.`
+        )
+      }
+    }
+
     // Group events by user_id for O(1) lookup
     const eventsMap = new Map<string, ActivityEvent[]>()
-    const rows = (data || []) as ActivityEventRow[]
     for (const row of rows) {
       if (!eventsMap.has(row.user_id)) {
         eventsMap.set(row.user_id, [])
@@ -409,7 +506,7 @@ class TeamPerformanceService {
     }
 
     logger.log(
-      `[TeamPerformance] Fetched ${rows.length} activity events for ${eventsMap.size} associates in 1 query (dynamic config)`
+      `[TeamPerformance] Fetched ${rows.length} activity events for ${eventsMap.size} associates across ${1 + (totalRows !== null ? Math.ceil(totalRows / PAGE_SIZE) - 1 : firstRows.length === PAGE_SIZE ? 1 : 0)} request(s) (total reported by server: ${totalRows ?? 'unknown'})`
     )
     return eventsMap
   }
@@ -1013,9 +1110,29 @@ class TeamPerformanceService {
           const wasTruncatedEnd = clampedEndMin < blockEndMin
           const originalDuration = blockEndMin - blockStartMin
 
-          // Skip blocks that are entirely outside shift boundaries
-          // Use > instead of >= to allow same-minute blocks through
+          const isWorkBlock = block.type !== 'idle' && block.type !== 'break'
+          const hasActivity = block.taskCount > 0
+
+          // Skip blocks that are entirely outside shift boundaries.
+          // EXCEPTION: keep work blocks with actual activity at their original
+          // bounds — operators sometimes log work before/after their declared
+          // shift (e.g. test admin sessions, off-shift kit work, overtime that
+          // wasn't yet captured in shift_assignments). Dropping them here was
+          // the root cause of the Activity Timeline rendering as a single
+          // grey idle block when 100% of the user's events fell outside the
+          // shift window (see Debug/Fix-Activity-Timeline-Missing-Kit-Events).
+          // Use > instead of >= to allow same-minute blocks through.
           if (clampedStartMin > clampedEndMin) {
+            if (isWorkBlock && hasActivity) {
+              const offShiftDuration = Math.max(blockEndMin - blockStartMin, 1)
+              return {
+                ...block,
+                duration: offShiftDuration,
+                wasTruncatedStart: false,
+                wasTruncatedEnd: false,
+                originalDuration,
+              }
+            }
             return null
           }
 
@@ -1023,8 +1140,6 @@ class TeamPerformanceService {
           // IMPORTANT: For work blocks with actual tasks, ensure minimum 1 minute duration
           // This handles cases where all events happen within the same minute
           const rawDuration = clampedEndMin - clampedStartMin
-          const isWorkBlock = block.type !== 'idle' && block.type !== 'break'
-          const hasActivity = block.taskCount > 0
           const clampedDuration =
             isWorkBlock && hasActivity ? Math.max(rawDuration, 1) : rawDuration
 
@@ -1056,14 +1171,18 @@ class TeamPerformanceService {
         })
         .filter((block): block is ActivityBlock => block !== null)
 
-      // Verify total matches shift duration - if not, adjust idle time
+      // Verify total matches shift duration - if not, adjust idle time.
+      // NOTE: We only ever ADD idle to fill a gap. We never subtract from idle
+      // when current total exceeds shift duration — that case happens when
+      // off-shift work blocks were kept (see exception above) and clipping
+      // idle would mis-attribute that real work as missing time.
       const currentTotal = activityBlocks.reduce(
         (sum, b) => sum + b.duration,
         0
       )
       const difference = shiftDurationMinutes - currentTotal
 
-      if (Math.abs(difference) > 0) {
+      if (difference > 0) {
         // Find the last idle block and adjust its duration
         const lastIdleIdx = activityBlocks
           .map((b, i) => (b.type === 'idle' ? i : -1))
@@ -1166,6 +1285,10 @@ class TeamPerformanceService {
           final_packed: 0,
           putbacks: 0,
           cycle_counts: 0,
+          kit_picking: 0,
+          kit_building: 0,
+          kit_inspection: 0,
+          kit_dock_staging: 0,
           total: 0,
         })
       }
@@ -1175,6 +1298,9 @@ class TeamPerformanceService {
       switch (event.type) {
         case 'inbound_scan':
           breakdown.inbound_scans++
+          break
+        case 'cart_stow':
+          breakdown.cart_stows++
           break
         case 'putaway':
           breakdown.put_aways++
@@ -1196,6 +1322,19 @@ class TeamPerformanceService {
           break
         case 'cycle_count':
           breakdown.cycle_counts++
+          break
+        // Kit workflow stages — migration 310
+        case 'kit_picking':
+          breakdown.kit_picking++
+          break
+        case 'kit_building':
+          breakdown.kit_building++
+          break
+        case 'kit_inspection':
+          breakdown.kit_inspection++
+          break
+        case 'kit_dock_staging':
+          breakdown.kit_dock_staging++
           break
       }
 
@@ -1280,6 +1419,11 @@ class TeamPerformanceService {
         final_packed: counts?.final_packed ?? 0,
         putbacks: counts?.putbacks ?? 0,
         cycle_counts: counts?.cycle_counts ?? 0,
+        // Kit workflow stages — migration 310
+        kit_picking: counts?.kit_picking ?? 0,
+        kit_building: counts?.kit_building ?? 0,
+        kit_inspection: counts?.kit_inspection ?? 0,
+        kit_dock_staging: counts?.kit_dock_staging ?? 0,
       }
 
       // Get activity events from batch result (O(1) lookup)
@@ -1347,7 +1491,11 @@ class TeamPerformanceService {
         productivity.shipped +
         productivity.final_packed +
         productivity.putbacks +
-        productivity.cycle_counts
+        productivity.cycle_counts +
+        productivity.kit_picking +
+        productivity.kit_building +
+        productivity.kit_inspection +
+        productivity.kit_dock_staging
 
       // Calculate efficiency against labor standards
       const efficiency = this.calculateAssociateEfficiency(
@@ -1542,6 +1690,10 @@ class TeamPerformanceService {
       final_packed: number
       putbacks: number
       cycle_counts: number
+      kit_picking?: number
+      kit_building?: number
+      kit_inspection?: number
+      kit_dock_staging?: number
     },
     laborStandards: LaborStandard[]
   ): number {
@@ -1554,7 +1706,11 @@ class TeamPerformanceService {
       productivity.shipped +
       productivity.final_packed +
       productivity.putbacks +
-      productivity.cycle_counts
+      productivity.cycle_counts +
+      (productivity.kit_picking ?? 0) +
+      (productivity.kit_building ?? 0) +
+      (productivity.kit_inspection ?? 0) +
+      (productivity.kit_dock_staging ?? 0)
 
     // If no work done, return 0%
     if (totalTasks === 0) {
@@ -1566,7 +1722,8 @@ class TeamPerformanceService {
     // This supports both:
     // - Legacy short names (e.g., 'scan', 'pick', 'count')
     // - Activity source types (e.g., 'inbound_scan', 'picking', 'cycle_count')
-    // - Custom activity types linked to standards (e.g., 'kit_picking')
+    // - Custom activity types linked to standards (e.g., 'kit_picking',
+    //   'kit_building', 'kit_inspection', 'kit_dock_staging' — migration 310)
     const taskTypes: { aliases: string[]; actual: number }[] = [
       {
         aliases: ['scan', 'inbound_scan', 'scanning'],
@@ -1577,7 +1734,7 @@ class TeamPerformanceService {
         actual: productivity.put_aways,
       },
       {
-        aliases: ['pick', 'picking', 'kit_picking'],
+        aliases: ['pick', 'picking'],
         actual: productivity.picking,
       },
       {
@@ -1590,6 +1747,25 @@ class TeamPerformanceService {
         actual: productivity.cycle_counts,
       },
       { aliases: ['putback', 'put_back'], actual: productivity.putbacks },
+      // Kit workflow stages — migration 310. Each has its own labor
+      // standard slot so operators see a clean per-stage efficiency in
+      // the team-performance comparisons.
+      {
+        aliases: ['kit_pick', 'kit_picking'],
+        actual: productivity.kit_picking ?? 0,
+      },
+      {
+        aliases: ['kit_build', 'kit_building'],
+        actual: productivity.kit_building ?? 0,
+      },
+      {
+        aliases: ['kit_inspect', 'kit_inspection'],
+        actual: productivity.kit_inspection ?? 0,
+      },
+      {
+        aliases: ['kit_dock_staging', 'kit_dock_stage', 'kit_stage_dock'],
+        actual: productivity.kit_dock_staging ?? 0,
+      },
     ]
 
     let totalWeight = 0
@@ -1806,6 +1982,23 @@ class TeamPerformanceService {
           (sum, a) => sum + (a.cycle_counts || 0),
           0
         ),
+        // Kit workflow stages — migration 310
+        kit_picking: areaAssociates.reduce(
+          (sum, a) => sum + (a.kit_picking || 0),
+          0
+        ),
+        kit_building: areaAssociates.reduce(
+          (sum, a) => sum + (a.kit_building || 0),
+          0
+        ),
+        kit_inspection: areaAssociates.reduce(
+          (sum, a) => sum + (a.kit_inspection || 0),
+          0
+        ),
+        kit_dock_staging: areaAssociates.reduce(
+          (sum, a) => sum + (a.kit_dock_staging || 0),
+          0
+        ),
       }
 
       // Build aggregate timeline info for area-level visualization
@@ -1919,6 +2112,10 @@ class TeamPerformanceService {
       final_packed: 0,
       putbacks: 0,
       cycle_counts: 0,
+      kit_picking: 0,
+      kit_building: 0,
+      kit_inspection: 0,
+      kit_dock_staging: 0,
       work_queue_tasks: 0,
       total_tasks: 0,
     }
@@ -1932,6 +2129,10 @@ class TeamPerformanceService {
       stats.final_packed += associate.final_packed
       stats.putbacks += associate.putbacks
       stats.cycle_counts += associate.cycle_counts
+      stats.kit_picking += associate.kit_picking ?? 0
+      stats.kit_building += associate.kit_building ?? 0
+      stats.kit_inspection += associate.kit_inspection ?? 0
+      stats.kit_dock_staging += associate.kit_dock_staging ?? 0
       stats.work_queue_tasks += associate.work_queue_tasks
     }
 
@@ -1950,9 +2151,11 @@ class TeamPerformanceService {
   ): LaborStandardComparison[] {
     const comparisons: LaborStandardComparison[] = []
 
-    // Task mapping with aliases for flexible matching
-    // Supports both legacy short names AND activity source types
-    // Custom activity types (like kit_picking) are mapped to their parent category
+    // Task mapping with aliases for flexible matching.
+    // Supports both legacy short names AND activity source types.
+    // Kit workflow stages are first-class entries (migration 310) so each
+    // shows up as a distinct comparison row when operators configure a
+    // matching labor_standards target.
     const taskMapping: { aliases: string[]; actual: number }[] = [
       {
         aliases: ['scan', 'inbound_scan', 'scanning'],
@@ -1962,7 +2165,7 @@ class TeamPerformanceService {
         aliases: ['putaway', 'put_away', 'putaway_confirm'],
         actual: stats.put_aways,
       },
-      { aliases: ['pick', 'picking', 'kit_picking'], actual: stats.picking },
+      { aliases: ['pick', 'picking'], actual: stats.picking },
       {
         aliases: ['pack', 'packing', 'final_pack'],
         actual: stats.packed + stats.final_packed,
@@ -1973,6 +2176,22 @@ class TeamPerformanceService {
         actual: stats.cycle_counts,
       },
       { aliases: ['putback', 'put_back'], actual: stats.putbacks || 0 },
+      {
+        aliases: ['kit_pick', 'kit_picking'],
+        actual: stats.kit_picking || 0,
+      },
+      {
+        aliases: ['kit_build', 'kit_building'],
+        actual: stats.kit_building || 0,
+      },
+      {
+        aliases: ['kit_inspect', 'kit_inspection'],
+        actual: stats.kit_inspection || 0,
+      },
+      {
+        aliases: ['kit_dock_staging', 'kit_dock_stage', 'kit_stage_dock'],
+        actual: stats.kit_dock_staging || 0,
+      },
     ]
 
     for (const standard of laborStandards) {
@@ -2103,6 +2322,10 @@ class TeamPerformanceService {
                 final_packed: 0,
                 putbacks: 0,
                 cycle_counts: 0,
+                kit_picking: 0,
+                kit_building: 0,
+                kit_inspection: 0,
+                kit_dock_staging: 0,
                 work_queue_tasks: 0,
                 total_tasks: 0,
               },
@@ -2158,6 +2381,15 @@ class TeamPerformanceService {
             existing.final_packed += associate.final_packed || 0
             existing.putbacks += associate.putbacks || 0
             existing.cycle_counts += associate.cycle_counts || 0
+            existing.kit_picking =
+              (existing.kit_picking || 0) + (associate.kit_picking || 0)
+            existing.kit_building =
+              (existing.kit_building || 0) + (associate.kit_building || 0)
+            existing.kit_inspection =
+              (existing.kit_inspection || 0) + (associate.kit_inspection || 0)
+            existing.kit_dock_staging =
+              (existing.kit_dock_staging || 0) +
+              (associate.kit_dock_staging || 0)
             existing.total_tasks += associate.total_tasks || 0
 
             // Merge task breakdowns
@@ -2210,6 +2442,10 @@ class TeamPerformanceService {
             final_packed: associate.final_packed || 0,
             putbacks: associate.putbacks || 0,
             cycle_counts: associate.cycle_counts || 0,
+            kit_picking: associate.kit_picking || 0,
+            kit_building: associate.kit_building || 0,
+            kit_inspection: associate.kit_inspection || 0,
+            kit_dock_staging: associate.kit_dock_staging || 0,
           },
           laborStandards || []
         )
@@ -2278,6 +2514,7 @@ class TeamPerformanceService {
       } else {
         const existing = areaMap.get(breakdown.area)!
         existing.inbound_scans += breakdown.inbound_scans
+        existing.cart_stows += breakdown.cart_stows
         existing.put_aways += breakdown.put_aways
         existing.picking += breakdown.picking
         existing.packed += breakdown.packed
@@ -2285,6 +2522,10 @@ class TeamPerformanceService {
         existing.final_packed += breakdown.final_packed
         existing.putbacks += breakdown.putbacks
         existing.cycle_counts += breakdown.cycle_counts
+        existing.kit_picking += breakdown.kit_picking
+        existing.kit_building += breakdown.kit_building
+        existing.kit_inspection += breakdown.kit_inspection
+        existing.kit_dock_staging += breakdown.kit_dock_staging
         existing.total += breakdown.total
       }
     }
@@ -2394,6 +2635,33 @@ class TeamPerformanceService {
   }
 
   /**
+   * Public wrapper around the activity events RPC.
+   * Returns a Map keyed by user_id of timestamped activity events for the
+   * given local date in the supplied timezone. Used by Production Boards
+   * (hourly grid) to bucket events client-side without re-running the
+   * heavy aggregation pipeline used by getTeamProductivity.
+   */
+  async getActivityEventsForDate(
+    organizationId: string,
+    dateString: string,
+    timezone: string = DEFAULT_TIMEZONE
+  ): Promise<Map<string, ActivityEvent[]>> {
+    const { startUTC, endUTC } = getUTCBoundariesForDate(dateString, timezone)
+    return this.getTeamActivityEvents(organizationId, startUTC, endUTC)
+  }
+
+  /**
+   * Public wrapper around the shift assignments RPC.
+   * Production Boards needs raw shift start/end times to dim off-shift
+   * hour cells without dragging in the full team productivity payload.
+   */
+  async getShiftAssignmentsRaw(
+    organizationId: string
+  ): Promise<ShiftAssignmentDetailRow[]> {
+    return this.getShiftAssignmentsWithDetails(organizationId)
+  }
+
+  /**
    * Get active associates count (currently working)
    */
   async getActiveAssociatesCount(organizationId: string): Promise<number> {
@@ -2458,6 +2726,10 @@ class TeamPerformanceService {
       'Final Packed',
       'Putbacks',
       'Cycle Counts',
+      'Kit Picking',
+      'Kit Building',
+      'Kit Inspection',
+      'Kit Dock Staging',
       'Total Tasks',
     ]
 
@@ -2477,6 +2749,10 @@ class TeamPerformanceService {
       a.final_packed,
       a.putbacks,
       a.cycle_counts,
+      a.kit_picking ?? 0,
+      a.kit_building ?? 0,
+      a.kit_inspection ?? 0,
+      a.kit_dock_staging ?? 0,
       a.total_tasks,
     ])
 
@@ -2490,4 +2766,5 @@ class TeamPerformanceService {
 
 export default TeamPerformanceService.getInstance()
 export { TeamPerformanceService }
-// Developer and Creator: Jai Singh
+
+// Created and developed by Jai Singh

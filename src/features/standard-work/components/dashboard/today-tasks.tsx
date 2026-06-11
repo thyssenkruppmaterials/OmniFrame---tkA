@@ -1,10 +1,13 @@
+// Created and developed by Jai Singh
 /**
  * Today Tasks Section Component
  * Modern enterprise-grade task list with priority grouping and status indicators
  * Updated: February 8, 2026 - Complete redesign for enterprise experience
  */
 import { useMemo } from 'react'
+import { motion, AnimatePresence, useReducedMotion } from 'framer-motion'
 import {
+  AlertCircle,
   AlertTriangle,
   ArrowRight,
   CheckCircle2,
@@ -20,6 +23,7 @@ import type {
   ScheduledTask,
   StandardWorkSubmission,
 } from '@/hooks/use-standard-work'
+import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import {
@@ -169,6 +173,7 @@ interface TodayTasksSectionProps {
   todaySubmissions: StandardWorkSubmission[]
   onStartChecklist: (templateId: string) => void
   onContinueChecklist: (submissionId: string) => void
+  isError?: boolean
 }
 
 export function TodayTasksSection({
@@ -176,7 +181,9 @@ export function TodayTasksSection({
   todaySubmissions,
   onStartChecklist,
   onContinueChecklist,
+  isError,
 }: TodayTasksSectionProps) {
+  const reduce = useReducedMotion()
   const totalTasks =
     tasks.overdue.length +
     tasks.dueSoon.length +
@@ -186,18 +193,30 @@ export function TodayTasksSection({
   const completionPct =
     totalTasks > 0 ? Math.round((tasks.completed.length / totalTasks) * 100) : 0
 
-  // Memoize submission lookup for performance
+  // Memoize submission lookup for performance. Key on template_id +
+  // working_area_id so concurrent drafts in different areas don't collide.
+  const submissionKey = (templateId: string, workingAreaId?: string | null) =>
+    `${templateId}::${workingAreaId ?? ''}`
+
   const submissionMap = useMemo(() => {
     const map = new Map<string, StandardWorkSubmission>()
     todaySubmissions.forEach((s) => {
-      if (s.status !== 'submitted') {
-        map.set(s.template_id, s)
+      if (s.status !== 'submitted' && s.status !== 'approved') {
+        map.set(submissionKey(s.template_id, s.working_area_id), s)
       }
     })
     return map
   }, [todaySubmissions])
 
-  const findSubmission = (templateId: string) => submissionMap.get(templateId)
+  const findSubmission = (task: ScheduledTask) => {
+    const exact = submissionMap.get(
+      submissionKey(task.template_id, task.working_area_id)
+    )
+    if (exact) return exact
+    // Fallback: legacy submissions without a working_area_id should still
+    // match a task with one if no exact match exists.
+    return submissionMap.get(submissionKey(task.template_id))
+  }
 
   const renderTaskGroup = (
     groupTasks: ScheduledTask[],
@@ -208,7 +227,15 @@ export function TodayTasksSection({
     if (groupTasks.length === 0) return null
 
     return (
-      <div className='space-y-2'>
+      <motion.div
+        className='space-y-2'
+        layout
+        variants={{
+          hidden: { opacity: 0, y: 6 },
+          visible: { opacity: 1, y: 0 },
+        }}
+        transition={{ duration: 0.25 }}
+      >
         <div className='flex items-center gap-2 px-1'>
           <div className={cn('flex items-center gap-1.5', colorClass)}>
             {icon}
@@ -226,18 +253,18 @@ export function TodayTasksSection({
         <div className='space-y-2'>
           {groupTasks.map((task) => (
             <TaskCard
-              key={`${label}-${task.template_id}`}
+              key={`${label}-${task.template_id}-${task.working_area_id ?? 'all'}`}
               task={task}
-              submission={findSubmission(task.template_id)}
+              submission={findSubmission(task)}
               onStart={() => onStartChecklist(task.template_id)}
               onContinue={() => {
-                const sub = findSubmission(task.template_id)
+                const sub = findSubmission(task)
                 if (sub) onContinueChecklist(sub.id)
               }}
             />
           ))}
         </div>
-      </div>
+      </motion.div>
     )
   }
 
@@ -268,51 +295,70 @@ export function TodayTasksSection({
       </CardHeader>
 
       <CardContent className='pt-0'>
-        {hasNoTasks ? (
+        {isError ? (
+          <Alert variant='destructive'>
+            <AlertCircle className='h-4 w-4' />
+            <AlertDescription className='text-sm'>
+              Couldn't load today's tasks. Use Refresh above to retry.
+            </AlertDescription>
+          </Alert>
+        ) : hasNoTasks ? (
           <div className='flex flex-col items-center justify-center py-12 text-center'>
             <div className='mb-4 flex h-16 w-16 items-center justify-center rounded-2xl bg-green-500/10'>
               <CheckCircle2 className='h-8 w-8 text-green-500' />
             </div>
             <p className='text-sm font-semibold'>All caught up!</p>
             <p className='text-muted-foreground mt-1 max-w-[200px] text-xs'>
-              No tasks scheduled for today. Check upcoming tasks below.
+              No tasks scheduled for today. Check upcoming work below.
             </p>
           </div>
         ) : (
-          <ScrollArea className='-mr-3 max-h-[480px] pr-3'>
-            <div className='space-y-5'>
-              {renderTaskGroup(
-                tasks.overdue,
-                'Overdue',
-                <AlertTriangle className='h-3.5 w-3.5' />,
-                'text-destructive'
-              )}
-              {renderTaskGroup(
-                tasks.dueSoon,
-                'Due Soon',
-                <Clock className='h-3.5 w-3.5' />,
-                'text-yellow-600 dark:text-yellow-500'
-              )}
-              {renderTaskGroup(
-                tasks.upcoming,
-                'Upcoming',
-                <ArrowRight className='h-3.5 w-3.5' />,
-                'text-muted-foreground'
-              )}
+          <ScrollArea className='-mr-3 max-h-[520px] pr-3'>
+            <motion.div
+              className='space-y-5'
+              initial={reduce ? false : 'hidden'}
+              animate='visible'
+              variants={{
+                hidden: { opacity: 0 },
+                visible: {
+                  opacity: 1,
+                  transition: { staggerChildren: 0.04 },
+                },
+              }}
+            >
+              <AnimatePresence initial={false}>
+                {renderTaskGroup(
+                  tasks.overdue,
+                  'Overdue',
+                  <AlertTriangle className='h-3.5 w-3.5' aria-hidden='true' />,
+                  'text-destructive'
+                )}
+                {renderTaskGroup(
+                  tasks.dueSoon,
+                  'Due Soon',
+                  <Clock className='h-3.5 w-3.5' aria-hidden='true' />,
+                  'text-yellow-600 dark:text-yellow-500'
+                )}
+                {renderTaskGroup(
+                  tasks.upcoming,
+                  'Later Today',
+                  <ArrowRight className='h-3.5 w-3.5' aria-hidden='true' />,
+                  'text-muted-foreground'
+                )}
 
-              {/* Separator before completed */}
-              {tasks.completed.length > 0 &&
-                (tasks.overdue.length > 0 ||
-                  tasks.dueSoon.length > 0 ||
-                  tasks.upcoming.length > 0) && <Separator />}
+                {tasks.completed.length > 0 &&
+                  (tasks.overdue.length > 0 ||
+                    tasks.dueSoon.length > 0 ||
+                    tasks.upcoming.length > 0) && <Separator />}
 
-              {renderTaskGroup(
-                tasks.completed,
-                'Completed',
-                <CheckCircle2 className='h-3.5 w-3.5' />,
-                'text-green-600 dark:text-green-500'
-              )}
-            </div>
+                {renderTaskGroup(
+                  tasks.completed,
+                  'Completed',
+                  <CheckCircle2 className='h-3.5 w-3.5' aria-hidden='true' />,
+                  'text-green-600 dark:text-green-500'
+                )}
+              </AnimatePresence>
+            </motion.div>
           </ScrollArea>
         )}
       </CardContent>
@@ -321,3 +367,5 @@ export function TodayTasksSection({
 }
 
 export default TodayTasksSection
+
+// Created and developed by Jai Singh

@@ -1,3 +1,4 @@
+// Created and developed by Jai Singh
 /**
  * Position Options Tab Component
  * Manage position types, levels, area types, and departments configuration
@@ -974,7 +975,7 @@ function TypeFormDialog({
   const organizationId = profile?.organization_id || ''
 
   const form = useForm<TypeFormData>({
-    resolver: zodResolver(typeSchema),
+    resolver: zodResolver(typeSchema) as never,
     defaultValues: {
       type_value: editingType?.type_value || '',
       type_label: editingType?.type_label || '',
@@ -1194,7 +1195,7 @@ function LevelFormDialog({
   const organizationId = profile?.organization_id || ''
 
   const form = useForm<LevelFormData>({
-    resolver: zodResolver(levelSchema),
+    resolver: zodResolver(levelSchema) as never,
     defaultValues: {
       level_value: editingLevel?.level_value || 1,
       level_label: editingLevel?.level_label || '',
@@ -1418,7 +1419,7 @@ function AreaTypeFormDialog({
   const organizationId = profile?.organization_id || ''
 
   const form = useForm<AreaTypeFormData>({
-    resolver: zodResolver(areaTypeSchema),
+    resolver: zodResolver(areaTypeSchema) as never,
     defaultValues: {
       type_value: editingAreaType?.type_value || '',
       type_label: editingAreaType?.type_label || '',
@@ -1638,7 +1639,7 @@ function DepartmentFormDialog({
   const organizationId = profile?.organization_id || ''
 
   const form = useForm<DepartmentFormData>({
-    resolver: zodResolver(departmentSchema),
+    resolver: zodResolver(departmentSchema) as never,
     defaultValues: {
       department_value: editingDepartment?.department_value || '',
       department_label: editingDepartment?.department_label || '',
@@ -2172,3 +2173,5 @@ function DeleteDepartmentDialog({
     </Dialog>
   )
 }
+
+// Created and developed by Jai Singh

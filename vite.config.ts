@@ -1,3 +1,4 @@
+// Created and developed by Jai Singh
 import path from 'path'
 import { defineConfig, type Plugin } from 'vite'
 import react from '@vitejs/plugin-react-swc'
@@ -135,18 +136,44 @@ export default defineConfig({
         ],
         navigationPreload: false,
         // Deterministic cache ID from git hash - NOT Date.now()
-        cacheId: `omniframe-${BUILD_META.hash}`,
+        cacheId: `onebox-ai-${BUILD_META.hash}`,
         skipWaiting: true,
         clientsClaim: true,
         // Force cleanup of old caches from previous builds
         cleanupOutdatedCaches: true,
         runtimeCaching: [
-          // CRITICAL: build-info.json must ALWAYS go to the network.
-          // This prevents the service worker from ever caching or
-          // intercepting version-check requests.
+          // build-info.json: NetworkFirst with a 1-entry, 5-min cache.
+          //
+          // Network-first preserves the original "always try the network"
+          // intent — the SW will fetch fresh on every poll. The tiny cache
+          // is a fallback for the corporate-proxy scenario:
+          //
+          //   Warehouse RF terminals sit behind Zscaler / Symantec WSS,
+          //   which intercepts /build-info.json with a CORS-blocked
+          //   redirect every poll. Without a cache, the version checker
+          //   sees `TypeError: Failed to fetch` and floods the console;
+          //   with a cache, the SW returns the last successful payload,
+          //   the version checker sees a hash that matches the running
+          //   build, and there's no spurious "update available" trigger.
+          //
+          // Safety: the cached value is whatever the network most-recently
+          // returned, so it can never be OLDER than the running build —
+          // worst case it's equal (no false trigger) or newer (correct
+          // trigger). The 5-min TTL keeps stale values from lingering
+          // across deploys when the proxy block clears.
+          //
+          // See `Debug/Fix-Version-Checker-Corporate-Proxy-Noise.md`.
           {
             urlPattern: /\/build-info\.json(\?.*)?$/,
-            handler: 'NetworkOnly',
+            handler: 'NetworkFirst',
+            options: {
+              cacheName: 'build-info-cache',
+              networkTimeoutSeconds: 5,
+              expiration: {
+                maxEntries: 1,
+                maxAgeSeconds: 5 * 60,
+              },
+            },
           },
           // Service worker itself should never be cached
           {
@@ -179,8 +206,8 @@ export default defineConfig({
       },
       includeAssets: [
         'favicon.ico',
-        'images/favicon.svg',
-        'images/favicon_light.svg',
+        'images/OneBoxLogoX.png',
+        'images/favicon.png',
         'images/favicon.svg',
       ],
       manifest: {
@@ -194,19 +221,19 @@ export default defineConfig({
         scope: '/rf-interface',
         icons: [
           {
-            src: 'images/favicon.svg',
+            src: 'images/OneBoxLogoX.png',
             sizes: '192x192',
-            type: 'image/svg+xml',
+            type: 'image/png',
           },
           {
-            src: 'images/favicon.svg',
+            src: 'images/OneBoxLogoX.png',
             sizes: '512x512',
-            type: 'image/svg+xml',
+            type: 'image/png',
           },
           {
-            src: 'images/favicon.svg',
+            src: 'images/OneBoxLogoX.png',
             sizes: '512x512',
-            type: 'image/svg+xml',
+            type: 'image/png',
             purpose: 'any maskable',
           },
         ],
@@ -245,9 +272,70 @@ export default defineConfig({
             // PDF.js engine — pure JS, no React dependency (~250+ KB)
             // NOTE: react-pdf (React wrapper) is NOT split — only pdfjs-dist is.
             if (id.includes('/pdfjs-dist/')) return 'vendor-pdfjs'
+            // Three.js core + its pure-JS ecosystem (controls, loaders, troika
+            // text, meshline, gainmap, bvh, maath…). All are plain JS with NO
+            // React top-level dependency, so they are SAFE to vendor-split (the
+            // React-coupled @react-three/fiber + @react-three/drei wrappers are
+            // deliberately NOT matched here — they ride the default chunker with
+            // the lazy feature-warehouse-3d chunk). This ~1 MB engine only loads
+            // when the 3D Location Tab opens, so vendor-three is budget-exempt
+            // (see scripts/check-bundle-budget.mjs LAZY_VENDOR_EXEMPT).
+            if (
+              id.includes('/three/') ||
+              id.includes('/three-stdlib/') ||
+              id.includes('/troika-three-text/') ||
+              id.includes('/troika-three-utils/') ||
+              id.includes('/troika-worker-utils/') ||
+              id.includes('/webgl-sdf-generator/') ||
+              id.includes('/bidi-js/') ||
+              id.includes('/meshline/') ||
+              id.includes('/@monogrid/gainmap-js/') ||
+              id.includes('/three-mesh-bvh/') ||
+              id.includes('/stats-gl/') ||
+              id.includes('/stats.js/') ||
+              id.includes('/detect-gpu/') ||
+              id.includes('/camera-controls/') ||
+              id.includes('/maath/')
+            )
+              return 'vendor-three'
           }
 
           // ── First-party feature splits (heavy feature modules) ──
+          // Isometric 3D warehouse scene engine. Lazy-loaded by
+          // warehouse-location-map; carving it into a dedicated chunk keeps the
+          // three.js-using scene code out of the warehouse-map shell chunk. NOTE
+          // per the manualChunks rule above we do NOT pull three/fiber/drei into
+          // a vendor chunk here — fiber/drei are React-coupled. They ride the
+          // default chunker; only our first-party scene3d/ source lands here.
+          // Parametric geometry recipe modules (objects/recipes-*) — their own
+          // chunk. They are statically imported by SceneObject so they load in
+          // parallel with feature-warehouse-3d behind the same lazy boundary,
+          // but splitting keeps BOTH sides of the catalog under the 500 KB
+          // per-chunk gate as the object library grows.
+          if (id.includes('/components/warehouse-map/scene3d/objects/recipes-'))
+            return 'feature-warehouse-recipes'
+          // The editor's DOM overlay panels are React.lazy()-loaded — leave
+          // them to the default chunker (feature-warehouse-3d sits AT the
+          // 500 KB gate; forcing them in here defeats those dynamic imports).
+          // scene3d/simulation/ (live pick-scenario engine + layer + panel)
+          // is likewise fully lazy and must stay out for the same reason.
+          if (
+            id.includes('/components/warehouse-map/scene3d/') &&
+            !id.includes('/scene3d/simulation/') &&
+            !/scene3d\/(RackSystemDialog|FurnitureLibraryPanel|InsightsPanel|LayersPanel|MultiSelectToolbar|ShortcutsDialog|ObjectConfigPanel|FloorPlanDialog|RackConfigPanel3D)\.tsx/.test(
+              id
+            )
+          )
+            return 'feature-warehouse-3d'
+          // Supply-chain 3D globe (three/webgpu + TSL). The scene engine is
+          // React.lazy()-loaded from the page shell — keep them in separate
+          // chunks so the route chunk stays light and the engine (plus the
+          // vendor-three graph it drags in) only downloads when the canvas
+          // actually mounts.
+          if (id.includes('/features/admin/supply-chain-mapping/scene/'))
+            return 'feature-supply-chain-3d'
+          if (id.includes('/features/admin/supply-chain-mapping/'))
+            return 'feature-supply-chain'
           // Admin sub-features (split to keep each under 500 KB)
           // Onboarding steps are lazy-loaded via React.lazy() — do NOT override that.
           // Only group the wizard container/shared/context, let steps split naturally.
@@ -272,6 +360,8 @@ export default defineConfig({
             return 'feature-admin-sap'
           if (id.includes('/features/admin/performance-monitor/'))
             return 'feature-admin-perf'
+          if (id.includes('/features/admin/omnibelt-dashboard/'))
+            return 'feature-admin-omnibelt'
           if (id.includes('/features/admin/')) return 'feature-admin'
           // Shift productivity sub-features
           if (id.includes('/features/shift-productivity/team-performance/'))
@@ -280,6 +370,47 @@ export default defineConfig({
             id.includes('/features/shift-productivity/associate-performance/')
           )
             return 'feature-shift-associate'
+          // Production-boards per-board chunks: each board's body is lazy-loaded
+          // via React.lazy() in lib/boards.ts. Returning `undefined` here lets
+          // Rollup auto-split each board into its own chunk; otherwise the
+          // sweeping `feature-shift-productivity` rule below would collapse
+          // every board back into the parent chunk and bust the bundle budget.
+          if (
+            id.includes(
+              '/features/shift-productivity/production-boards/boards/'
+            )
+          )
+            return undefined
+          // Production-boards post composer (NEW 2026-05-17): the four boards
+          // each `React.lazy()` import `post-composer-dialog.tsx`, but the
+          // sweeping `feature-shift-productivity` rule below would otherwise
+          // pull the composer + its sub-tree (attachments uploader, dnd-kit
+          // wiring, per-kind sections, preview) into the parent chunk and
+          // bust the 500 KB budget. Pin them to a named chunk so they form
+          // one async-loaded ~100 KB bundle that's only fetched when a
+          // curator clicks "New post" / the pencil.
+          if (
+            id.includes(
+              '/features/shift-productivity/production-boards/components/post-composer-dialog'
+            ) ||
+            id.includes(
+              '/features/shift-productivity/production-boards/components/composer/'
+            )
+          )
+            return 'feature-production-boards-composer'
+          // Production-boards bento grid (NEW 2026-05-17): the four
+          // secondary boards lazy-import `<BentoBoardShell>` which pulls
+          // in the bento grid + 5 variant cards + framer-motion gallery
+          // crossfade. Carve into its own async chunk so the boards
+          // tab itself stays light and `feature-shift-productivity`
+          // doesn't grow past the 500 KB budget. Only fetched on first
+          // navigation to one of the four content boards.
+          if (
+            id.includes(
+              '/features/shift-productivity/production-boards/components/bento/'
+            )
+          )
+            return 'feature-production-boards-bento'
           if (id.includes('/features/shift-productivity/'))
             return 'feature-shift-productivity'
           // Other heavy features
@@ -291,6 +422,32 @@ export default defineConfig({
           if (id.includes('/features/outbound/')) return 'feature-outbound'
           if (id.includes('/features/rf-interface/'))
             return 'feature-rf-interface'
+          // OmniBelt site-wide chrome (P3) — host + default `skystrip`
+          // skin + Panel + shared tool registry. Lives on every
+          // authenticated page so a dedicated chunk avoids re-walking the
+          // dep graph on each route entry. Per the documented manualChunks
+          // rule above, we deliberately do NOT include react / radix /
+          // tanstack / framer-motion / tabler-icons-react here — those
+          // continue through the default chunker so the React top-level
+          // dep chain stays intact.
+          //
+          // The `skystrip` skin is the store default
+          // (`DEFAULT_PERSISTED_STATE.skin`) and is statically imported by
+          // `OmniBeltHost.tsx` for a zero-latency first paint, so it
+          // belongs IN this always-resident slice — a separate chunk would
+          // just add a parallel request for bytes that always load anyway.
+          // Only `orb` (and `pill`, via the default chunker) stay
+          // lazy-loaded as their own chunk, fetched on first skin switch.
+          if (id.includes('/features/omnibelt/skins/orb/'))
+            return 'feature-omnibelt-skin-orb'
+          if (id.includes('/features/omnibelt/')) {
+            // Tool shells lazy-load on first open — keep them out of
+            // the host chunk so the bundle budget tracks the always-
+            // resident slice only.
+            if (id.includes('/features/omnibelt/tools/shells/'))
+              return undefined
+            return 'feature-omnibelt'
+          }
 
           // Everything else uses Vite/Rollup default chunking
         },
@@ -304,3 +461,5 @@ export default defineConfig({
     },
   },
 })
+
+// Created and developed by Jai Singh

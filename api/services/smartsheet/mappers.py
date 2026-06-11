@@ -1,3 +1,4 @@
+# Created and developed by Jai Singh
 """Pydantic models, response types, and custom exceptions for the Smartsheet service."""
 
 from typing import Optional, Dict, List, Any
@@ -84,4 +85,4 @@ class SmartsheetAuthenticationError(SmartsheetServiceError):
     """Exception for authentication errors."""
     pass
 
-# Developer and Creator: Jai Singh
+# Created and developed by Jai Singh

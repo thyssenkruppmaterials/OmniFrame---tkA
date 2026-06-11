@@ -1,10 +1,11 @@
+// Created and developed by Jai Singh
 import { logger } from '@/lib/utils/logger'
 
 /**
  * Query Retry Utility
  * Implements exponential backoff retry logic for Supabase queries
  *
- * Author: Jai Singh
+ * Author: OmniFrame Team
  * Date: October 29, 2025
  * Version: 1.0.0
  */
@@ -202,4 +203,5 @@ export function extractSupabaseError(error: unknown): {
     hint: (err?.hint as string) || null,
   }
 }
-// Developer and Creator: Jai Singh
+
+// Created and developed by Jai Singh

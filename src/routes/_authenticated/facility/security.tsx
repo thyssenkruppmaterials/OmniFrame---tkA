@@ -1,3 +1,4 @@
+// Created and developed by Jai Singh
 import { Suspense, lazy } from 'react'
 import { createFileRoute } from '@tanstack/react-router'
 import { IconVideo, IconIdBadge2, IconSettings } from '@tabler/icons-react'
@@ -23,10 +24,17 @@ const VisitorLogPanel = lazy(() =>
   }))
 )
 
+const WeatherDashboard = lazy(() =>
+  import('@/features/weather').then((module) => ({
+    default: module.WeatherDashboard,
+  }))
+)
+
 const securityTabs = [
   { id: 'visitor-tracking', label: 'Visitor Tracking' },
   { id: 'camera-system', label: 'Camera System' },
   { id: 'badge-access', label: 'Badge Access' },
+  { id: 'weather', label: 'Weather' },
   { id: 'settings', label: 'Security Settings' },
 ]
 
@@ -62,7 +70,7 @@ function FacilitySecurity() {
                   <IconVideo className='text-muted-foreground h-5 w-5' />
                   <h3 className='text-lg font-semibold'>Camera System</h3>
                 </div>
-                <div className='grid min-h-[600px] grid-cols-1 gap-4 lg:grid-cols-4'>
+                <div className='grid min-h-[50vh] grid-cols-1 gap-4 lg:grid-cols-4'>
                   <div className='lg:col-span-1'>
                     <Skeleton className='h-full w-full rounded-lg' />
                   </div>
@@ -93,6 +101,21 @@ function FacilitySecurity() {
               </div>
             </div>
           </div>
+        )
+      case 'weather':
+        return (
+          <Suspense
+            fallback={
+              <div className='flex min-h-[50vh] items-center justify-center rounded-xl bg-slate-900/50'>
+                <div className='flex flex-col items-center gap-3'>
+                  <div className='h-8 w-8 animate-spin rounded-full border-2 border-blue-400/20 border-t-blue-400' />
+                  <p className='text-sm text-white/40'>Loading weather...</p>
+                </div>
+              </div>
+            }
+          >
+            <WeatherDashboard />
+          </Suspense>
         )
       case 'settings':
         return (
@@ -167,7 +190,9 @@ function FacilitySecurity() {
           {/* Visitor tracking & camera system have their own layouts */}
           <div
             className={
-              activeTab === 'camera-system' || activeTab === 'visitor-tracking'
+              activeTab === 'camera-system' ||
+              activeTab === 'visitor-tracking' ||
+              activeTab === 'weather'
                 ? ''
                 : 'bg-background rounded-lg border p-6'
             }
@@ -183,4 +208,5 @@ function FacilitySecurity() {
 export const Route = createFileRoute('/_authenticated/facility/security')({
   component: FacilitySecurity,
 })
-// Developer and Creator: Jai Singh
+
+// Created and developed by Jai Singh

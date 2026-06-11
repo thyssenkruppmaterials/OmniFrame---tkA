@@ -1,3 +1,4 @@
+// Created and developed by Jai Singh
 /**
  * Add Labor Standard Dialog Component
  * Form modal for creating new labor standards
@@ -163,7 +164,7 @@ export function AddStandardDialog({
   const [showLinkedInfo, setShowLinkedInfo] = useState(false)
 
   const form = useForm<StandardFormData>({
-    resolver: zodResolver(standardSchema),
+    resolver: zodResolver(standardSchema) as never,
     defaultValues: {
       linked_activity: '',
       standard_name: '',
@@ -842,3 +843,5 @@ export function AddStandardDialog({
     </Dialog>
   )
 }
+
+// Created and developed by Jai Singh

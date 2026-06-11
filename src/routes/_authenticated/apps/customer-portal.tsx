@@ -1,3 +1,4 @@
+// Created and developed by Jai Singh
 import { useMemo, useState } from 'react'
 import { createFileRoute } from '@tanstack/react-router'
 import {
@@ -40,6 +41,14 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import { TabMenu } from '@/components/ui/tab-menu'
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from '@/components/ui/table'
 import { Header } from '@/components/layout/header'
 import { Main } from '@/components/layout/main'
 import { ProfileDropdown } from '@/components/profile-dropdown'
@@ -278,7 +287,7 @@ function TicketTrendsChart({ tickets }: { tickets: Ticket[] }) {
       </CardHeader>
       <CardContent className='px-2 pt-4 sm:px-6 sm:pt-6'>
         {/* Summary stats row */}
-        <div className='mb-4 flex justify-center gap-8 text-sm'>
+        <div className='mb-4 flex flex-wrap justify-center gap-x-8 gap-y-2 text-sm'>
           <div className='flex items-center gap-2'>
             <div
               className='h-3 w-3 rounded-full'
@@ -425,11 +434,16 @@ function TicketTrendsChart({ tickets }: { tickets: Ticket[] }) {
  */
 function AvgOpenDaysByDeptChart({ tickets }: { tickets: Ticket[] }) {
   const chartData = useMemo(() => {
-    // Group tickets by ilc_department and calculate average days_open
+    // Group tickets by ilc_department and calculate average days_open.
+    // Skip tickets with a blank or whitespace-only ILC department — those
+    // are typically legacy/closed rows from before the field was required,
+    // and bucketing them as a synthetic "Unassigned" department was
+    // misleading on the chart.
     const deptMap = new Map<string, { totalDays: number; count: number }>()
 
     tickets.forEach((ticket) => {
-      const dept = ticket.ilc_department || 'Unassigned'
+      const dept = ticket.ilc_department?.trim()
+      if (!dept) return
       const daysOpen = ticket.days_open ?? 0
 
       if (!deptMap.has(dept)) {
@@ -540,12 +554,13 @@ function AvgOpenDaysByDeptChart({ tickets }: { tickets: Ticket[] }) {
 function OpenRequestsByDeptChart({ tickets }: { tickets: Ticket[] }) {
   const [selectedDept, setSelectedDept] = useState<string>('all')
 
-  // Get unique departments
+  // Get unique departments (ignoring blank / whitespace-only values)
   const departments = useMemo(() => {
     const depts = new Set<string>()
     tickets.forEach((ticket) => {
-      if (ticket.ilc_department) {
-        depts.add(ticket.ilc_department)
+      const dept = ticket.ilc_department?.trim()
+      if (dept) {
+        depts.add(dept)
       }
     })
     return ['all', ...Array.from(depts).sort()]
@@ -567,12 +582,12 @@ function OpenRequestsByDeptChart({ tickets }: { tickets: Ticket[] }) {
     // If a department is selected, show status breakdown for that dept
     if (selectedDept !== 'all') {
       const deptTickets = openTickets.filter(
-        (t) => t.ilc_department === selectedDept
+        (t) => t.ilc_department?.trim() === selectedDept
       )
       const statusCounts = new Map<string, number>()
 
       deptTickets.forEach((ticket) => {
-        const status = ticket.status || 'Unassigned'
+        const status = ticket.status || 'Blank'
         statusCounts.set(status, (statusCounts.get(status) || 0) + 1)
       })
 
@@ -581,10 +596,13 @@ function OpenRequestsByDeptChart({ tickets }: { tickets: Ticket[] }) {
         .filter((d) => d.value > 0)
     }
 
-    // Show all departments breakdown
+    // Show all departments breakdown — skip tickets without an ILC
+    // department instead of bucketing them as a synthetic "Unassigned"
+    // slice (legacy/closed rows usually have no ILC department set).
     const deptCounts = new Map<string, number>()
     openTickets.forEach((ticket) => {
-      const dept = ticket.ilc_department || 'Unassigned'
+      const dept = ticket.ilc_department?.trim()
+      if (!dept) return
       deptCounts.set(dept, (deptCounts.get(dept) || 0) + 1)
     })
 
@@ -928,26 +946,35 @@ function AgentProductivityPanel() {
             </div>
 
             {/* Per-Agent Table */}
-            <div className='overflow-hidden rounded-md border'>
-              <table className='w-full text-sm'>
-                <thead>
-                  <tr className='bg-muted/50 border-b'>
-                    <th className='p-3 text-left font-medium'>Agent</th>
-                    <th className='p-3 text-right font-medium'>Tickets</th>
-                    <th className='p-3 text-right font-medium'>Comments</th>
-                    <th className='p-3 text-right font-medium'>
+            <div className='rounded-md border'>
+              <Table className='text-sm'>
+                <TableHeader>
+                  <TableRow className='bg-muted/50'>
+                    <TableHead className='p-3 font-medium'>Agent</TableHead>
+                    <TableHead className='p-3 text-right font-medium'>
+                      Tickets
+                    </TableHead>
+                    <TableHead className='p-3 text-right font-medium'>
+                      Comments
+                    </TableHead>
+                    <TableHead className='p-3 text-right font-medium'>
                       Status Changes
-                    </th>
-                    <th className='p-3 text-right font-medium'>Updates</th>
-                    <th className='p-3 text-right font-medium'>Total</th>
-                    <th className='p-3 text-right font-medium'>Avg Response</th>
-                  </tr>
-                </thead>
-                <tbody>
+                    </TableHead>
+                    <TableHead className='p-3 text-right font-medium'>
+                      Updates
+                    </TableHead>
+                    <TableHead className='p-3 text-right font-medium'>
+                      Total
+                    </TableHead>
+                    <TableHead className='p-3 text-right font-medium'>
+                      Avg Response
+                    </TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
                   {agentMetrics
                     .sort((a, b) => b.total_actions - a.total_actions)
                     .map((metric) => {
-                      // Build display name from user profile data
                       const displayName =
                         metric.user_full_name ||
                         [metric.user_first_name, metric.user_last_name]
@@ -957,11 +984,11 @@ function AgentProductivityPanel() {
                         metric.user_id.slice(0, 8) + '...'
 
                       return (
-                        <tr
+                        <TableRow
                           key={metric.user_id}
-                          className='hover:bg-muted/30 border-b transition-colors last:border-0'
+                          className='hover:bg-muted/30 transition-colors'
                         >
-                          <td className='p-3'>
+                          <TableCell className='p-3'>
                             <div className='font-medium'>{displayName}</div>
                             {metric.user_email &&
                               displayName !== metric.user_email && (
@@ -969,30 +996,30 @@ function AgentProductivityPanel() {
                                   {metric.user_email}
                                 </div>
                               )}
-                          </td>
-                          <td className='p-3 text-right'>
+                          </TableCell>
+                          <TableCell className='p-3 text-right'>
                             {metric.tickets_handled}
-                          </td>
-                          <td className='p-3 text-right'>
+                          </TableCell>
+                          <TableCell className='p-3 text-right'>
                             {metric.comments_made}
-                          </td>
-                          <td className='p-3 text-right'>
+                          </TableCell>
+                          <TableCell className='p-3 text-right'>
                             {metric.status_changes}
-                          </td>
-                          <td className='p-3 text-right'>
+                          </TableCell>
+                          <TableCell className='p-3 text-right'>
                             {metric.field_updates}
-                          </td>
-                          <td className='p-3 text-right font-semibold'>
+                          </TableCell>
+                          <TableCell className='p-3 text-right font-semibold'>
                             {metric.total_actions}
-                          </td>
-                          <td className='p-3 text-right'>
+                          </TableCell>
+                          <TableCell className='p-3 text-right'>
                             {formatResponseTime(metric.avg_response_time_ms)}
-                          </td>
-                        </tr>
+                          </TableCell>
+                        </TableRow>
                       )
                     })}
-                </tbody>
-              </table>
+                </TableBody>
+              </Table>
             </div>
           </div>
         )}
@@ -1181,18 +1208,18 @@ function CustomerPortal() {
       </Header>
 
       <Main>
-        <div className='mb-2 flex flex-wrap items-center justify-between space-y-2'>
+        <div className='mb-4 flex flex-wrap items-center justify-between'>
           <div>
             <h2 className='text-2xl font-bold tracking-tight'>
               Customer Portal
             </h2>
-            <p className='text-muted-foreground'>
+            <p className='text-muted-foreground text-sm'>
               Manage customer support tickets and relationships.
             </p>
           </div>
         </div>
 
-        <div className='space-y-6'>
+        <div className='space-y-4'>
           <TabMenu
             tabs={customerPortalTabs}
             activeTab={activeTab}
@@ -1201,7 +1228,6 @@ function CustomerPortal() {
             fallbackTab='dashboard'
           />
 
-          {/* Dashboard tab doesn't need border wrapper - it manages its own layout */}
           {activeTab === 'dashboard' ? (
             renderTabContent()
           ) : (
@@ -1219,4 +1245,5 @@ export const Route = createFileRoute('/_authenticated/apps/customer-portal')({
   beforeLoad: createStandardProtectedRoute('CUSTOMER_PORTAL'),
   component: CustomerPortal,
 })
-// Developer and Creator: Jai Singh
+
+// Created and developed by Jai Singh

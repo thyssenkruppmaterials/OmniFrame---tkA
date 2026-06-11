@@ -1,3 +1,4 @@
+// Created and developed by Jai Singh
 //! AI Service with Fallback Chain
 //! 
 //! Coordinates between Hugging Face and Novita APIs with automatic
@@ -220,3 +221,5 @@ That's the result."#;
         assert_eq!(json, text);
     }
 }
+
+// Created and developed by Jai Singh

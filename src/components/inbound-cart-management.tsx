@@ -1,14 +1,24 @@
+// Created and developed by Jai Singh
 import { useMemo, useState } from 'react'
 import { format, toZonedTime } from 'date-fns-tz'
 import {
+  AlertTriangle,
+  Archive,
+  Box,
+  CheckCircle2,
+  Clock,
   Loader2,
+  PackageCheck,
   Pencil,
   Plus,
+  RotateCcw,
   Search,
   ShoppingCart,
   Trash2,
+  TrendingUp,
   X,
 } from 'lucide-react'
+import type { LucideIcon } from 'lucide-react'
 import { toast } from 'sonner'
 import { cn } from '@/lib/utils'
 import {
@@ -48,6 +58,11 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table'
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from '@/components/ui/tooltip'
 
 const formatTimestamp = (ts: string | null) => {
   if (!ts) return 'N/A'
@@ -55,38 +70,169 @@ const formatTimestamp = (ts: string | null) => {
     return format(
       toZonedTime(new Date(ts), 'America/New_York'),
       'MM/dd h:mm a',
-      {
-        timeZone: 'America/New_York',
-      }
+      { timeZone: 'America/New_York' }
     )
   } catch {
     return 'Invalid'
   }
 }
 
-const statusColors: Record<string, string> = {
-  Empty:
-    'bg-emerald-100 text-emerald-800 dark:bg-emerald-900/30 dark:text-emerald-400',
-  Loading: 'bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-400',
-  Full: 'bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-400',
-  InPutaway:
-    'bg-purple-100 text-purple-800 dark:bg-purple-900/30 dark:text-purple-400',
-  Cleared: 'bg-gray-100 text-gray-800 dark:bg-gray-800/30 dark:text-gray-400',
+const statusConfig: Record<
+  string,
+  { color: string; bg: string; icon: LucideIcon; label: string }
+> = {
+  Empty: {
+    color: 'text-emerald-600 dark:text-emerald-400',
+    bg: 'bg-emerald-100 text-emerald-800 dark:bg-emerald-900/30 dark:text-emerald-400',
+    icon: Box,
+    label: 'Empty',
+  },
+  Loading: {
+    color: 'text-blue-600 dark:text-blue-400',
+    bg: 'bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-400',
+    icon: TrendingUp,
+    label: 'Loading',
+  },
+  Full: {
+    color: 'text-amber-600 dark:text-amber-400',
+    bg: 'bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-400',
+    icon: AlertTriangle,
+    label: 'Full',
+  },
+  InPutaway: {
+    color: 'text-purple-600 dark:text-purple-400',
+    bg: 'bg-purple-100 text-purple-800 dark:bg-purple-900/30 dark:text-purple-400',
+    icon: PackageCheck,
+    label: 'In Putaway',
+  },
+  Cleared: {
+    color: 'text-gray-500 dark:text-gray-400',
+    bg: 'bg-gray-100 text-gray-800 dark:bg-gray-800/30 dark:text-gray-400',
+    icon: CheckCircle2,
+    label: 'Cleared',
+  },
 }
 
 function StatCard({
   label,
   value,
+  icon: Icon,
   color,
+  accent,
 }: {
   label: string
   value: number
+  icon: LucideIcon
   color: string
+  accent: string
 }) {
   return (
-    <div className='bg-card rounded-lg border p-3 text-center'>
-      <p className={cn('text-2xl font-bold', color)}>{value}</p>
-      <p className='text-muted-foreground text-xs'>{label}</p>
+    <div
+      className={cn(
+        'group relative overflow-hidden rounded-xl border p-4 transition-all hover:shadow-sm',
+        accent
+      )}
+    >
+      <div className='flex items-center justify-between'>
+        <div>
+          <p className={cn('text-3xl font-bold tabular-nums', color)}>
+            {value}
+          </p>
+          <p className='text-muted-foreground mt-0.5 text-xs font-medium'>
+            {label}
+          </p>
+        </div>
+        <div
+          className={cn(
+            'flex h-9 w-9 items-center justify-center rounded-lg bg-current/10',
+            color
+          )}
+        >
+          <Icon className='h-4.5 w-4.5 opacity-70' />
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function CartFormFields({
+  cartNumber,
+  setCartNumber,
+  maxCapacity,
+  setMaxCapacity,
+  warehouse,
+  setWarehouse,
+  zone,
+  setZone,
+  notes,
+  setNotes,
+}: {
+  cartNumber: string
+  setCartNumber: (v: string) => void
+  maxCapacity: string
+  setMaxCapacity: (v: string) => void
+  warehouse: string
+  setWarehouse: (v: string) => void
+  zone: string
+  setZone: (v: string) => void
+  notes: string
+  setNotes: (v: string) => void
+}) {
+  return (
+    <div className='space-y-4'>
+      <div className='space-y-1.5'>
+        <label className='text-muted-foreground text-[11px] font-medium tracking-wider uppercase'>
+          Cart Number <span className='text-destructive'>*</span>
+        </label>
+        <Input
+          value={cartNumber}
+          onChange={(e) => setCartNumber(e.target.value)}
+          placeholder='e.g., CART-001'
+        />
+      </div>
+      <div className='grid grid-cols-2 gap-3'>
+        <div className='space-y-1.5'>
+          <label className='text-muted-foreground text-[11px] font-medium tracking-wider uppercase'>
+            Max Capacity
+          </label>
+          <Input
+            type='number'
+            min='1'
+            value={maxCapacity}
+            onChange={(e) => setMaxCapacity(e.target.value)}
+          />
+        </div>
+        <div className='space-y-1.5'>
+          <label className='text-muted-foreground text-[11px] font-medium tracking-wider uppercase'>
+            Warehouse
+          </label>
+          <Input
+            value={warehouse}
+            onChange={(e) => setWarehouse(e.target.value)}
+            placeholder='e.g., IPDC'
+          />
+        </div>
+      </div>
+      <div className='space-y-1.5'>
+        <label className='text-muted-foreground text-[11px] font-medium tracking-wider uppercase'>
+          Warehouse Zone
+        </label>
+        <Input
+          value={zone}
+          onChange={(e) => setZone(e.target.value)}
+          placeholder='e.g., Zone A, Dock 3'
+        />
+      </div>
+      <div className='space-y-1.5'>
+        <label className='text-muted-foreground text-[11px] font-medium tracking-wider uppercase'>
+          Notes
+        </label>
+        <Input
+          value={notes}
+          onChange={(e) => setNotes(e.target.value)}
+          placeholder='Optional notes'
+        />
+      </div>
     </div>
   )
 }
@@ -137,64 +283,29 @@ function CreateCartDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>Create New Cart</DialogTitle>
+          <DialogTitle className='flex items-center gap-2'>
+            <Plus className='h-4 w-4' />
+            Create New Cart
+          </DialogTitle>
         </DialogHeader>
-        <div className='space-y-4 pt-2'>
-          <div>
-            <label className='mb-1 block text-sm font-medium'>
-              Cart Number *
-            </label>
-            <Input
-              value={cartNumber}
-              onChange={(e) => setCartNumber(e.target.value)}
-              placeholder='e.g., CART-001'
-            />
-          </div>
-          <div className='grid grid-cols-2 gap-3'>
-            <div>
-              <label className='mb-1 block text-sm font-medium'>
-                Max Capacity
-              </label>
-              <Input
-                type='number'
-                min='1'
-                value={maxCapacity}
-                onChange={(e) => setMaxCapacity(e.target.value)}
-              />
-            </div>
-            <div>
-              <label className='mb-1 block text-sm font-medium'>
-                Warehouse
-              </label>
-              <Input
-                value={warehouse}
-                onChange={(e) => setWarehouse(e.target.value)}
-                placeholder='e.g., IPDC'
-              />
-            </div>
-          </div>
-          <div>
-            <label className='mb-1 block text-sm font-medium'>
-              Warehouse Zone
-            </label>
-            <Input
-              value={zone}
-              onChange={(e) => setZone(e.target.value)}
-              placeholder='e.g., Zone A, Dock 3'
-            />
-          </div>
-          <div>
-            <label className='mb-1 block text-sm font-medium'>Notes</label>
-            <Input
-              value={notes}
-              onChange={(e) => setNotes(e.target.value)}
-              placeholder='Optional notes'
-            />
-          </div>
+        <div className='space-y-5 pt-1'>
+          <CartFormFields
+            cartNumber={cartNumber}
+            setCartNumber={setCartNumber}
+            maxCapacity={maxCapacity}
+            setMaxCapacity={setMaxCapacity}
+            warehouse={warehouse}
+            setWarehouse={setWarehouse}
+            zone={zone}
+            setZone={setZone}
+            notes={notes}
+            setNotes={setNotes}
+          />
           <Button
             onClick={handleSubmit}
             disabled={createMutation.isPending}
             className='w-full'
+            size='lg'
           >
             {createMutation.isPending && (
               <Loader2 className='mr-2 h-4 w-4 animate-spin' />
@@ -280,64 +391,29 @@ function EditCartDialog({
     <Dialog open={open} onOpenChange={handleOpen}>
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>Edit Cart</DialogTitle>
+          <DialogTitle className='flex items-center gap-2'>
+            <Pencil className='h-4 w-4' />
+            Edit Cart
+          </DialogTitle>
         </DialogHeader>
-        <div className='space-y-4 pt-2'>
-          <div>
-            <label className='mb-1 block text-sm font-medium'>
-              Cart Number *
-            </label>
-            <Input
-              value={cartNumber}
-              onChange={(e) => setCartNumber(e.target.value)}
-              placeholder='e.g., CART-001'
-            />
-          </div>
-          <div className='grid grid-cols-2 gap-3'>
-            <div>
-              <label className='mb-1 block text-sm font-medium'>
-                Max Capacity
-              </label>
-              <Input
-                type='number'
-                min='1'
-                value={maxCapacity}
-                onChange={(e) => setMaxCapacity(e.target.value)}
-              />
-            </div>
-            <div>
-              <label className='mb-1 block text-sm font-medium'>
-                Warehouse
-              </label>
-              <Input
-                value={warehouse}
-                onChange={(e) => setWarehouse(e.target.value)}
-                placeholder='e.g., IPDC'
-              />
-            </div>
-          </div>
-          <div>
-            <label className='mb-1 block text-sm font-medium'>
-              Warehouse Zone
-            </label>
-            <Input
-              value={zone}
-              onChange={(e) => setZone(e.target.value)}
-              placeholder='e.g., Zone A, Dock 3'
-            />
-          </div>
-          <div>
-            <label className='mb-1 block text-sm font-medium'>Notes</label>
-            <Input
-              value={notes}
-              onChange={(e) => setNotes(e.target.value)}
-              placeholder='Optional notes'
-            />
-          </div>
+        <div className='space-y-5 pt-1'>
+          <CartFormFields
+            cartNumber={cartNumber}
+            setCartNumber={setCartNumber}
+            maxCapacity={maxCapacity}
+            setMaxCapacity={setMaxCapacity}
+            warehouse={warehouse}
+            setWarehouse={setWarehouse}
+            zone={zone}
+            setZone={setZone}
+            notes={notes}
+            setNotes={setNotes}
+          />
           <Button
             onClick={handleSubmit}
             disabled={updateMutation.isPending}
             className='w-full'
+            size='lg'
           >
             {updateMutation.isPending && (
               <Loader2 className='mr-2 h-4 w-4 animate-spin' />
@@ -377,6 +453,8 @@ function CartDetailDialog({
     (a) => a.status !== 'on_cart'
   )
 
+  const cfg = cart ? statusConfig[cart.status] || statusConfig.Empty : null
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className='max-w-3xl'>
@@ -384,10 +462,8 @@ function CartDetailDialog({
           <DialogTitle className='flex items-center gap-2'>
             <ShoppingCart className='h-5 w-5' />
             {cart?.cart_number || 'Cart Details'}
-            {cart && (
-              <Badge className={cn('ml-2', statusColors[cart.status])}>
-                {cart.status}
-              </Badge>
+            {cart && cfg && (
+              <Badge className={cn('ml-2', cfg.bg)}>{cfg.label}</Badge>
             )}
           </DialogTitle>
         </DialogHeader>
@@ -396,81 +472,130 @@ function CartDetailDialog({
             <Loader2 className='text-muted-foreground h-6 w-6 animate-spin' />
           </div>
         ) : cart ? (
-          <div className='space-y-4'>
-            {/* Cart Info */}
-            <div className='bg-muted/50 grid grid-cols-2 gap-3 rounded-lg p-3 text-sm sm:grid-cols-4'>
-              <div>
-                <p className='text-muted-foreground text-xs'>Zone</p>
-                <p className='font-medium'>
-                  {cart.warehouse_zone || 'Not set'}
-                </p>
-              </div>
-              <div>
-                <p className='text-muted-foreground text-xs'>Warehouse</p>
-                <p className='font-medium'>{cart.warehouse || 'Not set'}</p>
-              </div>
-              <div>
-                <p className='text-muted-foreground text-xs'>Capacity</p>
-                <p className='font-medium'>
-                  {cart.active_count} / {cart.max_capacity}
-                </p>
-              </div>
-              <div>
-                <p className='text-muted-foreground text-xs'>Created</p>
-                <p className='font-medium'>
-                  {formatTimestamp(cart.created_at)}
-                </p>
+          <div className='space-y-5'>
+            {/* Cart Info Grid */}
+            <div className='grid grid-cols-2 gap-3 sm:grid-cols-4'>
+              {[
+                {
+                  label: 'Zone',
+                  value: cart.warehouse_zone || 'Not set',
+                  icon: Archive,
+                },
+                {
+                  label: 'Warehouse',
+                  value: cart.warehouse || 'Not set',
+                  icon: Box,
+                },
+                {
+                  label: 'Capacity',
+                  value: `${cart.active_count} / ${cart.max_capacity}`,
+                  icon: ShoppingCart,
+                },
+                {
+                  label: 'Created',
+                  value: formatTimestamp(cart.created_at),
+                  icon: Clock,
+                },
+              ].map((item) => (
+                <div
+                  key={item.label}
+                  className='bg-muted/40 flex items-start gap-2.5 rounded-lg border p-3'
+                >
+                  <item.icon className='text-muted-foreground mt-0.5 h-3.5 w-3.5 shrink-0' />
+                  <div className='min-w-0'>
+                    <p className='text-muted-foreground text-[10px] tracking-wider uppercase'>
+                      {item.label}
+                    </p>
+                    <p className='truncate text-sm font-semibold'>
+                      {item.value}
+                    </p>
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            {/* Capacity Bar */}
+            <div className='space-y-1'>
+              <div className='bg-secondary h-2 overflow-hidden rounded-full'>
+                <div
+                  className={cn(
+                    'h-full rounded-full transition-all duration-500',
+                    cart.active_count >= cart.max_capacity
+                      ? 'bg-linear-to-r from-amber-500 to-amber-400'
+                      : cart.active_count > 0
+                        ? 'bg-linear-to-r from-blue-600 to-blue-400'
+                        : 'bg-emerald-500'
+                  )}
+                  style={{
+                    width: `${Math.min(100, (cart.active_count / cart.max_capacity) * 100)}%`,
+                  }}
+                />
               </div>
             </div>
+
             {cart.notes && (
-              <div className='bg-muted/30 rounded-lg px-3 py-2 text-sm'>
-                <p className='text-muted-foreground text-xs'>Notes</p>
-                <p>{cart.notes}</p>
+              <div className='bg-muted/30 flex items-start gap-2 rounded-lg border px-3 py-2.5 text-sm'>
+                <span className='text-muted-foreground text-[10px] tracking-wider uppercase'>
+                  Notes:
+                </span>
+                <p className='text-xs'>{cart.notes}</p>
               </div>
             )}
 
             {/* Active T.O.s */}
             {onCartAssignments.length > 0 && (
               <div>
-                <h4 className='mb-2 text-sm font-medium'>
-                  Active T.O.s ({onCartAssignments.length})
-                </h4>
-                <div className='max-h-48 overflow-y-auto rounded-md border'>
+                <div className='mb-2 flex items-center gap-2'>
+                  <h4 className='text-sm font-semibold'>Active T.O.s</h4>
+                  <Badge variant='secondary' className='text-[10px]'>
+                    {onCartAssignments.length}
+                  </Badge>
+                </div>
+                <div className='max-h-48 overflow-y-auto rounded-lg border'>
                   <Table>
                     <TableHeader>
-                      <TableRow>
-                        <TableHead>T.O.</TableHead>
-                        <TableHead>Material</TableHead>
-                        <TableHead>Stowed By</TableHead>
-                        <TableHead>Stowed At</TableHead>
+                      <TableRow className='bg-muted/30 hover:bg-muted/30'>
+                        <TableHead className='text-xs'>T.O.</TableHead>
+                        <TableHead className='text-xs'>Material</TableHead>
+                        <TableHead className='text-xs'>Stowed By</TableHead>
+                        <TableHead className='text-xs'>Stowed At</TableHead>
                         <TableHead className='w-10'></TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
                       {onCartAssignments.map((a) => (
                         <TableRow key={a.id}>
-                          <TableCell className='font-medium'>
+                          <TableCell className='font-mono text-xs font-medium'>
                             {a.to_number}
                           </TableCell>
-                          <TableCell>{a.material_number}</TableCell>
-                          <TableCell>
+                          <TableCell className='font-mono text-xs'>
+                            {a.material_number}
+                          </TableCell>
+                          <TableCell className='text-xs'>
                             {a.stowed_by_user?.full_name || 'Unknown'}
                           </TableCell>
-                          <TableCell>{formatTimestamp(a.stowed_at)}</TableCell>
+                          <TableCell className='text-muted-foreground text-xs'>
+                            {formatTimestamp(a.stowed_at)}
+                          </TableCell>
                           <TableCell>
-                            <Button
-                              variant='ghost'
-                              size='icon'
-                              className='h-7 w-7'
-                              onClick={() =>
-                                removeMutation.mutate({
-                                  assignmentId: a.id,
-                                })
-                              }
-                              disabled={removeMutation.isPending}
-                            >
-                              <X className='h-3 w-3' />
-                            </Button>
+                            <Tooltip>
+                              <TooltipTrigger asChild>
+                                <Button
+                                  variant='ghost'
+                                  size='icon'
+                                  className='h-7 w-7 text-red-500 hover:bg-red-50 hover:text-red-700 dark:hover:bg-red-950'
+                                  onClick={() =>
+                                    removeMutation.mutate({
+                                      assignmentId: a.id,
+                                    })
+                                  }
+                                  disabled={removeMutation.isPending}
+                                >
+                                  <X className='h-3 w-3' />
+                                </Button>
+                              </TooltipTrigger>
+                              <TooltipContent>Remove from cart</TooltipContent>
+                            </Tooltip>
                           </TableCell>
                         </TableRow>
                       ))}
@@ -483,30 +608,41 @@ function CartDetailDialog({
             {/* History */}
             {historicalAssignments.length > 0 && (
               <div>
-                <h4 className='mb-2 text-sm font-medium'>
-                  History ({historicalAssignments.length})
-                </h4>
-                <div className='max-h-36 overflow-y-auto rounded-md border'>
+                <div className='mb-2 flex items-center gap-2'>
+                  <h4 className='text-muted-foreground text-sm font-semibold'>
+                    History
+                  </h4>
+                  <Badge variant='outline' className='text-[10px]'>
+                    {historicalAssignments.length}
+                  </Badge>
+                </div>
+                <div className='max-h-36 overflow-y-auto rounded-lg border'>
                   <Table>
                     <TableHeader>
-                      <TableRow>
-                        <TableHead>T.O.</TableHead>
-                        <TableHead>Material</TableHead>
-                        <TableHead>Status</TableHead>
-                        <TableHead>Cleared At</TableHead>
+                      <TableRow className='bg-muted/30 hover:bg-muted/30'>
+                        <TableHead className='text-xs'>T.O.</TableHead>
+                        <TableHead className='text-xs'>Material</TableHead>
+                        <TableHead className='text-xs'>Status</TableHead>
+                        <TableHead className='text-xs'>Cleared At</TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
                       {historicalAssignments.map((a) => (
                         <TableRow key={a.id}>
-                          <TableCell>{a.to_number}</TableCell>
-                          <TableCell>{a.material_number}</TableCell>
+                          <TableCell className='font-mono text-xs'>
+                            {a.to_number}
+                          </TableCell>
+                          <TableCell className='font-mono text-xs'>
+                            {a.material_number}
+                          </TableCell>
                           <TableCell>
-                            <Badge variant='secondary' className='text-xs'>
+                            <Badge variant='secondary' className='text-[10px]'>
                               {a.status}
                             </Badge>
                           </TableCell>
-                          <TableCell>{formatTimestamp(a.cleared_at)}</TableCell>
+                          <TableCell className='text-muted-foreground text-xs'>
+                            {formatTimestamp(a.cleared_at)}
+                          </TableCell>
                         </TableRow>
                       ))}
                     </TableBody>
@@ -516,13 +652,14 @@ function CartDetailDialog({
             )}
 
             {/* Actions */}
-            <div className='flex flex-wrap gap-2 border-t pt-3'>
+            <div className='flex flex-wrap items-center gap-2 border-t pt-4'>
               <Button
                 variant='outline'
                 size='sm'
                 onClick={() => setEditOpen(true)}
+                className='gap-1.5'
               >
-                <Pencil className='mr-1 h-3 w-3' />
+                <Pencil className='h-3 w-3' />
                 Edit Cart
               </Button>
               {cart.is_active ? (
@@ -548,8 +685,9 @@ function CartDetailDialog({
                     disabled={
                       deactivateMutation.isPending || cart.active_count > 0
                     }
+                    className='gap-1.5'
                   >
-                    <Trash2 className='mr-1 h-3 w-3' />
+                    <Archive className='h-3 w-3' />
                     Deactivate
                   </Button>
                 </>
@@ -561,30 +699,41 @@ function CartDetailDialog({
                     if (cartId) reactivateMutation.mutate(cartId)
                   }}
                   disabled={reactivateMutation.isPending}
-                  className='border-emerald-300 text-emerald-700 hover:bg-emerald-50 dark:border-emerald-700 dark:text-emerald-400 dark:hover:bg-emerald-950'
+                  className='gap-1.5 border-emerald-300 text-emerald-700 hover:bg-emerald-50 dark:border-emerald-700 dark:text-emerald-400 dark:hover:bg-emerald-950'
                 >
                   {reactivateMutation.isPending ? (
-                    <Loader2 className='mr-1 h-3 w-3 animate-spin' />
-                  ) : null}
+                    <Loader2 className='h-3 w-3 animate-spin' />
+                  ) : (
+                    <RotateCcw className='h-3 w-3' />
+                  )}
                   Reactivate
                 </Button>
               )}
 
               <div className='ml-auto'>
                 {!confirmDelete ? (
-                  <Button
-                    variant='ghost'
-                    size='sm'
-                    onClick={() => setConfirmDelete(true)}
-                    disabled={cart.active_count > 0}
-                    className='text-red-500 hover:bg-red-50 hover:text-red-700 dark:hover:bg-red-950'
-                  >
-                    <Trash2 className='mr-1 h-3 w-3' />
-                    Delete Permanently
-                  </Button>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <Button
+                        variant='ghost'
+                        size='sm'
+                        onClick={() => setConfirmDelete(true)}
+                        disabled={cart.active_count > 0}
+                        className='gap-1.5 text-red-500 hover:bg-red-50 hover:text-red-700 dark:hover:bg-red-950'
+                      >
+                        <Trash2 className='h-3 w-3' />
+                        Delete
+                      </Button>
+                    </TooltipTrigger>
+                    <TooltipContent>
+                      Permanently delete this cart
+                    </TooltipContent>
+                  </Tooltip>
                 ) : (
                   <div className='flex items-center gap-2'>
-                    <span className='text-xs text-red-600'>Are you sure?</span>
+                    <span className='text-xs font-medium text-red-600'>
+                      Delete permanently?
+                    </span>
                     <Button
                       variant='destructive'
                       size='sm'
@@ -605,7 +754,7 @@ function CartDetailDialog({
                       {deleteMutation.isPending ? (
                         <Loader2 className='mr-1 h-3 w-3 animate-spin' />
                       ) : null}
-                      Yes, Delete
+                      Confirm
                     </Button>
                     <Button
                       variant='ghost'
@@ -661,160 +810,230 @@ export default function InboundCartManagement() {
   }
 
   return (
-    <div className='space-y-6'>
+    <div className='space-y-5'>
       {/* Stats Bar */}
-      <div className='grid grid-cols-3 gap-3 sm:grid-cols-6'>
+      <div className='grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6'>
         <StatCard
           label='Total'
           value={stats?.total || 0}
+          icon={ShoppingCart}
           color='text-foreground'
+          accent='bg-card'
         />
         <StatCard
           label='Empty'
           value={stats?.empty || 0}
-          color='text-emerald-600'
+          icon={Box}
+          color='text-emerald-600 dark:text-emerald-400'
+          accent='bg-card'
         />
         <StatCard
           label='Loading'
           value={stats?.loading || 0}
-          color='text-blue-600'
+          icon={TrendingUp}
+          color='text-blue-600 dark:text-blue-400'
+          accent='bg-card'
         />
         <StatCard
           label='Full'
           value={stats?.full || 0}
-          color='text-amber-600'
+          icon={AlertTriangle}
+          color='text-amber-600 dark:text-amber-400'
+          accent='bg-card'
         />
         <StatCard
           label='In Putaway'
           value={stats?.inPutaway || 0}
-          color='text-purple-600'
+          icon={PackageCheck}
+          color='text-purple-600 dark:text-purple-400'
+          accent='bg-card'
         />
         <StatCard
           label='Cleared'
           value={stats?.cleared || 0}
-          color='text-gray-500'
+          icon={CheckCircle2}
+          color='text-gray-500 dark:text-gray-400'
+          accent='bg-card'
         />
       </div>
 
       {/* Toolbar */}
-      <div className='flex flex-wrap items-center gap-3'>
-        <div className='relative flex-1'>
-          <Search className='text-muted-foreground absolute top-2.5 left-3 h-4 w-4' />
-          <Input
-            placeholder='Search by cart number or T.O...'
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            className='pl-9'
-          />
-        </div>
-        <Select value={statusFilter} onValueChange={setStatusFilter}>
-          <SelectTrigger className='w-36'>
-            <SelectValue placeholder='All Statuses' />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value='all'>All Statuses</SelectItem>
-            <SelectItem value='Empty'>Empty</SelectItem>
-            <SelectItem value='Loading'>Loading</SelectItem>
-            <SelectItem value='Full'>Full</SelectItem>
-            <SelectItem value='InPutaway'>In Putaway</SelectItem>
-            <SelectItem value='Cleared'>Cleared</SelectItem>
-          </SelectContent>
-        </Select>
-        <Button
-          variant={showDeactivated ? 'secondary' : 'outline'}
-          size='sm'
-          onClick={() => setShowDeactivated(!showDeactivated)}
-        >
-          {showDeactivated ? 'Hide' : 'Show'} Deactivated
-        </Button>
-        <Button onClick={() => setCreateOpen(true)}>
-          <Plus className='mr-2 h-4 w-4' />
-          Create Cart
-        </Button>
-      </div>
+      <Card className='border-0 shadow-sm'>
+        <CardContent className='flex flex-wrap items-center gap-3 p-3'>
+          <div className='relative min-w-[200px] flex-1'>
+            <Search className='text-muted-foreground absolute top-2.5 left-3 h-4 w-4' />
+            <Input
+              placeholder='Search by cart number or T.O...'
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              className='pl-9'
+            />
+          </div>
+          <Select value={statusFilter} onValueChange={setStatusFilter}>
+            <SelectTrigger className='w-[140px]'>
+              <SelectValue placeholder='All Statuses' />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value='all'>All Statuses</SelectItem>
+              <SelectItem value='Empty'>Empty</SelectItem>
+              <SelectItem value='Loading'>Loading</SelectItem>
+              <SelectItem value='Full'>Full</SelectItem>
+              <SelectItem value='InPutaway'>In Putaway</SelectItem>
+              <SelectItem value='Cleared'>Cleared</SelectItem>
+            </SelectContent>
+          </Select>
+          <Button
+            variant={showDeactivated ? 'secondary' : 'outline'}
+            size='sm'
+            onClick={() => setShowDeactivated(!showDeactivated)}
+            className='gap-1.5'
+          >
+            <Archive className='h-3.5 w-3.5' />
+            {showDeactivated ? 'Hide' : 'Show'} Deactivated
+          </Button>
+          <Button onClick={() => setCreateOpen(true)} className='gap-1.5'>
+            <Plus className='h-4 w-4' />
+            Create Cart
+          </Button>
+        </CardContent>
+      </Card>
 
       {/* Cart Grid */}
       {isLoading ? (
-        <div className='flex items-center justify-center py-12'>
+        <div className='flex items-center justify-center py-16'>
           <Loader2 className='text-muted-foreground h-6 w-6 animate-spin' />
         </div>
       ) : filteredCarts.length === 0 ? (
-        <div className='text-muted-foreground flex flex-col items-center gap-3 py-12'>
-          <ShoppingCart className='h-10 w-10 opacity-40' />
-          <p>
-            {carts?.length === 0
-              ? 'No carts created yet'
-              : 'No carts match your filters'}
-          </p>
+        <div className='flex flex-col items-center gap-4 py-16'>
+          <div className='bg-muted flex h-16 w-16 items-center justify-center rounded-2xl'>
+            <ShoppingCart className='text-muted-foreground/50 h-8 w-8' />
+          </div>
+          <div className='text-center'>
+            <p className='font-medium'>
+              {carts?.length === 0
+                ? 'No carts created yet'
+                : 'No carts match your filters'}
+            </p>
+            <p className='text-muted-foreground mt-1 text-sm'>
+              {carts?.length === 0
+                ? 'Create your first cart to start managing inbound T.O.s'
+                : 'Try adjusting your search or filter criteria'}
+            </p>
+          </div>
           {carts?.length === 0 && (
-            <Button variant='outline' onClick={() => setCreateOpen(true)}>
-              <Plus className='mr-2 h-4 w-4' />
+            <Button
+              onClick={() => setCreateOpen(true)}
+              className='mt-2 gap-1.5'
+            >
+              <Plus className='h-4 w-4' />
               Create First Cart
             </Button>
           )}
         </div>
       ) : (
         <div className='grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4'>
-          {filteredCarts.map((cart) => (
-            <Card
-              key={cart.id}
-              className={cn(
-                'cursor-pointer transition-shadow hover:shadow-md',
-                !cart.is_active && 'opacity-60'
-              )}
-              onClick={() => handleCartClick(cart.id)}
-            >
-              <CardContent className='p-4'>
-                <div className='mb-3 flex items-start justify-between'>
-                  <div className='flex items-center gap-2'>
-                    <h3 className='text-lg font-bold'>{cart.cart_number}</h3>
-                    {!cart.is_active && (
-                      <Badge
-                        variant='outline'
-                        className='border-red-300 text-xs text-red-500'
-                      >
-                        Inactive
-                      </Badge>
-                    )}
-                  </div>
-                  <Badge className={cn('text-xs', statusColors[cart.status])}>
-                    {cart.status}
-                  </Badge>
-                </div>
+          {filteredCarts.map((cart) => {
+            const cfg = statusConfig[cart.status] || statusConfig.Empty
+            const StatusIcon = cfg.icon
+            const pct = Math.min(
+              100,
+              (cart.active_count / cart.max_capacity) * 100
+            )
 
-                {/* Capacity bar */}
-                <div className='mb-3'>
-                  <div className='mb-1 flex justify-between text-xs'>
-                    <span className='text-muted-foreground'>Load</span>
-                    <span className='font-medium'>
-                      {cart.active_count} / {cart.max_capacity}
+            return (
+              <Card
+                key={cart.id}
+                className={cn(
+                  'group cursor-pointer overflow-hidden border-0 shadow-sm transition-all hover:shadow-md',
+                  !cart.is_active && 'opacity-60'
+                )}
+                onClick={() => handleCartClick(cart.id)}
+              >
+                <CardContent className='p-0'>
+                  {/* Card Header */}
+                  <div className='flex items-start justify-between p-4 pb-3'>
+                    <div className='flex items-center gap-2.5'>
+                      <div
+                        className={cn(
+                          'flex h-9 w-9 shrink-0 items-center justify-center rounded-lg',
+                          cart.active_count >= cart.max_capacity
+                            ? 'bg-amber-100 dark:bg-amber-900/30'
+                            : cart.active_count > 0
+                              ? 'bg-blue-100 dark:bg-blue-900/30'
+                              : 'bg-emerald-100 dark:bg-emerald-900/30'
+                        )}
+                      >
+                        <ShoppingCart
+                          className={cn(
+                            'h-4 w-4',
+                            cart.active_count >= cart.max_capacity
+                              ? 'text-amber-600 dark:text-amber-400'
+                              : cart.active_count > 0
+                                ? 'text-blue-600 dark:text-blue-400'
+                                : 'text-emerald-600 dark:text-emerald-400'
+                          )}
+                        />
+                      </div>
+                      <div>
+                        <h3 className='text-sm leading-tight font-bold'>
+                          {cart.cart_number}
+                        </h3>
+                        {!cart.is_active && (
+                          <Badge
+                            variant='outline'
+                            className='mt-0.5 border-red-300 text-[9px] text-red-500'
+                          >
+                            Inactive
+                          </Badge>
+                        )}
+                      </div>
+                    </div>
+                    <Badge className={cn('shrink-0 gap-1 text-[10px]', cfg.bg)}>
+                      <StatusIcon className='h-2.5 w-2.5' />
+                      {cfg.label}
+                    </Badge>
+                  </div>
+
+                  {/* Capacity */}
+                  <div className='px-4 pb-3'>
+                    <div className='mb-1.5 flex items-center justify-between text-xs'>
+                      <span className='text-muted-foreground'>Load</span>
+                      <span className='font-semibold tabular-nums'>
+                        {cart.active_count} / {cart.max_capacity}
+                      </span>
+                    </div>
+                    <div className='bg-secondary h-2 overflow-hidden rounded-full'>
+                      <div
+                        className={cn(
+                          'h-full rounded-full transition-all duration-500',
+                          pct >= 100
+                            ? 'bg-linear-to-r from-amber-500 to-amber-400'
+                            : pct > 0
+                              ? 'bg-linear-to-r from-blue-600 to-blue-400'
+                              : 'bg-emerald-500'
+                        )}
+                        style={{ width: `${pct}%` }}
+                      />
+                    </div>
+                  </div>
+
+                  {/* Footer Meta */}
+                  <div className='bg-muted/30 text-muted-foreground flex items-center gap-3 border-t px-4 py-2.5 text-[11px]'>
+                    {cart.warehouse_zone && (
+                      <span className='flex items-center gap-1'>
+                        <Archive className='h-3 w-3' />
+                        {cart.warehouse_zone}
+                      </span>
+                    )}
+                    <span className='ml-auto flex items-center gap-1'>
+                      <Clock className='h-3 w-3' />
+                      {formatTimestamp(cart.updated_at)}
                     </span>
                   </div>
-                  <div className='bg-secondary h-2 overflow-hidden rounded-full'>
-                    <div
-                      className={cn(
-                        'h-full rounded-full transition-all',
-                        cart.active_count >= cart.max_capacity
-                          ? 'bg-amber-500'
-                          : cart.active_count > 0
-                            ? 'bg-blue-500'
-                            : 'bg-emerald-500'
-                      )}
-                      style={{
-                        width: `${Math.min(100, (cart.active_count / cart.max_capacity) * 100)}%`,
-                      }}
-                    />
-                  </div>
-                </div>
-
-                <div className='text-muted-foreground space-y-1 text-xs'>
-                  {cart.warehouse_zone && <p>Zone: {cart.warehouse_zone}</p>}
-                  {cart.warehouse && <p>Warehouse: {cart.warehouse}</p>}
-                  <p>Updated: {formatTimestamp(cart.updated_at)}</p>
-                </div>
-              </CardContent>
-            </Card>
-          ))}
+                </CardContent>
+              </Card>
+            )
+          })}
         </div>
       )}
 
@@ -828,3 +1047,5 @@ export default function InboundCartManagement() {
     </div>
   )
 }
+
+// Created and developed by Jai Singh

@@ -1,6 +1,6 @@
 syntax = "proto3";
 
-package omniframe.core;
+package onebox.core;
 
 // Authentication Service
 service AuthService {

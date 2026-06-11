@@ -1,3 +1,4 @@
+// Created and developed by Jai Singh
 //! Authentication-related database queries
 
 use super::super::models::auth::*;
@@ -192,3 +193,5 @@ impl AuthQueries {
         .await
     }
 }
+
+// Created and developed by Jai Singh

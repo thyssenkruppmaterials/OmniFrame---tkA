@@ -1,3 +1,4 @@
+// Created and developed by Jai Singh
 use axum::{
     extract::{
         State,
@@ -139,3 +140,5 @@ async fn handle_location_stream(socket: WebSocket, state: Arc<AppState>, org_id:
 
     info!("Location stream WebSocket client disconnected");
 }
+
+// Created and developed by Jai Singh

@@ -1,3 +1,4 @@
+// Created and developed by Jai Singh
 import * as React from 'react'
 
 const MOBILE_BREAKPOINT = 768
@@ -17,3 +18,5 @@ export function useIsMobile() {
 
   return !!isMobile
 }
+
+// Created and developed by Jai Singh

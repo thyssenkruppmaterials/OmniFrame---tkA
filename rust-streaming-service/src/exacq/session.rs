@@ -1,3 +1,4 @@
+// Created and developed by Jai Singh
 //! ExacqVision session management
 //!
 //! Handles session lifecycle with automatic refresh and Redis caching.
@@ -204,3 +205,5 @@ pub struct SessionInfo {
     pub last_verified_seconds: u64,
     pub ttl_remaining: u64,
 }
+
+// Created and developed by Jai Singh

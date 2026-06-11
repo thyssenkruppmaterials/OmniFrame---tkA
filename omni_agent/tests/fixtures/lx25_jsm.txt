@@ -1,0 +1,41 @@
+05/10/2026			Inventory Status - List with Totals
+
+Warehouse number			JSM	Lift System Warehouse
+
+	Typ	Storage type name
+	Summary				Absolute	Proportio	WhN	Typ
+
+	DDN	DOD NEW
+	Total number of bins				    935	 100.00%	JSM	DDN
+	Inv. executed during selection peri				    446	  47.70%	JSM	DDN
+	Inventory active				     12	   1.28%	JSM	DDN
+	Inventory planned				      0	   0.00%	JSM	DDN
+	No inventory executed				    489	  52.30%	JSM	DDN
+
+	DDS	DOD SERV
+	Total number of bins				    132	 100.00%	JSM	DDS
+	Inv. executed during selection peri				     78	  59.09%	JSM	DDS
+	Inventory active				      0	   0.00%	JSM	DDS
+	Inventory planned				      0	   0.00%	JSM	DDS
+	No inventory executed				     54	  40.91%	JSM	DDS
+
+	DDU	DOD UNSV
+	Total number of bins				    461	 100.00%	JSM	DDU
+	Inv. executed during selection peri				    118	  25.60%	JSM	DDU
+	Inventory active				      4	   0.87%	JSM	DDU
+	Inventory planned				      0	   0.00%	JSM	DDU
+	No inventory executed				    343	  74.40%	JSM	DDU
+
+	DUR	DOD Unrepairable
+	Total number of bins				      1	 100.00%	JSM	DUR
+	Inv. executed during selection peri				      0	   0.00%	JSM	DUR
+	Inventory active				      0	   0.00%	JSM	DUR
+	Inventory planned				      0	   0.00%	JSM	DUR
+	No inventory executed				      1	 100.00%	JSM	DUR
+
+	SCD	Scrap DoD
+	Total number of bins				     17	 100.00%	JSM	SCD
+	Inv. executed during selection peri				      0	   0.00%	JSM	SCD
+	Inventory active				      0	   0.00%	JSM	SCD
+	Inventory planned				      0	   0.00%	JSM	SCD
+	No inventory executed				     17	 100.00%	JSM	SCD

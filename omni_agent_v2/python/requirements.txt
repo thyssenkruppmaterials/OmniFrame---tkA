@@ -1,0 +1,29 @@
+# OmniAgent v2 — Python helper dependencies.
+#
+# Production target: Python 3.11+ on Windows (where pywin32 + COM live).
+# Validation target: Python 3.11+ on macOS / Linux (mock COM via com_compat).
+#
+# Be ruthless about exclusions — every dep makes the python-embed bundle
+# larger. The Rust shell handles outbound HTTP, WebSockets, FastAPI/uvicorn
+# server, JWT validation, and audit-log persistence; the helper is a pure
+# JSON-RPC-over-stdio process that touches SAP COM and nothing else.
+
+# ---------------------------------------------------------------------------
+# Windows-only — pywin32 is the COM bridge. NOT installed on macOS/Linux
+# (com_compat.py degrades to a mock at runtime when the import fails).
+# ---------------------------------------------------------------------------
+pywin32==306; sys_platform == 'win32'
+
+# ---------------------------------------------------------------------------
+# Cryptography — used by handlers.recording for AES-GCM encryption of
+# replay payloads on disk (so a stolen recordings dir can't be replayed
+# without the agent's signing key). Cross-platform.
+# ---------------------------------------------------------------------------
+cryptography>=42.0
+
+# ---------------------------------------------------------------------------
+# Test deps (only installed in CI / dev — not in the production bundle).
+# Pin pytest + pytest-asyncio so the async fixtures work consistently.
+# ---------------------------------------------------------------------------
+pytest>=8.0; extra == 'dev'
+pytest-asyncio>=0.23; extra == 'dev'

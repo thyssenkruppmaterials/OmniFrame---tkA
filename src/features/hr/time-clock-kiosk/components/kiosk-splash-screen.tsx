@@ -1,3 +1,4 @@
+// Created and developed by Jai Singh
 import { useState, useEffect, useRef } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 
@@ -176,7 +177,7 @@ export default function KioskSplashScreen({
                 }}
               />
               <motion.img
-                src='/images/favicon.svg'
+                src='/images/OneBoxLogoX.png'
                 alt='OmniFrame'
                 className='relative h-20 w-20 object-contain drop-shadow-2xl'
                 animate={{ rotate: 360 }}
@@ -292,3 +293,5 @@ export default function KioskSplashScreen({
     </AnimatePresence>
   )
 }
+
+// Created and developed by Jai Singh

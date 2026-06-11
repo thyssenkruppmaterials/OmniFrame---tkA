@@ -1,8 +1,10 @@
+// Created and developed by Jai Singh
 /**
  * Standard Work React Hook
  * Provides state management for standard work checklists, templates, and submissions
  * Created: January 4, 2026
  */
+import { useRef } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
 import { useUnifiedAuth } from '@/lib/auth/unified-auth-provider'
@@ -181,6 +183,9 @@ export function useStandardWork() {
     },
   })
 
+  // Deletes route through the builder's own "undo" toast, so we suppress
+  // the generic success toast here -- the builder surfaces a richer one
+  // with an Undo action that calls restoreItem.
   const deleteItemMutation = useMutation({
     mutationFn: ({
       itemId,
@@ -194,10 +199,59 @@ export function useStandardWork() {
       queryClient.invalidateQueries({
         queryKey: ['standard-work-templates', organizationId],
       })
-      toast.success('Item removed successfully')
     },
     onError: (error: Error) => {
       toast.error(`Failed to remove item: ${error.message}`)
+    },
+  })
+
+  const restoreItemMutation = useMutation({
+    mutationFn: ({
+      itemId,
+      templateId: tId,
+    }: {
+      itemId: string
+      templateId: string
+    }) =>
+      StandardWorkService.restoreItem(itemId).then((result) => ({
+        result,
+        tId,
+      })),
+    onSuccess: (data) => {
+      queryClient.invalidateQueries({
+        queryKey: ['standard-work-items', data.tId],
+      })
+      queryClient.invalidateQueries({
+        queryKey: ['standard-work-templates', organizationId],
+      })
+    },
+    onError: (error: Error) => {
+      toast.error(`Couldn't restore item: ${error.message}`)
+    },
+  })
+
+  const duplicateItemMutation = useMutation({
+    mutationFn: ({
+      itemId,
+      templateId: tId,
+    }: {
+      itemId: string
+      templateId: string
+    }) =>
+      StandardWorkService.duplicateItem(itemId).then((result) => ({
+        result,
+        tId,
+      })),
+    onSuccess: (data) => {
+      queryClient.invalidateQueries({
+        queryKey: ['standard-work-items', data.tId],
+      })
+      queryClient.invalidateQueries({
+        queryKey: ['standard-work-templates', organizationId],
+      })
+    },
+    onError: (error: Error) => {
+      toast.error(`Failed to duplicate item: ${error.message}`)
     },
   })
 
@@ -264,6 +318,39 @@ export function useStandardWork() {
     })
   }
 
+  /**
+   * Combined submission + items + responses fetched via the
+   * `get_submission_with_responses` RPC. Replaces three parallel queries on
+   * the runner load path with one round trip.
+   */
+  const useSubmissionBundle = (submissionId: string) => {
+    return useQuery({
+      queryKey: ['standard-work-submission-bundle', submissionId],
+      queryFn: () => StandardWorkService.getSubmissionBundle(submissionId),
+      enabled: !!submissionId,
+    })
+  }
+
+  // Helper used by submission lifecycle mutations to keep dashboard, progress,
+  // upcoming, and overdue caches in sync with submitted state.
+  const invalidateDashboardSurfaces = () => {
+    queryClient.invalidateQueries({
+      queryKey: ['standard-work-dashboard-tasks', organizationId],
+    })
+    queryClient.invalidateQueries({
+      queryKey: ['standard-work-user-progress', organizationId],
+    })
+    queryClient.invalidateQueries({
+      queryKey: ['standard-work-upcoming-tasks', organizationId],
+    })
+    queryClient.invalidateQueries({
+      queryKey: ['standard-work-overdue-tasks', organizationId],
+    })
+    queryClient.invalidateQueries({
+      queryKey: ['standard-work-scheduled-tasks', organizationId],
+    })
+  }
+
   const startSubmissionMutation = useMutation({
     mutationFn: ({
       templateId,
@@ -289,6 +376,7 @@ export function useStandardWork() {
       queryClient.invalidateQueries({
         queryKey: ['standard-work-submissions-today', organizationId],
       })
+      invalidateDashboardSurfaces()
       toast.success('Checklist started')
     },
     onError: (error: Error) => {
@@ -311,6 +399,7 @@ export function useStandardWork() {
       queryClient.invalidateQueries({
         queryKey: ['standard-work-submissions', organizationId],
       })
+      invalidateDashboardSurfaces()
     },
     onError: (error: Error) => {
       toast.error(`Failed to update submission: ${error.message}`)
@@ -325,11 +414,15 @@ export function useStandardWork() {
         queryKey: ['standard-work-submission', submissionId],
       })
       queryClient.invalidateQueries({
+        queryKey: ['standard-work-submission-bundle', submissionId],
+      })
+      queryClient.invalidateQueries({
         queryKey: ['standard-work-submissions', organizationId],
       })
       queryClient.invalidateQueries({
         queryKey: ['standard-work-submissions-today', organizationId],
       })
+      invalidateDashboardSurfaces()
       toast.success('Checklist submitted successfully!')
     },
     onError: (error: Error) => {
@@ -347,6 +440,7 @@ export function useStandardWork() {
       queryClient.invalidateQueries({
         queryKey: ['standard-work-submissions-today', organizationId],
       })
+      invalidateDashboardSurfaces()
       toast.success('Submission deleted')
     },
     onError: (error: Error) => {
@@ -356,18 +450,36 @@ export function useStandardWork() {
 
   // ===== RESPONSES =====
 
+  // Track repeated upsert failures so a single network blip doesn't spam the
+  // user, but persistent failures still surface.
+  const upsertFailureCountRef = useRef(0)
+
   const upsertResponseMutation = useMutation({
     mutationFn: (response: Partial<StandardWorkResponse>) =>
       StandardWorkService.upsertResponse({
         ...response,
         organization_id: organizationId,
       }),
-    // NOTE: No query invalidation here -- local state in the checklist component
+    // No query invalidation here -- local state in the checklist component
     // already has the correct data. Invalidation on every keystroke caused a
     // query storm (refetch loop). Responses are refreshed when the submission
     // view is mounted or after submit.
+    onSuccess: () => {
+      upsertFailureCountRef.current = 0
+    },
     onError: (error: Error) => {
+      upsertFailureCountRef.current += 1
       logger.error('Failed to save response:', error.message)
+      // Surface a toast on the first failure and every 5th repeat so an
+      // offline user knows their work isn't being persisted.
+      if (
+        upsertFailureCountRef.current === 1 ||
+        upsertFailureCountRef.current % 5 === 0
+      ) {
+        toast.error(
+          `Couldn't save your last change: ${error.message}. We'll retry on the next edit.`
+        )
+      }
     },
   })
 
@@ -694,9 +806,12 @@ export function useStandardWork() {
     createItem: createItemMutation.mutateAsync,
     updateItem: updateItemMutation.mutateAsync,
     deleteItem: deleteItemMutation.mutateAsync,
+    restoreItem: restoreItemMutation.mutateAsync,
+    duplicateItem: duplicateItemMutation.mutateAsync,
     reorderItems: reorderItemsMutation.mutateAsync,
     isCreatingItem: createItemMutation.isPending,
     isUpdatingItem: updateItemMutation.isPending,
+    isDuplicatingItem: duplicateItemMutation.isPending,
 
     // Submissions
     submissions,
@@ -708,6 +823,7 @@ export function useStandardWork() {
     todaySubmissionsLoading,
     useSubmission,
     useSubmissionResponses,
+    useSubmissionBundle,
     startSubmission: startSubmissionMutation.mutateAsync,
     updateSubmission: updateSubmissionMutation.mutateAsync,
     submitChecklist: submitChecklistMutation.mutateAsync,
@@ -766,3 +882,5 @@ export type {
   ScheduleConfig,
   NotificationSettings,
 }
+
+// Created and developed by Jai Singh

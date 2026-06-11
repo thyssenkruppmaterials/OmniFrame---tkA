@@ -1,3 +1,4 @@
+// Created and developed by Jai Singh
 'use client'
 
 import * as React from 'react'
@@ -140,3 +141,5 @@ export {
   DialogTitle,
   DialogTrigger,
 }
+
+// Created and developed by Jai Singh

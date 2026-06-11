@@ -1,3 +1,4 @@
+// Created and developed by Jai Singh
 //! Drone AI Analysis Service
 //! 
 //! This service processes drone scan images using AI vision models
@@ -133,8 +134,8 @@ async fn main() -> anyhow::Result<()> {
                 .allow_origin([
                     "http://localhost:5173".parse().unwrap(),
                     "http://localhost:3000".parse().unwrap(),
-                    "https://omniframe.example.com".parse().unwrap(),
-                    "https://omniframe.example.com".parse().unwrap(),
+                    "https://onebox-ai.netlify.app".parse().unwrap(),
+                    "https://onebox-ai-logistics-production.up.railway.app".parse().unwrap(),
                 ])
                 .allow_methods([
                     axum::http::Method::GET,
@@ -165,4 +166,5 @@ async fn main() -> anyhow::Result<()> {
 
     Ok(())
 }
-// Developer and Creator: Jai Singh
+
+// Created and developed by Jai Singh

@@ -1,3 +1,4 @@
+# Created and developed by Jai Singh
 """
 Pydantic models for delivery status operations.
 Mirrors the rr_all_deliveries table schema.
@@ -113,3 +114,4 @@ class DeliveryImportResult(BaseModel):
     errors: List[str] = Field(default_factory=list)
     processing_time_seconds: float
 
+# Created and developed by Jai Singh

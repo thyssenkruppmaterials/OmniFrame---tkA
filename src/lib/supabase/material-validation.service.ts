@@ -1,3 +1,4 @@
+// Created and developed by Jai Singh
 import { logger } from '@/lib/utils/logger'
 import { supabase } from './client'
 
@@ -403,4 +404,5 @@ export class MaterialValidationService {
 
 // Export singleton instance
 export const materialValidationService = MaterialValidationService.getInstance()
-// Developer and Creator: Jai Singh
+
+// Created and developed by Jai Singh

@@ -1,3 +1,4 @@
+# Created and developed by Jai Singh
 """
 Analytics API endpoints providing advanced data insights.
 Complements the existing frontend with Python-powered analytics.
@@ -14,12 +15,14 @@ try:
     from ..models.outbound import OutboundAnalytics
     from ..models.delivery import DeliveryStatusSummary
     from ..utils.error_responses import sanitized_error
+    from ..config.database import db as _db
 except ImportError:
     from auth.supabase_auth import get_current_user, AuthenticatedUser
     from services.analytics import AnalyticsService
     from models.outbound import OutboundAnalytics
     from models.delivery import DeliveryStatusSummary
     from utils.error_responses import sanitized_error
+    from config.database import db as _db
 
 router = APIRouter()
 
@@ -45,7 +48,7 @@ async def get_outbound_analytics_summary(
         raise HTTPException(status_code=403, detail="Organization access required")
     
     try:
-        analytics_service = AnalyticsService(current_user.supabase_client)
+        analytics_service = AnalyticsService(current_user.supabase_client, read_client=_db.read_client)
         analytics = await analytics_service.get_outbound_analytics(
             organization_id=current_user.organization_id,
             date_from=date_from,
@@ -76,7 +79,7 @@ async def get_delivery_status_summary(
         raise HTTPException(status_code=403, detail="Organization access required")
     
     try:
-        analytics_service = AnalyticsService(current_user.supabase_client)
+        analytics_service = AnalyticsService(current_user.supabase_client, read_client=_db.read_client)
         summary = await analytics_service.get_delivery_status_summary(
             organization_id=current_user.organization_id,
             include_detailed_breakdown=include_details
@@ -106,7 +109,7 @@ async def get_performance_metrics(
         raise HTTPException(status_code=403, detail="Organization access required")
     
     try:
-        analytics_service = AnalyticsService(current_user.supabase_client)
+        analytics_service = AnalyticsService(current_user.supabase_client, read_client=_db.read_client)
         metrics = await analytics_service.get_performance_metrics(
             organization_id=current_user.organization_id,
             metric_type=metric_type
@@ -141,7 +144,7 @@ async def get_daily_trends(
         raise HTTPException(status_code=403, detail="Organization access required")
     
     try:
-        analytics_service = AnalyticsService(current_user.supabase_client) 
+        analytics_service = AnalyticsService(current_user.supabase_client, read_client=_db.read_client) 
         
         # Calculate date range
         date_to = datetime.now()
@@ -197,7 +200,7 @@ async def get_comparative_analysis(
         raise HTTPException(status_code=403, detail="Organization access required")
     
     try:
-        analytics_service = AnalyticsService(current_user.supabase_client)
+        analytics_service = AnalyticsService(current_user.supabase_client, read_client=_db.read_client)
         
         # Calculate periods
         now = datetime.now()
@@ -268,5 +271,4 @@ async def get_comparative_analysis(
     except Exception as e:
         raise sanitized_error(500, public_message="Comparative analysis failed.", exc=e, context="comparative analysis")
 
-# Developer and Creator: Jai Singh
-
+# Created and developed by Jai Singh

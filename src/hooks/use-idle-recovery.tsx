@@ -1,3 +1,4 @@
+// Created and developed by Jai Singh
 import { useEffect, useRef, useCallback } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
 // import { useSupabaseAuth } from '@/stores/supabaseAuthStore'
@@ -171,3 +172,5 @@ export function useIdleRecovery(options: UseIdleRecoveryOptions = {}) {
     timeSinceActivity: Date.now() - lastActivity.current,
   }
 }
+
+// Created and developed by Jai Singh

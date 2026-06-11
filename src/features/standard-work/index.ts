@@ -1,3 +1,4 @@
+// Created and developed by Jai Singh
 /**
  * Standard Work Feature
  * Exports all standard work components and utilities
@@ -19,3 +20,5 @@ export { SchedulingPanel } from './components/scheduling-panel'
 
 // Assignments
 export { AssignmentPanel } from './components/assignment-panel'
+
+// Created and developed by Jai Singh

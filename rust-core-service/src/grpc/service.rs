@@ -1,3 +1,4 @@
+// Created and developed by Jai Singh
 //! gRPC service implementation
 //!
 //! Note: This is a placeholder implementation. Full gRPC support requires
@@ -40,7 +41,7 @@ pub async fn start_grpc_server(port: &str, _state: AppState) -> Result<(), anyho
 // When implementing full gRPC support, add:
 // 
 // pub mod core {
-//     tonic::include_proto!("omniframe.core");
+//     tonic::include_proto!("onebox.core");
 // }
 // 
 // #[tonic::async_trait]
@@ -52,3 +53,5 @@ pub async fn start_grpc_server(port: &str, _state: AppState) -> Result<(), anyho
 //         // Implementation here
 //     }
 // }
+
+// Created and developed by Jai Singh

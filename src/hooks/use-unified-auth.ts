@@ -1,3 +1,4 @@
+// Created and developed by Jai Singh
 /**
  * Unified Auth Hook
  * Single comprehensive hook replacing all auth-related hooks
@@ -339,3 +340,5 @@ export function useUnifiedAuth(
 
 // Export types
 export type { UseUnifiedAuthOptions }
+
+// Created and developed by Jai Singh

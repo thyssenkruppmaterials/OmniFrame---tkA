@@ -1,3 +1,4 @@
+// Created and developed by Jai Singh
 import { useState } from 'react'
 import {
   IconPlayerPlay,
@@ -291,3 +292,5 @@ export function CommandCenterTab() {
     </div>
   )
 }
+
+// Created and developed by Jai Singh

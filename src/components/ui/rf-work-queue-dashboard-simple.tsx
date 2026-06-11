@@ -1,3 +1,4 @@
+// Created and developed by Jai Singh
 /**
  * Simple RF Work Queue Dashboard Component
  * Simplified mobile-optimized dashboard for RF interface
@@ -7,7 +8,6 @@ import React, { useCallback, useEffect, useState } from 'react'
 import {
   BarChart3,
   CheckCircle,
-  ChevronLeft,
   ClipboardList,
   Clock,
   Loader2,
@@ -27,6 +27,7 @@ import type {
   SimpleWorkQueueTask,
   SimpleWorkerCapacity,
 } from '@/features/admin/work-queue/context/work-queue-context-simple'
+import { RFScreenHeader } from '@/features/rf-interface/_shell'
 
 // Temporary stub services until types are resolved
 const simpleWorkQueueService = {
@@ -381,37 +382,29 @@ const RFWorkQueueDashboardSimple: React.FC<RFWorkQueueDashboardSimpleProps> = ({
 
   return (
     <div className='flex flex-1 flex-col space-y-4'>
-      {/* Back Button */}
-      {onBack && (
-        <div className='flex items-center space-x-2'>
-          <Button variant='ghost' size='sm' onClick={onBack}>
-            <ChevronLeft className='h-4 w-4' />
-            Back
-          </Button>
-        </div>
-      )}
-
       {/* Header */}
-      <div className='flex items-center justify-between'>
-        <div>
-          <h2 className='text-lg font-bold'>Work Queue</h2>
-          <p className='text-muted-foreground text-sm'>
-            {profile?.full_name || user?.email?.split('@')[0] || 'Worker'}
-          </p>
-        </div>
-        <Button
-          variant='outline'
-          size='sm'
-          onClick={refreshData}
-          disabled={isRefreshing}
-        >
-          {isRefreshing ? (
-            <Loader2 className='h-4 w-4 animate-spin' />
-          ) : (
-            <RefreshCw className='h-4 w-4' />
-          )}
-        </Button>
-      </div>
+      <RFScreenHeader
+        title='Work Queue'
+        subtitle={
+          profile?.full_name || user?.email?.split('@')[0] || 'Active work'
+        }
+        onBack={onBack}
+        right={
+          <Button
+            variant='outline'
+            size='sm'
+            onClick={refreshData}
+            disabled={isRefreshing}
+            className='h-9 w-9 shrink-0 p-0'
+          >
+            {isRefreshing ? (
+              <Loader2 className='h-4 w-4 animate-spin' />
+            ) : (
+              <RefreshCw className='h-4 w-4' />
+            )}
+          </Button>
+        }
+      />
 
       {/* Capacity Status */}
       {workerCapacity && (
@@ -547,3 +540,5 @@ const RFWorkQueueDashboardSimple: React.FC<RFWorkQueueDashboardSimpleProps> = ({
 }
 
 export default RFWorkQueueDashboardSimple
+
+// Created and developed by Jai Singh

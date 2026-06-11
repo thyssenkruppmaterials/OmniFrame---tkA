@@ -1,3 +1,4 @@
+// Created and developed by Jai Singh
 import { createContext, useContext, useState, type ReactNode } from 'react'
 import { type Permission } from '../../../admin/roles/data/schema'
 
@@ -65,3 +66,5 @@ export default function PermissionsProvider({
     </PermissionsContext.Provider>
   )
 }
+
+// Created and developed by Jai Singh

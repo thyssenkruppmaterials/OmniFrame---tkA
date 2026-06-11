@@ -1,3 +1,4 @@
+// Created and developed by Jai Singh
 import { supabase } from '@/lib/supabase/client'
 import { logger } from '@/lib/utils/logger'
 
@@ -396,3 +397,5 @@ export class SettingsService {
     }
   }
 }
+
+// Created and developed by Jai Singh

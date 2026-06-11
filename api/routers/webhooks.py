@@ -1,3 +1,4 @@
+# Created and developed by Jai Singh
 """
 Webhook endpoints for receiving Smartsheet real-time updates.
 Handles webhook verification and event processing.
@@ -162,5 +163,4 @@ async def test_webhook_processing(
         logger.error(f"Error in test webhook: {str(e)}")
         raise sanitized_error(500, public_message="Webhook processing failed.", exc=e, context="test webhook")
 
-# Developer and Creator: Jai Singh
-
+# Created and developed by Jai Singh

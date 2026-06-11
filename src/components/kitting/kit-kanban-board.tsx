@@ -1,3 +1,4 @@
+// Created and developed by Jai Singh
 /**
  * Kit Kanban Board Component - DATABASE INTEGRATED
  * A drag-and-drop kanban board for managing kit assembly tasks
@@ -17,6 +18,7 @@ import {
   User,
   Loader2,
   Package,
+  Boxes,
   Play,
   Eye,
   RefreshCw,
@@ -31,6 +33,7 @@ import {
 import { RRKittingDataService } from '@/lib/supabase/rr-kitting-data.service'
 import { cn } from '@/lib/utils'
 import { logger } from '@/lib/utils/logger'
+import { useKitInspectionRequired } from '@/hooks/use-kitting-workflow-settings'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -65,7 +68,12 @@ interface KitTask {
   blackHatNote?: string
 }
 
-// Production progress steps for the visual indicator
+// Production progress steps for the visual indicator. The Inspection
+// step is filtered out at render time when the org has
+// `kit_inspection_required = false` (see [[Optional-Kit-Inspection-Toggle]] /
+// [[Implementations/Kit-Kanban-Inspection-Aware-Progress-And-Dock-Completion]]) —
+// the same convention the larger KitProductionTracker dialog already uses
+// for its vertical timeline.
 const PRODUCTION_STEPS = [
   { id: 'planning', label: 'Planning', shortLabel: 'Plan' },
   { id: 'picking', label: 'Picking', shortLabel: 'Pick' },
@@ -73,6 +81,8 @@ const PRODUCTION_STEPS = [
   { id: 'inspection', label: 'Inspection', shortLabel: 'Insp' },
   { id: 'on_dock', label: 'On Dock', shortLabel: 'Dock' },
 ] as const
+
+type ProductionStep = (typeof PRODUCTION_STEPS)[number]
 
 // Color scheme for each production step (matching kit-production-tracker.tsx)
 const stepColorScheme: Record<
@@ -116,10 +126,37 @@ const stepColorScheme: Record<
   },
 }
 
-// Get the index of the current step in the production flow
-function getStepIndex(step: string | undefined): number {
-  const idx = PRODUCTION_STEPS.findIndex((s) => s.id === step)
+// Get the index of the current step in the production flow.
+// Accepts an optional `visibleSteps` list so callers can pass the
+// inspection-aware filtered list and the index lines up with what's
+// actually rendered.
+function getStepIndex(
+  step: string | undefined,
+  visibleSteps: readonly ProductionStep[] = PRODUCTION_STEPS
+): number {
+  const idx = visibleSteps.findIndex((s) => s.id === step)
   return idx >= 0 ? idx : 0
+}
+
+// When inspection is disabled at the org level, the data layer still
+// stamps `kit_inspection_completion_date_time` on the skip-inspection
+// branch of `completeKitBuild` (see [[Optional-Kit-Inspection-Toggle]])
+// so the production-tracker stage calculator stays coherent if the
+// flag is later flipped back ON. That stamp causes `computeKitProgress`
+// in `KitKanbanService` to derive `current_step = 'inspection'` for the
+// "build complete, awaiting dock staging" state. With Insp filtered out
+// of the visible bar, that step would have no segment to highlight.
+// Remap it to 'kitting' so the operator sees Kit as the active step
+// (kitting is the last visible work-stage before Dock) until
+// `stageKitToDock` flips the row to `current_step = 'on_dock'`.
+function remapStepForVisibility(
+  step: string | undefined,
+  kitInspectionRequired: boolean
+): string | undefined {
+  if (!kitInspectionRequired && step === 'inspection') {
+    return 'kitting'
+  }
+  return step
 }
 
 // Get the progress values and label for the current step
@@ -204,6 +241,7 @@ interface DraggableTaskProps {
   columnId: string
   columnName: string // The column name like 'planning', 'in_progress', etc.
   index: number
+  kitInspectionRequired: boolean
   onDragStart: (
     e: React.DragEvent,
     task: KitTask,
@@ -212,7 +250,11 @@ interface DraggableTaskProps {
   ) => void
   onDragEnd: () => void
   onStartKit: (taskId: string) => void
-  onQuickView: (kitSerialNumber: string, kitPoNumber: string) => void
+  onQuickView: (
+    kitSerialNumber: string,
+    kitPoNumber: string,
+    displayPriority: number
+  ) => void
   isDragging: boolean
   isStartingKit: boolean
 }
@@ -223,6 +265,7 @@ const DraggableTask = memo<DraggableTaskProps>(
     columnId,
     columnName,
     index,
+    kitInspectionRequired,
     onDragStart,
     onDragEnd,
     onStartKit,
@@ -230,10 +273,30 @@ const DraggableTask = memo<DraggableTaskProps>(
     isDragging,
     isStartingKit,
   }) => {
+    // Visible production steps depend on the org's inspection workflow flag.
+    const visibleSteps = useMemo(
+      () =>
+        kitInspectionRequired
+          ? PRODUCTION_STEPS
+          : PRODUCTION_STEPS.filter((s) => s.id !== 'inspection'),
+      [kitInspectionRequired]
+    )
+
+    // Effective current step — remaps `inspection` to `kitting` when the
+    // org bypasses inspections so the operator-visible active-step
+    // indicator stays meaningful (see remapStepForVisibility above).
+    const effectiveCurrentStep = useMemo(
+      () => remapStepForVisibility(task.currentStep, kitInspectionRequired),
+      [task.currentStep, kitInspectionRequired]
+    )
+
     // Memoize step-specific progress calculation - depends on specific progress fields
     const stepProgress = useMemo(() => {
-      return getStepProgress(task)
-    }, [task])
+      return getStepProgress({
+        ...task,
+        currentStep: effectiveCurrentStep,
+      })
+    }, [task, effectiveCurrentStep])
 
     // Optimized drag start handler
     const handleDragStart = useCallback(
@@ -257,10 +320,16 @@ const DraggableTask = memo<DraggableTaskProps>(
       (e: React.MouseEvent) => {
         e.stopPropagation() // Prevent drag from starting
         if (task.kitSerialNumber) {
-          onQuickView(task.kitSerialNumber, task.kitPoNumber || '') // Pass kit_serial_number as unique identifier
+          // task.priority is the position-based display priority (#n) — forward
+          // it so the audit trail header matches the card.
+          onQuickView(
+            task.kitSerialNumber,
+            task.kitPoNumber || '',
+            task.priority
+          )
         }
       },
-      [onQuickView, task.kitSerialNumber, task.kitPoNumber]
+      [onQuickView, task.kitSerialNumber, task.kitPoNumber, task.priority]
     )
 
     // Show Start Kit button only in Planning column
@@ -321,6 +390,16 @@ const DraggableTask = memo<DraggableTaskProps>(
                 </Badge>
               </div>
 
+              {/* Kit Number — human-readable kit identity (e.g. "Kit 424 Inlet #1") */}
+              {task.kitNumber && (
+                <div className='mb-2 flex items-center gap-1.5 text-xs'>
+                  <Boxes className='text-muted-foreground h-3.5 w-3.5 shrink-0' />
+                  <span className='text-foreground font-medium'>
+                    Kit {task.kitNumber}
+                  </span>
+                </div>
+              )}
+
               {task.description && (
                 <p className='text-muted-foreground mb-3 line-clamp-2 text-xs'>
                   {task.description}
@@ -349,8 +428,11 @@ const DraggableTask = memo<DraggableTaskProps>(
               {/* Production Progress Indicator */}
               <div className='mb-3'>
                 <div className='flex items-center gap-0.5'>
-                  {PRODUCTION_STEPS.map((step, idx) => {
-                    const currentStepIdx = getStepIndex(task.currentStep)
+                  {visibleSteps.map((step, idx) => {
+                    const currentStepIdx = getStepIndex(
+                      effectiveCurrentStep,
+                      visibleSteps
+                    )
                     const isActive = idx === currentStepIdx
                     const isCompleted = idx < currentStepIdx
 
@@ -371,8 +453,11 @@ const DraggableTask = memo<DraggableTaskProps>(
                   })}
                 </div>
                 <div className='mt-1 flex justify-between'>
-                  {PRODUCTION_STEPS.map((step, idx) => {
-                    const currentStepIdx = getStepIndex(task.currentStep)
+                  {visibleSteps.map((step, idx) => {
+                    const currentStepIdx = getStepIndex(
+                      effectiveCurrentStep,
+                      visibleSteps
+                    )
                     const isActive = idx === currentStepIdx
 
                     return (
@@ -396,7 +481,7 @@ const DraggableTask = memo<DraggableTaskProps>(
                   <span className={cn('font-medium', stepProgress.colors.text)}>
                     {stepProgress.label}
                   </span>
-                  {task.currentStep !== 'planning' &&
+                  {effectiveCurrentStep !== 'planning' &&
                     stepProgress.total > 0 && (
                       <span className='text-muted-foreground'>
                         {stepProgress.completed}/{stepProgress.total}
@@ -419,7 +504,7 @@ const DraggableTask = memo<DraggableTaskProps>(
                       />
                     </div>
                     {/* Show percentage for non-planning steps with progress */}
-                    {task.currentStep !== 'planning' &&
+                    {effectiveCurrentStep !== 'planning' &&
                       stepProgress.percentage > 0 && (
                         <p className='text-muted-foreground mt-0.5 text-[10px]'>
                           {Math.round(stepProgress.percentage)}% complete
@@ -526,6 +611,7 @@ const DraggableTask = memo<DraggableTaskProps>(
       prevProps.isDragging === nextProps.isDragging &&
       prevProps.isStartingKit === nextProps.isStartingKit &&
       prevProps.columnName === nextProps.columnName &&
+      prevProps.kitInspectionRequired === nextProps.kitInspectionRequired &&
       prevProps.task.componentsTotal === nextProps.task.componentsTotal &&
       prevProps.task.componentsCompleted ===
         nextProps.task.componentsCompleted &&
@@ -535,7 +621,8 @@ const DraggableTask = memo<DraggableTaskProps>(
       prevProps.task.priority === nextProps.task.priority &&
       prevProps.task.currentStep === nextProps.task.currentStep &&
       prevProps.task.lastTouchedByName === nextProps.task.lastTouchedByName &&
-      prevProps.task.hasBlackHat === nextProps.task.hasBlackHat
+      prevProps.task.hasBlackHat === nextProps.task.hasBlackHat &&
+      prevProps.task.kitNumber === nextProps.task.kitNumber
     )
   }
 )
@@ -543,6 +630,7 @@ const DraggableTask = memo<DraggableTaskProps>(
 // Droppable Column Component - MEMOIZED for performance
 interface DroppableColumnProps {
   column: KanbanColumn
+  kitInspectionRequired: boolean
   onDragOver: (e: React.DragEvent) => void
   onDrop: (e: React.DragEvent, columnId: string) => void
   onDragStart: (
@@ -553,7 +641,11 @@ interface DroppableColumnProps {
   ) => void
   onDragEnd: () => void
   onStartKit: (taskId: string) => void
-  onQuickView: (kitSerialNumber: string, kitPoNumber: string) => void
+  onQuickView: (
+    kitSerialNumber: string,
+    kitPoNumber: string,
+    displayPriority: number
+  ) => void
   draggingTask: { task: KitTask; columnId: string; index: number } | null
   startingKitId: string | null
 }
@@ -561,6 +653,7 @@ interface DroppableColumnProps {
 const DroppableColumn = memo<DroppableColumnProps>(
   ({
     column,
+    kitInspectionRequired,
     onDragOver,
     onDrop,
     onDragStart,
@@ -652,6 +745,7 @@ const DroppableColumn = memo<DroppableColumnProps>(
                 columnId={column.id}
                 columnName={column.name}
                 index={index}
+                kitInspectionRequired={kitInspectionRequired}
                 onDragStart={onDragStart}
                 onDragEnd={onDragEnd}
                 onStartKit={onStartKit}
@@ -673,6 +767,7 @@ const DroppableColumn = memo<DroppableColumnProps>(
     return (
       prevProps.column.id === nextProps.column.id &&
       prevProps.column.tasks.length === nextProps.column.tasks.length &&
+      prevProps.kitInspectionRequired === nextProps.kitInspectionRequired &&
       prevProps.draggingTask?.task.id === nextProps.draggingTask?.task.id &&
       prevProps.draggingTask?.columnId === nextProps.draggingTask?.columnId &&
       prevProps.startingKitId === nextProps.startingKitId
@@ -792,6 +887,7 @@ const defaultColumns: KanbanColumn[] = [
 // Main Kanban Board Component - OPTIMIZED with useCallback and useMemo
 export const KitKanbanBoard: React.FC = () => {
   const [columns, setColumns] = useState<KanbanColumn[]>(defaultColumns)
+  const kitInspectionRequired = useKitInspectionRequired()
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [startingKitId, setStartingKitId] = useState<string | null>(null)
@@ -803,6 +899,11 @@ export const KitKanbanBoard: React.FC = () => {
   const [selectedKitPoNumber, setSelectedKitPoNumber] = useState<string | null>(
     null
   ) // For display purposes
+  // Position-based priority (#n) of the card, forwarded to the audit trail so
+  // its header matches the kanban card instead of the raw kit_priority.
+  const [selectedDisplayPriority, setSelectedDisplayPriority] = useState<
+    number | null
+  >(null)
   const [isAuditTrailOpen, setIsAuditTrailOpen] = useState(false)
 
   // Start Kit Confirmation Dialog State
@@ -813,10 +914,17 @@ export const KitKanbanBoard: React.FC = () => {
   const [pendingStartKitPoNumber, setPendingStartKitPoNumber] = useState<
     string | null
   >(null)
+  // Kit serial is the unique identity — the cover sheet must load by it
+  // so multi-kit POs don't all print the same (first) kit's sheet.
+  const [pendingStartKitSerialNumber, setPendingStartKitSerialNumber] =
+    useState<string | null>(null)
 
   // Kit Build Sheet Dialog State (shown after confirmation)
   const [isKitBuildSheetOpen, setIsKitBuildSheetOpen] = useState(false)
   const [buildSheetKitPoNumber, setBuildSheetKitPoNumber] = useState<
+    string | null
+  >(null)
+  const [buildSheetKitSerialNumber, setBuildSheetKitSerialNumber] = useState<
     string | null
   >(null)
 
@@ -900,6 +1008,26 @@ export const KitKanbanBoard: React.FC = () => {
         return col
       })
     )
+
+    // kit_number lives on RR_Kitting_DATA, not on the realtime payload —
+    // enrich the freshly-inserted card so it shows the kit identity.
+    if (newRecord.kit_serial_number) {
+      KitKanbanService.getKitNumberBySerial(newRecord.kit_serial_number)
+        .then((kitNumber) => {
+          if (!kitNumber) return
+          setColumns((prev) =>
+            prev.map((col) => ({
+              ...col,
+              tasks: col.tasks.map((t) =>
+                t.id === newTask.id ? { ...t, kitNumber } : t
+              ),
+            }))
+          )
+        })
+        .catch(() => {
+          // Non-fatal: card still renders without the kit-number label
+        })
+    }
   }, [])
 
   // Apply incremental update for UPDATE events
@@ -908,6 +1036,18 @@ export const KitKanbanBoard: React.FC = () => {
       const updatedTask = transformRawDbTask(newRecord)
 
       setColumns((prev) => {
+        // The realtime payload from kit_kanban_tasks doesn't carry
+        // kit_number (it lives on RR_Kitting_DATA), so carry forward the
+        // enriched value from the card already in state — it doesn't
+        // change over a kit's lifecycle.
+        const existingTask = prev
+          .flatMap((col) => col.tasks)
+          .find((t) => t.id === updatedTask.id)
+        const merged =
+          existingTask?.kitNumber && !updatedTask.kitNumber
+            ? { ...updatedTask, kitNumber: existingTask.kitNumber }
+            : updatedTask
+
         // Check if task moved to a different column
         const oldColumnId = oldRecord?.column_id
         const newColumnId = newRecord.column_id
@@ -925,23 +1065,21 @@ export const KitKanbanBoard: React.FC = () => {
             // Add to new column
             if (col.id === newColumnId) {
               // Check if already exists (from optimistic update)
-              if (col.tasks.some((t) => t.id === updatedTask.id)) {
+              if (col.tasks.some((t) => t.id === merged.id)) {
                 return {
                   ...col,
                   tasks: col.tasks.map((t) =>
-                    t.id === updatedTask.id ? updatedTask : t
+                    t.id === merged.id ? merged : t
                   ),
                 }
               }
-              return { ...col, tasks: [...col.tasks, updatedTask] }
+              return { ...col, tasks: [...col.tasks, merged] }
             }
           } else if (col.id === newColumnId) {
             // Update in place
             return {
               ...col,
-              tasks: col.tasks.map((t) =>
-                t.id === updatedTask.id ? updatedTask : t
-              ),
+              tasks: col.tasks.map((t) => (t.id === merged.id ? merged : t)),
             }
           }
           return col
@@ -1063,12 +1201,14 @@ export const KitKanbanBoard: React.FC = () => {
   // Handle Start Kit button click - Opens confirmation dialog first
   const handleStartKit = useCallback(
     (taskId: string) => {
-      // Find the task to get the kit PO number
+      // Find the task to get the kit PO + serial number
       let kitPoNumber: string | null = null
+      let kitSerialNumber: string | null = null
       for (const column of columns) {
         const task = column.tasks.find((t) => t.id === taskId)
         if (task) {
           kitPoNumber = task.kitPoNumber || null
+          kitSerialNumber = task.kitSerialNumber || null
           break
         }
       }
@@ -1076,6 +1216,7 @@ export const KitKanbanBoard: React.FC = () => {
       // Open the confirmation dialog
       setPendingStartKitTaskId(taskId)
       setPendingStartKitPoNumber(kitPoNumber)
+      setPendingStartKitSerialNumber(kitSerialNumber)
       setIsStartKitDialogOpen(true)
     },
     [columns]
@@ -1118,6 +1259,7 @@ export const KitKanbanBoard: React.FC = () => {
       // STEP 1: Immediately close confirmation dialog and open build sheet for smooth UX
       setIsStartKitDialogOpen(false)
       setBuildSheetKitPoNumber(pendingStartKitPoNumber)
+      setBuildSheetKitSerialNumber(pendingStartKitSerialNumber)
       setIsKitBuildSheetOpen(true)
 
       // STEP 2: Optimistically move the task to "In Progress" column locally
@@ -1160,8 +1302,19 @@ export const KitKanbanBoard: React.FC = () => {
         return
       }
 
-      // STEP 4: Update the kit build status to "printed" in RR_Kitting_DATA
-      if (result.kitPoNumber) {
+      // STEP 4: Update the kit build status to "printed" in RR_Kitting_DATA.
+      // Scope by kit_serial_number so a multi-kit PO doesn't flip every
+      // sibling kit to "printed" (see [[Kit-Serial-Scoping]]); fall back
+      // to PO only if the serial is somehow unavailable.
+      if (pendingStartKitSerialNumber) {
+        const statusResult =
+          await RRKittingDataService.markKitAsPrintedBySerialNumber(
+            pendingStartKitSerialNumber
+          )
+        if (!statusResult.success) {
+          logger.error('Failed to update kit status:', statusResult.error)
+        }
+      } else if (result.kitPoNumber) {
         const statusResult = await RRKittingDataService.markKitAsPrinted(
           result.kitPoNumber
         )
@@ -1179,22 +1332,29 @@ export const KitKanbanBoard: React.FC = () => {
     } finally {
       setStartingKitId(null)
     }
-  }, [pendingStartKitTaskId, pendingStartKitPoNumber, silentRefresh])
+  }, [
+    pendingStartKitTaskId,
+    pendingStartKitPoNumber,
+    pendingStartKitSerialNumber,
+    silentRefresh,
+  ])
 
   // Handle closing the start kit dialog
   const handleStartKitDialogClose = useCallback((open: boolean) => {
     if (!open) {
       setPendingStartKitTaskId(null)
       setPendingStartKitPoNumber(null)
+      setPendingStartKitSerialNumber(null)
     }
     setIsStartKitDialogOpen(open)
   }, [])
 
   // Handle Quick View button click - opens the Kit Build Audit Trail dialog
   const handleQuickView = useCallback(
-    (kitSerialNumber: string, kitPoNumber: string) => {
+    (kitSerialNumber: string, kitPoNumber: string, displayPriority: number) => {
       setSelectedKitSerialNumber(kitSerialNumber) // Use kit_serial_number as unique identifier
       setSelectedKitPoNumber(kitPoNumber) // For display purposes
+      setSelectedDisplayPriority(displayPriority) // Match the card's #n in the dialog
       setIsAuditTrailOpen(true)
     },
     []
@@ -1321,20 +1481,25 @@ export const KitKanbanBoard: React.FC = () => {
       </motion.div>
 
       <div className='grid min-w-max grid-cols-1 gap-6 pb-6 md:grid-cols-2 lg:grid-cols-4'>
-        {columns.map((column) => (
-          <DroppableColumn
-            key={column.id}
-            column={column}
-            onDragOver={handleDragOver}
-            onDrop={handleDrop}
-            onDragStart={handleDragStart}
-            onDragEnd={handleDragEnd}
-            onStartKit={handleStartKit}
-            onQuickView={handleQuickView}
-            draggingTask={draggingTask}
-            startingKitId={startingKitId}
-          />
-        ))}
+        {columns
+          .filter(
+            (column) => kitInspectionRequired || column.name !== 'quality_check'
+          )
+          .map((column) => (
+            <DroppableColumn
+              key={column.id}
+              column={column}
+              kitInspectionRequired={kitInspectionRequired}
+              onDragOver={handleDragOver}
+              onDrop={handleDrop}
+              onDragStart={handleDragStart}
+              onDragEnd={handleDragEnd}
+              onStartKit={handleStartKit}
+              onQuickView={handleQuickView}
+              draggingTask={draggingTask}
+              startingKitId={startingKitId}
+            />
+          ))}
       </div>
 
       {/* Kit Build Audit Trail Dialog */}
@@ -1343,6 +1508,8 @@ export const KitKanbanBoard: React.FC = () => {
         onOpenChange={setIsAuditTrailOpen}
         kitSerialNumber={selectedKitSerialNumber}
         kitPoNumber={selectedKitPoNumber}
+        displayPriority={selectedDisplayPriority}
+        onKitDeleted={() => fetchData()}
       />
 
       {/* Start Kit Confirmation Dialog */}
@@ -1360,7 +1527,10 @@ export const KitKanbanBoard: React.FC = () => {
         open={isKitBuildSheetOpen}
         onOpenChange={setIsKitBuildSheetOpen}
         kitPoNumber={buildSheetKitPoNumber}
+        kitSerialNumber={buildSheetKitSerialNumber}
       />
     </div>
   )
 }
+
+// Created and developed by Jai Singh

@@ -1,7 +1,8 @@
-//! OmniFrame Rust Core Service Library
+// Created and developed by Jai Singh
+//! OneBox AI Rust Core Service Library
 //!
 //! This crate provides high-performance database queries, JWT validation,
-//! and Redis caching for the OmniFrame warehouse management platform.
+//! and Redis caching for the OneBox AI warehouse management platform.
 //!
 //! ## Features
 //!
@@ -44,8 +45,13 @@ use std::sync::Arc;
 /// Application state shared across all handlers
 #[derive(Clone)]
 pub struct AppState {
-    /// PostgreSQL connection pool
+    /// Primary PostgreSQL connection pool (writes + read-after-write paths)
     pub db_pool: sqlx::PgPool,
+    /// Read-only pool. Points at the Supabase read replica when
+    /// `DATABASE_READ_POOLER_URL` is configured; otherwise a clone of
+    /// `db_pool`. Use for: RBAC permission lookups, user-profile fetches,
+    /// any pure SELECT. Tolerates ~50-100 ms replication lag.
+    pub read_pool: sqlx::PgPool,
     /// Redis connection pool (optional)
     pub redis_pool: Option<cache::redis_pool::RedisPool>,
     /// JWT validator with JWKS cache
@@ -65,9 +71,14 @@ pub struct AppState {
 }
 
 impl AppState {
-    /// Create a new AppState with all dependencies initialized
+    /// Create a new AppState with all dependencies initialized.
+    ///
+    /// `read_pool` is a separate pool routed at the Supabase read replica
+    /// when configured; pass a clone of `db_pool` when no replica is
+    /// available so call sites stay uniform.
     pub async fn new(
         db_pool: sqlx::PgPool,
+        read_pool: sqlx::PgPool,
         redis_pool: Option<cache::redis_pool::RedisPool>,
         supabase_url: String,
         jwt_secret: Option<String>,
@@ -79,11 +90,14 @@ impl AppState {
         ));
         jwt_validator.initialize().await?;
 
-        // Initialize API key validator for service-to-service auth
+        // API key validator queries `service_api_keys` table (writes the
+        // hit on successful validation in some configurations) — keep on
+        // primary for now.
         let api_key_validator = Arc::new(auth::api_keys::ApiKeyValidator::new(db_pool.clone()));
 
-        // Initialize RBAC service
-        let rbac_service = Arc::new(auth::rbac::RbacService::new(db_pool.clone()));
+        // RBAC service is 100% read-only (get_user_permissions /
+        // get_user_roles). Route through the replica.
+        let rbac_service = Arc::new(auth::rbac::RbacService::new(read_pool.clone()));
 
         // Initialize cache and session services only if Redis is available
         let (cache_service, session_service) = if let Some(ref pool) = redis_pool {
@@ -101,6 +115,7 @@ impl AppState {
 
         Ok(Self {
             db_pool,
+            read_pool,
             redis_pool,
             jwt_validator,
             api_key_validator,
@@ -116,4 +131,5 @@ impl AppState {
 /// Version information
 pub const VERSION: &str = env!("CARGO_PKG_VERSION");
 pub const NAME: &str = env!("CARGO_PKG_NAME");
-// Developer and Creator: Jai Singh
+
+// Created and developed by Jai Singh

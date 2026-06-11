@@ -1,3 +1,4 @@
+// Created and developed by Jai Singh
 /**
  * Scan Detail Modal Component
  *
@@ -241,3 +242,5 @@ export function ScanDetailModal({
     </Dialog>
   )
 }
+
+// Created and developed by Jai Singh

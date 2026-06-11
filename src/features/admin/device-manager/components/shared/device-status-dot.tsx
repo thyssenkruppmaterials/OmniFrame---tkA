@@ -1,3 +1,4 @@
+// Created and developed by Jai Singh
 import { cn } from '@/lib/utils'
 import type { DeviceStatus } from '../../types/device-manager.types'
 
@@ -46,3 +47,5 @@ export function DeviceStatusDot({
     </span>
   )
 }
+
+// Created and developed by Jai Singh

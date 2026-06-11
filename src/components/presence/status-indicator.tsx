@@ -1,3 +1,4 @@
+// Created and developed by Jai Singh
 /**
  * StatusIndicator - Small colored dot showing presence status
  * Can be used standalone or composed with Avatar
@@ -68,3 +69,5 @@ export function StatusIndicator({
     </TooltipProvider>
   )
 }
+
+// Created and developed by Jai Singh

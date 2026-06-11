@@ -1,3 +1,4 @@
+// Created and developed by Jai Singh
 import { useState } from 'react'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
@@ -232,3 +233,5 @@ export function UserInviteDialog() {
     </Dialog>
   )
 }
+
+// Created and developed by Jai Singh

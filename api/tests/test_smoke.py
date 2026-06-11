@@ -1,5 +1,6 @@
+# Created and developed by Jai Singh
 """
-Backend Smoke Tests for OmniFrame.
+Backend Smoke Tests for OneBox AI.
 
 Validates critical paths: health endpoints, auth gates, and core routers.
 These run in CI as the minimum backend quality gate.
@@ -72,3 +73,5 @@ class TestImportability:
             from api.config import database  # noqa: F401
         except ImportError:
             pytest.skip("api.config.database not importable")
+
+# Created and developed by Jai Singh

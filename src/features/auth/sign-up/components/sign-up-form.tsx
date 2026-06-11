@@ -1,3 +1,4 @@
+// Created and developed by Jai Singh
 import { HTMLAttributes, useState } from 'react'
 import { z } from 'zod'
 import { useForm } from 'react-hook-form'
@@ -6,6 +7,7 @@ import { useNavigate } from '@tanstack/react-router'
 import { toast } from 'sonner'
 import { supabase } from '@/lib/supabase/client'
 import { cn } from '@/lib/utils'
+import { getAppUrl } from '@/lib/utils/app-url'
 import { Button } from '@/components/ui/button'
 import {
   Form,
@@ -59,7 +61,7 @@ export function SignUpForm({ className, ...props }: SignUpFormProps) {
       password,
       options: {
         data: metadata,
-        emailRedirectTo: `${window.location.origin}/auth/callback`,
+        emailRedirectTo: `${getAppUrl()}/auth/callback`,
       },
     })
     if (error) throw error
@@ -183,3 +185,5 @@ export function SignUpForm({ className, ...props }: SignUpFormProps) {
     </Form>
   )
 }
+
+// Created and developed by Jai Singh

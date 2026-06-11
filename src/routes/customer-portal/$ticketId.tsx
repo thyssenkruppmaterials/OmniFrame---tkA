@@ -1,3 +1,4 @@
+// Created and developed by Jai Singh
 import { createFileRoute, useNavigate } from '@tanstack/react-router'
 import { ArrowLeft } from 'lucide-react'
 import { Button } from '@/components/ui/button'
@@ -58,4 +59,5 @@ function TicketDetailPage() {
 export const Route = createFileRoute('/customer-portal/$ticketId')({
   component: TicketDetailPage,
 })
-// Developer and Creator: Jai Singh
+
+// Created and developed by Jai Singh

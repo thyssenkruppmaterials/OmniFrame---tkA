@@ -1,3 +1,4 @@
+// Created and developed by Jai Singh
 import { useState, useEffect, useMemo } from 'react'
 import {
   ArrowRight,
@@ -578,3 +579,5 @@ export function RoleComparison({
     </div>
   )
 }
+
+// Created and developed by Jai Singh

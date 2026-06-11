@@ -1,3 +1,4 @@
+// Created and developed by Jai Singh
 import { Suspense, lazy, useEffect } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
 import { Loader2 } from 'lucide-react'
@@ -206,3 +207,5 @@ export default function OutboundManagement() {
     </>
   )
 }
+
+// Created and developed by Jai Singh

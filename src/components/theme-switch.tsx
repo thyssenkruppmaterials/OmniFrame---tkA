@@ -1,3 +1,4 @@
+// Created and developed by Jai Singh
 import { useRef } from 'react'
 import { Check, Moon, Sun, Monitor, Palette } from 'lucide-react'
 import { cn } from '@/lib/utils'
@@ -20,12 +21,13 @@ export function ThemeSwitch() {
     transitionTo(newTheme, buttonRef)
   }
 
-  const themeOptions: { value: ThemeMode; label: string; icon: typeof Sun }[] = [
-    { value: 'light', label: 'Light', icon: Sun },
-    { value: 'dark', label: 'Dark', icon: Moon },
-    { value: 'system', label: 'System', icon: Monitor },
-    { value: 'custom', label: 'Custom', icon: Palette },
-  ]
+  const themeOptions: { value: ThemeMode; label: string; icon: typeof Sun }[] =
+    [
+      { value: 'light', label: 'Light', icon: Sun },
+      { value: 'dark', label: 'Dark', icon: Moon },
+      { value: 'system', label: 'System', icon: Monitor },
+      { value: 'custom', label: 'Custom', icon: Palette },
+    ]
 
   return (
     <DropdownMenu modal={false}>
@@ -60,3 +62,5 @@ export function ThemeSwitch() {
     </DropdownMenu>
   )
 }
+
+// Created and developed by Jai Singh

@@ -1,3 +1,4 @@
+// Created and developed by Jai Singh
 import { Link } from '@tanstack/react-router'
 import { IconMenu } from '@tabler/icons-react'
 import { cn } from '@/lib/utils'
@@ -65,3 +66,5 @@ export function TopNav({ className, links, ...props }: TopNavProps) {
     </>
   )
 }
+
+// Created and developed by Jai Singh

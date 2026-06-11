@@ -1,3 +1,4 @@
+// Created and developed by Jai Singh
 //! Warehouse-related database models
 
 use chrono::{DateTime, Utc};
@@ -187,3 +188,5 @@ impl Default for TransferOrderQuery {
         }
     }
 }
+
+// Created and developed by Jai Singh

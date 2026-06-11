@@ -1,17 +1,39 @@
+// Created and developed by Jai Singh
 /**
  * Simple Work Queue Context Provider
  * Simplified state management for work queue administration interface
- * Temporary version while resolving TypeScript typing issues
+ * Temporary version while resolving TypeScript typing issues.
+ *
+ * Stats freshness is push-driven via the existing `WorkServiceWebSocket`
+ * singleton (see `src/lib/work-service/websocket.ts`). The legacy
+ * `setInterval(refreshQueueStats, 30_000)` was retired as part of the
+ * "Bundle with Option 2" Roadmap migration (see
+ * `memorybank/OmniFrame/Decisions/Roadmap-Rust-WS-Unlocks.md`); a slow
+ * 5-minute safety-net `setInterval` only kicks in when the WS is NOT
+ * `'connected'`.
  */
 import React, {
   createContext,
   useCallback,
   useContext,
   useEffect,
+  useRef,
   useState,
 } from 'react'
 import { toast } from 'sonner'
+import { useUnifiedAuth } from '@/lib/auth/unified-auth-provider'
 import { logger } from '@/lib/utils/logger'
+import type { WsEvent } from '@/lib/work-service/types'
+import { workServiceWs } from '@/lib/work-service/websocket'
+
+/**
+ * Safety-net poll cadence when the WS is NOT connected. Mirrors the
+ * `WORK_QUEUE_FALLBACK_REFETCH_MS` constant in `src/hooks/use-work-queue.ts`
+ * — kept as a local copy because this provider doesn't otherwise depend
+ * on that hook and re-importing it just to share a number would create
+ * an awkward FE→FE coupling.
+ */
+const QUEUE_STATS_FALLBACK_INTERVAL_MS = 5 * 60 * 1000
 
 // ============================================================================
 // SIMPLIFIED INTERFACES AND TYPES
@@ -131,7 +153,9 @@ interface WorkQueueProviderProps {
 }
 
 export function WorkQueueProvider({ children }: WorkQueueProviderProps) {
-  // State
+  const { authState } = useUnifiedAuth()
+  const organizationId = authState.profile?.organization_id
+
   const [queueStats, setQueueStats] = useState<SimpleQueueStats | null>(null)
   const [realtimeMetrics, setRealtimeMetrics] =
     useState<SimpleRealTimeMetrics | null>(null)
@@ -340,11 +364,81 @@ export function WorkQueueProvider({ children }: WorkQueueProviderProps) {
     refreshAllData()
   }, [refreshAllData])
 
-  // Auto-refresh data every 30 seconds
+  // ========================================================================
+  // PUSH-DRIVEN STATS REFRESH
+  // ========================================================================
+  // Stats freshness comes from the existing `WorkServiceWebSocket`. The
+  // 30-second `setInterval(refreshQueueStats, 30_000)` that used to live
+  // here was retired in the 2026-05-06 "Bundle with Option 2" migration
+  // (see `memorybank/OmniFrame/Decisions/Roadmap-Rust-WS-Unlocks.md`).
+  //
+  // The WS handler invalidates by calling `refreshQueueStats()`; a
+  // 5-minute safety-net interval only runs when the WS is NOT in
+  // `'connected'` state. Steady-state network volume in healthy WS
+  // conditions is zero — events drive everything.
+  // ========================================================================
+
+  // Use a ref for the handler so the WS effect below doesn't re-register
+  // on every `refreshQueueStats` identity change (which would tear down
+  // and re-establish the singleton subscription on each provider render).
+  const refreshQueueStatsRef = useRef(refreshQueueStats)
   useEffect(() => {
-    const interval = setInterval(refreshQueueStats, 30000) // 30 seconds
-    return () => clearInterval(interval)
+    refreshQueueStatsRef.current = refreshQueueStats
   }, [refreshQueueStats])
+
+  useEffect(() => {
+    if (!organizationId) return
+
+    const handleWsEvent = (event: WsEvent) => {
+      // Any event that can change a queue-stat field — assignment,
+      // status transition, push, escalation, worker counts, or the
+      // canonical scheduler-pushed `QueueStatsUpdated`.
+      switch (event.type) {
+        case 'TaskAssigned':
+        case 'TaskStatusChanged':
+        case 'PushedWork':
+        case 'ReservationEscalated':
+        case 'WorkerStatusChanged':
+        case 'QueueStatsUpdated':
+          logger.log('[WorkQueueContext] WS-driven stats refresh:', event.type)
+          void refreshQueueStatsRef.current()
+          return
+        default:
+          return
+      }
+    }
+
+    workServiceWs.connect(organizationId, handleWsEvent)
+
+    let intervalId: ReturnType<typeof setInterval> | null = null
+
+    const armOrDisarmInterval = (
+      state: ReturnType<typeof workServiceWs.getConnectionState>
+    ) => {
+      if (state === 'connected') {
+        if (intervalId !== null) {
+          clearInterval(intervalId)
+          intervalId = null
+        }
+        return
+      }
+      if (intervalId === null) {
+        intervalId = setInterval(() => {
+          void refreshQueueStatsRef.current()
+        }, QUEUE_STATS_FALLBACK_INTERVAL_MS)
+      }
+    }
+
+    armOrDisarmInterval(workServiceWs.getConnectionState())
+    const unsubscribeStateChange =
+      workServiceWs.onStateChange(armOrDisarmInterval)
+
+    return () => {
+      workServiceWs.removeHandler(handleWsEvent)
+      unsubscribeStateChange()
+      if (intervalId !== null) clearInterval(intervalId)
+    }
+  }, [organizationId])
 
   // Cleanup subscriptions on unmount
   useEffect(() => {
@@ -408,3 +502,5 @@ export function useWorkQueue() {
   }
   return context
 }
+
+// Created and developed by Jai Singh

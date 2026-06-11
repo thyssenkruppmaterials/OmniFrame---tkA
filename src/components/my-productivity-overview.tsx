@@ -1,3 +1,4 @@
+// Created and developed by Jai Singh
 /**
  * My Productivity Overview Component
  * Displays comprehensive productivity statistics matching the Associate Performance tab design
@@ -9,3 +10,5 @@ import { MyProductivityDashboard } from '@/components/my-productivity-dashboard'
 export function MyProductivityOverview() {
   return <MyProductivityDashboard />
 }
+
+// Created and developed by Jai Singh

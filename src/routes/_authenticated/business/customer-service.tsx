@@ -1,3 +1,4 @@
+// Created and developed by Jai Singh
 import { createFileRoute } from '@tanstack/react-router'
 import { Header } from '@/components/layout/header'
 import { Main } from '@/components/layout/main'
@@ -48,4 +49,5 @@ export const Route = createFileRoute(
 )({
   component: BusinessCustomerService,
 })
-// Developer and Creator: Jai Singh
+
+// Created and developed by Jai Singh

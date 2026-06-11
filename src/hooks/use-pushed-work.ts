@@ -1,3 +1,4 @@
+// Created and developed by Jai Singh
 /**
  * Pushed Work Hook
  * React Query hook for receiving and managing pushed work in RF interface
@@ -166,8 +167,63 @@ export function usePushedWork(
 
   const handleWsEvent = useCallback(
     (event: WsEvent) => {
-      // Handle pushed work events for current user
-      if (event.type === 'PushedWork' && event.user_id === userId) {
+      // Handle pushed work events for current user.
+      //
+      // Tier 2 #3 (2026-05-06): `PushedWork` was extended in place
+      // with optional `target_zone`, `target_role`, `target_user_ids`
+      // fields plus a `broadcast_message`. Two modes:
+      //
+      //   1. Single-user push (existing behaviour): `user_id` IS the
+      //      recipient. Targeting fields are all undefined.
+      //   2. Broadcast (new): targeting fields are set and `user_id`
+      //      identifies the SUPERVISOR / pusher (for audit). The
+      //      recipient is whoever matches the targeting criteria.
+      //
+      // We detect mode 2 by ANY targeting field being present + a
+      // `broadcast_message`. For mode 2 we currently match on
+      // `target_user_ids.includes(currentUserId)` only; zone and role
+      // matching require live worker_heartbeats / user_profiles
+      // context that this hook doesn't have. The Rust side resolves
+      // both target types into `target_user_ids` server-side, so the
+      // explicit-id check covers all three modes uniformly.
+      const isBroadcast =
+        !!event.broadcast_message ||
+        !!event.target_zone ||
+        !!event.target_role ||
+        !!event.target_user_ids
+      const isSingleUserPushForMe =
+        event.type === 'PushedWork' && !isBroadcast && event.user_id === userId
+      const isBroadcastForMe =
+        event.type === 'PushedWork' &&
+        isBroadcast &&
+        Array.isArray(event.target_user_ids) &&
+        userId != null &&
+        event.target_user_ids.includes(userId)
+
+      if (isBroadcast && isBroadcastForMe) {
+        logger.log('[usePushedWork] Received dispatch broadcast:', event)
+        if (showNotifications) {
+          const description =
+            event.broadcast_message || `Priority: ${event.priority ?? 'normal'}`
+          toast.info('New broadcast from supervisor', {
+            description,
+            duration: 12000,
+          })
+        }
+        // No mutation here — broadcast is an awareness UX, not a
+        // task-state change. If `work_task_id` was supplied (non-nil
+        // UUID) the supervisor wanted recipients to look at a specific
+        // task; refresh the queue so it surfaces.
+        if (
+          event.task_id &&
+          event.task_id !== '00000000-0000-0000-0000-000000000000'
+        ) {
+          queryClient.invalidateQueries({ queryKey: [WORK_QUEUE_QUERY_KEY] })
+        }
+        return
+      }
+
+      if (isSingleUserPushForMe) {
         logger.log('[usePushedWork] Received push:', event)
 
         // Create minimal task object for alert
@@ -191,6 +247,34 @@ export function usePushedWork(
           pushed_at: new Date().toISOString(),
           push_acknowledged: false,
           organization_id: organizationId || '',
+          completed_at: null,
+          recount_by: null,
+          recount_date: null,
+          recount_completed: false,
+          requires_recount: false,
+          counter_name: null,
+          resolved_location_key: null,
+          resolved_zone: null,
+          resolved_aisle: null,
+          resolved_sequence: null,
+          resolution_source: null,
+          // Workflow snapshot is empty on the transient alert task — the
+          // real task fetched by id will carry the full snapshot.
+          workflow_config_id: null,
+          workflow_config_version: null,
+          workflow_snapshot: {},
+          workflow_result: {},
+          evidence_photo_urls: null,
+          review_threshold_pct: null,
+          review_threshold_abs: null,
+          // Part verification defaults — real values arrive when the task
+          // is refetched by id on acknowledge.
+          scanned_material_number: null,
+          location_reported_empty: null,
+          part_variance: null,
+          scanned_parts: [],
+          transfer_destination_location: null,
+          transfer_source_quantity: null,
         }
 
         // Set alert for UI notification
@@ -355,29 +439,23 @@ export function useWorkerHeartbeat(
     const sendHeartbeat = () => {
       const status = taskId ? 'busy' : 'idle'
 
-      // Prefer WebSocket heartbeat when connected
-      if (workServiceWs.isConnected()) {
-        workServiceWs.sendHeartbeat({
+      // Always use HTTP for stateful heartbeats. The WebSocket heartbeat
+      // path on the Rust server logs/broadcasts but does NOT persist to
+      // worker_heartbeats yet (auth-on-upgrade pending), so WS-only
+      // updates would leave Active Operators stale (review fix
+      // 2026-04-24). When that gap closes, we can re-introduce WS as
+      // the primary path.
+      workServiceClient
+        .sendHeartbeat({
           task_id: taskId,
           task_type: taskType,
           zone,
           location,
           status,
         })
-      } else {
-        // Fallback to HTTP
-        workServiceClient
-          .sendHeartbeat({
-            task_id: taskId,
-            task_type: taskType,
-            zone,
-            location,
-            status,
-          })
-          .catch((error) => {
-            logger.warn('[useWorkerHeartbeat] HTTP heartbeat failed:', error)
-          })
-      }
+        .catch((error) => {
+          logger.warn('[useWorkerHeartbeat] HTTP heartbeat failed:', error)
+        })
     }
 
     // Send initial heartbeat
@@ -391,3 +469,5 @@ export function useWorkerHeartbeat(
     }
   }, [enabled, interval, organizationId, taskId, taskType, zone, location])
 }
+
+// Created and developed by Jai Singh

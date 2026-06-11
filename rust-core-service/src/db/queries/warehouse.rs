@@ -1,3 +1,4 @@
+// Created and developed by Jai Singh
 //! Warehouse-related database queries
 //!
 //! Optimized queries for warehouse operations including:
@@ -426,3 +427,5 @@ impl WarehouseQueries {
         })
     }
 }
+
+// Created and developed by Jai Singh

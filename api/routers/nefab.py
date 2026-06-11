@@ -1,9 +1,10 @@
+# Created and developed by Jai Singh
 """
 FastAPI router for Nefab PFC Trace API integration.
 
 Provides endpoints for kit cart tracking and item status.
 
-Author: Jai Singh
+Author: OneBox AI Team
 Date: December 17, 2025
 Version: 1.0.0
 """
@@ -268,5 +269,4 @@ async def refresh_items(
         logger.error(f"Refresh items failed: {str(e)}")
         raise handle_service_error(e)
 
-# Developer and Creator: Jai Singh
-
+# Created and developed by Jai Singh

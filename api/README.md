@@ -1,4 +1,4 @@
-# OmniFrame Logistics FastAPI Integration
+# OneBox AI Logistics FastAPI Integration
 
 Advanced analytics and data processing API that complements the existing React/TypeScript frontend with Python-powered capabilities.
 
@@ -66,7 +66,7 @@ api/
 
 ```bash
 # Application
-API_APP_NAME=OmniFrame Logistics API
+API_APP_NAME=OneBox AI Logistics API
 API_DEBUG=true
 API_HOST=localhost
 API_PORT=8000
@@ -251,5 +251,5 @@ services:
 - **Error Handling**: Comprehensive error handling and reporting
 - **Metrics**: Ready for integration with monitoring solutions
 
-This API extends the OmniFrame Logistics platform with advanced analytics and data processing capabilities while maintaining full compatibility with the existing architecture.
+This API extends the OneBox AI Logistics platform with advanced analytics and data processing capabilities while maintaining full compatibility with the existing architecture.
 

@@ -1,3 +1,4 @@
+# Created and developed by Jai Singh
 """
 Rust Core Service Integration
 
@@ -111,7 +112,15 @@ class RustCoreClient:
         retry_attempts: int = 2,
         retry_delay: float = 0.5,
     ):
-        self.base_url = base_url or os.getenv("RUST_CORE_URL", "https://your-rust-core-service.up.railway.app")
+        # Resolution order for the upstream URL:
+        #   1. Explicit base_url passed by the caller (lifespan uses this)
+        #   2. RUST_CORE_PRIVATE_URL (Railway internal DNS — preferred when set)
+        #   3. RUST_CORE_URL (public Railway URL — default)
+        self.base_url = (
+            base_url
+            or os.getenv("RUST_CORE_PRIVATE_URL")
+            or os.getenv("RUST_CORE_URL", "https://rust-core-service-production.up.railway.app")
+        )
         self.timeout = float(os.getenv("RUST_CORE_TIMEOUT", str(timeout)))
         self.retry_attempts = int(os.getenv("RUST_CORE_RETRY_ATTEMPTS", str(retry_attempts)))
         self.retry_delay = retry_delay
@@ -216,6 +225,13 @@ class RustCoreClient:
         
         Raises:
             RustCoreConnectionError: If unable to connect to Rust service
+                (httpx.ConnectError, httpx.TimeoutException, or other transport-level
+                failures). The caller in supabase_auth.py turns these into a 503
+                "Authentication service temporarily unavailable" response. If they
+                are NOT wrapped here, the raw httpx exception escapes to the
+                generic `except Exception` handler and surfaces as a misleading
+                401 "Authentication failed" instead — see
+                Debug/Fix-Rust-Core-Private-URL-IPv6-401-2026-05-22.md.
             RustCoreValidationError: If token validation fails
         """
         try:
@@ -264,6 +280,19 @@ class RustCoreClient:
                         error=f"Token validation failed with status {e.response.status_code}"
                     )
             raise RustCoreValidationError(f"Validation request failed: {e}")
+        except httpx.ConnectError as e:
+            raise RustCoreConnectionError(
+                f"Cannot connect to Rust core service at {self.base_url}: {e}"
+            ) from e
+        except httpx.TimeoutException as e:
+            raise RustCoreConnectionError(
+                f"Timeout connecting to Rust core service at {self.base_url}: {e}"
+            ) from e
+        except httpx.TransportError as e:
+            # Catch-all for other transport-level failures (DNS, network, etc.)
+            raise RustCoreConnectionError(
+                f"Transport error to Rust core service at {self.base_url}: {e}"
+            ) from e
 
     async def validate_token_with_profile(self, token: str) -> AuthenticatedUserResult:
         """
@@ -283,6 +312,13 @@ class RustCoreClient:
         
         Raises:
             RustCoreConnectionError: If unable to connect to Rust service
+                (httpx.ConnectError, httpx.TimeoutException, or other transport-level
+                failures). The caller in supabase_auth.py turns these into a 503
+                "Authentication service temporarily unavailable" response. If they
+                are NOT wrapped here, the raw httpx exception escapes to the
+                generic `except Exception` handler and surfaces as a misleading
+                401 "Authentication failed" instead — see
+                Debug/Fix-Rust-Core-Private-URL-IPv6-401-2026-05-22.md.
         """
         try:
             # Use a dedicated one-off client for auth calls to avoid mutating
@@ -339,6 +375,19 @@ class RustCoreClient:
                         error=f"Token validation failed with status {e.response.status_code}"
                     )
             raise RustCoreValidationError(f"Validation request failed: {e}")
+        except httpx.ConnectError as e:
+            raise RustCoreConnectionError(
+                f"Cannot connect to Rust core service at {self.base_url}: {e}"
+            ) from e
+        except httpx.TimeoutException as e:
+            raise RustCoreConnectionError(
+                f"Timeout connecting to Rust core service at {self.base_url}: {e}"
+            ) from e
+        except httpx.TransportError as e:
+            # Catch-all for other transport-level failures (DNS, network, etc.)
+            raise RustCoreConnectionError(
+                f"Transport error to Rust core service at {self.base_url}: {e}"
+            ) from e
 
     async def get_permissions(self, user_id: str) -> Dict[str, Any]:
         """Get user permissions"""
@@ -495,8 +544,15 @@ def is_rust_core_enabled() -> bool:
 
 
 def get_rust_core_url() -> str:
-    """Get the Rust core service URL"""
-    return os.getenv("RUST_CORE_URL", "https://your-rust-core-service.up.railway.app")
+    """Get the Rust core service URL.
+
+    Prefers RUST_CORE_PRIVATE_URL (Railway internal DNS) over RUST_CORE_URL
+    (public) when set. See `RustCoreClient.__init__` for the rationale.
+    """
+    return (
+        os.getenv("RUST_CORE_PRIVATE_URL")
+        or os.getenv("RUST_CORE_URL", "https://rust-core-service-production.up.railway.app")
+    )
 
 
 # Graceful fallback wrapper
@@ -551,3 +607,5 @@ __all__ = [
     "get_rust_core_url",
     "validate_token_with_fallback",
 ]
+
+# Created and developed by Jai Singh

@@ -1,3 +1,4 @@
+// Created and developed by Jai Singh
 'use client'
 
 import React, { useCallback, useEffect, useRef, useState } from 'react'
@@ -29,10 +30,12 @@ import {
 } from '@/lib/supabase/rf-putaway.service'
 import { cn } from '@/lib/utils'
 import { logger } from '@/lib/utils/logger'
+import { useWarehouseCodes } from '@/hooks/use-warehouses'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader } from '@/components/ui/card'
 import { Label } from '@/components/ui/label'
 import { ScannerInput } from '@/components/ui/scanner-input'
+import { RFScreenHeader } from '@/features/rf-interface/_shell'
 
 // Types
 interface PutawayFormData {
@@ -310,6 +313,23 @@ const RFPutawayForm: React.FC<RFPutawayFormProps> = ({ onBack }) => {
   const { authState } = useUnifiedAuth()
   const { user, profile } = authState
 
+  // Warehouse allowlist for the scan path (fix #1). Held in a ref so the
+  // memoized field/submit handlers read the latest set without re-binding.
+  // Enforcement is gated on `isLoaded` — while the list is loading or after a
+  // fetch error the ref stays `undefined`, so the scan fails open and never
+  // hard-blocks the floor on a transient outage.
+  const { codes: warehouseCodes, isLoaded: warehouseCodesLoaded } =
+    useWarehouseCodes()
+  const warehouseAllowlistRef = useRef<ReadonlySet<string> | undefined>(
+    undefined
+  )
+  useEffect(() => {
+    warehouseAllowlistRef.current =
+      warehouseCodesLoaded && warehouseCodes.size > 0
+        ? warehouseCodes
+        : undefined
+  }, [warehouseCodes, warehouseCodesLoaded])
+
   // Define steps (including conditional MCA steps)
   const baseSteps = [
     { id: 1, title: 'Material Scan', icon: Scan, description: '' },
@@ -512,7 +532,10 @@ const RFPutawayForm: React.FC<RFPutawayFormProps> = ({ onBack }) => {
 
         // Parse T.O. Number if toNumber field is being updated
         if (field === 'toNumber') {
-          const parseResult = parseTONumber(value)
+          const parseResult = parseTONumber(
+            value,
+            warehouseAllowlistRef.current
+          )
           return {
             ...prev,
             formData: updatedFormData,
@@ -659,7 +682,10 @@ const RFPutawayForm: React.FC<RFPutawayFormProps> = ({ onBack }) => {
                   }
 
                   // Validate T.O. Number format
-                  const toNumberValidation = validateTONumber(toNumber)
+                  const toNumberValidation = validateTONumber(
+                    toNumber,
+                    warehouseAllowlistRef.current
+                  )
                   if (!toNumberValidation.isValid) {
                     toast.error(toNumberValidation.message)
                     return currentState
@@ -811,6 +837,19 @@ const RFPutawayForm: React.FC<RFPutawayFormProps> = ({ onBack }) => {
         // Use parsed T.O. Number and warehouse from state
         const toNumber = state.parsedTONumber || formData.toNumber.trim()
         const warehouse = state.parsedWarehouse || null
+
+        // Belt-and-suspenders allowlist re-check (fix #1). Step 1 already
+        // blocks unknown warehouses, but re-validate here in case the value
+        // reached submit via a path that bypassed the gate. Fails open when the
+        // allowlist hasn't loaded (ref is undefined).
+        const allowlist = warehouseAllowlistRef.current
+        if (allowlist && warehouse && !allowlist.has(warehouse.toUpperCase())) {
+          toast.error(
+            `Unrecognized warehouse "${warehouse}". Re-scan the T.O. label.`
+          )
+          setState((prev) => ({ ...prev, isProcessing: false }))
+          return
+        }
 
         // Early duplicate T.O. Number check - give user immediate feedback
         const duplicateCheck = await rfPutawayService.checkDuplicateTONumber(
@@ -1037,7 +1076,10 @@ const RFPutawayForm: React.FC<RFPutawayFormProps> = ({ onBack }) => {
       }
 
       // Validate T.O. Number format
-      const toNumberValidation = validateTONumber(toNumber)
+      const toNumberValidation = validateTONumber(
+        toNumber,
+        warehouseAllowlistRef.current
+      )
       if (!toNumberValidation.isValid) {
         toast.error(toNumberValidation.message)
         return
@@ -1166,19 +1208,11 @@ const RFPutawayForm: React.FC<RFPutawayFormProps> = ({ onBack }) => {
       {/* Step Content */}
       <Card className='min-h-[400px]'>
         <CardHeader>
-          <div className='flex items-center'>
-            {onBack && (
-              <Button
-                variant='ghost'
-                size='sm'
-                onClick={onBack}
-                className='flex-shrink-0'
-              >
-                <ChevronLeft className='h-3 w-3' />
-                Back
-              </Button>
-            )}
-          </div>
+          <RFScreenHeader
+            title='Put Away'
+            subtitle='Stock locations'
+            onBack={onBack}
+          />
         </CardHeader>
         <CardContent>
           <AnimatePresence mode='wait'>
@@ -1724,3 +1758,5 @@ const RFPutawayForm: React.FC<RFPutawayFormProps> = ({ onBack }) => {
 }
 
 export default RFPutawayForm
+
+// Created and developed by Jai Singh

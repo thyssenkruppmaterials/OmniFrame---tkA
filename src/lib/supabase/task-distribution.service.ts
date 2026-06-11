@@ -1,3 +1,4 @@
+// Created and developed by Jai Singh
 import { logger } from '@/lib/utils/logger'
 
 /**
@@ -130,4 +131,5 @@ class TaskDistributionService {
 }
 
 export const taskDistributionService = new TaskDistributionService()
-// Developer and Creator: Jai Singh
+
+// Created and developed by Jai Singh

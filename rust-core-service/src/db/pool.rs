@@ -1,8 +1,10 @@
+// Created and developed by Jai Singh
 //! High-performance database connection pooling
 
-use sqlx::{postgres::PgPoolOptions, PgPool, Error};
+use sqlx::{postgres::{PgConnectOptions, PgPoolOptions}, PgPool, Error};
 use std::time::Duration;
 use std::num::NonZeroUsize;
+use std::str::FromStr;
 use tracing::{info, instrument};
 use dashmap::DashMap;
 use lru::LruCache;
@@ -32,7 +34,23 @@ impl Default for DatabaseConfig {
     }
 }
 
-/// Create a new database connection pool with optimized settings
+/// Create a new database connection pool with optimized settings.
+///
+/// Auto-detects Supavisor transaction-mode pooler URLs (port 6543) and
+/// disables sqlx's prepared-statement cache for those connections.
+///
+/// IMPORTANT — sqlx 0.7 incompatibility with transaction-mode pooling:
+/// Even with `statement_cache_capacity(0)`, sqlx 0.7 always assigns a
+/// named identifier (`sqlx_s_<counter>`) to every prepared statement
+/// (`statement_cache_capacity` only disables the LRU cache, not the
+/// naming). Under Supavisor transaction mode, the same Postgres backend
+/// is shared across distinct sqlx connections, so the named statement
+/// collides on backend reuse and the query fails with
+/// `prepared statement "sqlx_s_XXX" already exists`. Until we upgrade
+/// to sqlx 0.8 (which exposes proper unnamed-statement support), DO NOT
+/// route this service through a transaction-mode pooler. Use session
+/// mode (port 5432) instead. See: rust-core-service/src/db/pool.rs
+/// history for the failed transaction-mode rollout on 2026-05-20.
 #[instrument(skip(config))]
 pub async fn create_pool(config: &DatabaseConfig) -> Result<PgPool, Error> {
     info!(
@@ -41,6 +59,18 @@ pub async fn create_pool(config: &DatabaseConfig) -> Result<PgPool, Error> {
         "Creating database connection pool"
     );
 
+    let mut opts = PgConnectOptions::from_str(&config.url)?;
+    let is_transaction_pooler = opts.get_port() == 6543;
+    if is_transaction_pooler {
+        // Critical for Supavisor transaction mode — see fn doc above.
+        opts = opts.statement_cache_capacity(0);
+        info!(
+            host = opts.get_host(),
+            port = opts.get_port(),
+            "Supavisor transaction-mode pooler detected (port 6543); statement cache disabled"
+        );
+    }
+
     let pool = PgPoolOptions::new()
         .max_connections(config.max_connections)
         .min_connections(config.min_connections)
@@ -48,7 +78,7 @@ pub async fn create_pool(config: &DatabaseConfig) -> Result<PgPool, Error> {
         .idle_timeout(Some(config.idle_timeout))
         .max_lifetime(Some(config.max_lifetime))
         .test_before_acquire(true)
-        .connect(&config.url)
+        .connect_with(opts)
         .await?;
 
     // Warm up the pool by acquiring connections
@@ -144,3 +174,5 @@ mod tests {
         assert_eq!(cache.get_usage("query3"), 0);
     }
 }
+
+// Created and developed by Jai Singh

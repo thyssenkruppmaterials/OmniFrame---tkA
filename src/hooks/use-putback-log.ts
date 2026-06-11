@@ -1,3 +1,4 @@
+// Created and developed by Jai Singh
 /**
  * Putback Log Hook - October 20, 2025
  *
@@ -219,3 +220,5 @@ export function usePutbackLog({
     updatePutbackTicket,
   }
 }
+
+// Created and developed by Jai Singh

@@ -1,3 +1,4 @@
+# Created and developed by Jai Singh
 """System-level admin endpoints (health, test, routes)."""
 
 import logging
@@ -80,4 +81,4 @@ async def list_routes(
         "timestamp": datetime.utcnow().isoformat()
     }
 
-# Developer and Creator: Jai Singh
+# Created and developed by Jai Singh

@@ -1,3 +1,4 @@
+// Created and developed by Jai Singh
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { writeAuditLog } from '@/lib/audit/audit-log-writer'
 
@@ -66,3 +67,5 @@ describe('Audit Integrity', () => {
     expect(result.audit_id).toBeNull()
   })
 })
+
+// Created and developed by Jai Singh

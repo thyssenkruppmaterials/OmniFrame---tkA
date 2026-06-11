@@ -1,3 +1,4 @@
+// Created and developed by Jai Singh
 /**
  * Ticket Update Detection Hook (Option B – Delta Comparator)
  *
@@ -263,3 +264,5 @@ export function useTicketUpdates(
     suppressRow,
   }
 }
+
+// Created and developed by Jai Singh

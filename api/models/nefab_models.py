@@ -1,7 +1,8 @@
+# Created and developed by Jai Singh
 """
 Pydantic models for Nefab PFC Trace API integration.
 
-Author: Jai Singh
+Author: OneBox AI Team
 Date: December 17, 2025
 Version: 1.0.0
 """
@@ -167,3 +168,4 @@ NEFAB_ITEM_TYPES: List[NefabItemTypeDefinition] = [
 # Kit Cart specific item types (for filtering in Kit Cart Viewer)
 KIT_CART_ITEM_TYPE_IDS = [305, 310, 311, 312, 313, 314, 315, 316, 319]
 
+# Created and developed by Jai Singh

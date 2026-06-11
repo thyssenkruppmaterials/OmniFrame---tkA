@@ -1,3 +1,4 @@
+# Created and developed by Jai Singh
 """
 FastAPI router for Drone Scanner operations.
 Provides endpoints for drone scan uploads, AI analysis, search, and missions.
@@ -470,4 +471,4 @@ async def get_mission_scans(
         logger.error(f"Error getting mission scans: {str(e)}")
         raise handle_service_error(e)
 
-# Developer and Creator: Jai Singh
+# Created and developed by Jai Singh

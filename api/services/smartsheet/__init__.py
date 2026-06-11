@@ -1,3 +1,4 @@
+# Created and developed by Jai Singh
 """Smartsheet service package -- composes the full SmartsheetService class.
 
 Usage (new-style)::
@@ -53,3 +54,5 @@ async def get_smartsheet_service() -> SmartsheetService:
     if _smartsheet_service is None:
         _smartsheet_service = await SmartsheetService.get_instance()
     return _smartsheet_service
+
+# Created and developed by Jai Singh

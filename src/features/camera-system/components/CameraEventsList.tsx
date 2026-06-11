@@ -1,3 +1,4 @@
+// Created and developed by Jai Singh
 /**
  * Camera Events List Component
  *
@@ -286,3 +287,5 @@ export function CameraEventsList({
     </div>
   )
 }
+
+// Created and developed by Jai Singh

@@ -1,3 +1,4 @@
+// Created and developed by Jai Singh
 /**
  * Delete Assignment Dialog Component
  * Confirmation dialog for deleting user assignments
@@ -136,3 +137,5 @@ export function DeleteAssignmentDialog({
     </AlertDialog>
   )
 }
+
+// Created and developed by Jai Singh

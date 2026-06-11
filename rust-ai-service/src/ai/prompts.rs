@@ -1,3 +1,4 @@
+// Created and developed by Jai Singh
 //! Warehouse-Specific Prompt Templates for AI Analysis
 //! 
 //! These prompts are optimized for Qwen3-VL to extract structured
@@ -140,3 +141,5 @@ Return JSON:
   "priority": "medium"
 }
 "#;
+
+// Created and developed by Jai Singh

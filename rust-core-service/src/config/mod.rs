@@ -1,3 +1,4 @@
+// Created and developed by Jai Singh
 //! Configuration module for the Rust Core Service
 //!
 //! Provides configuration structures and helpers for database, Redis, and authentication.
@@ -51,3 +52,5 @@ impl AppConfig {
         })
     }
 }
+
+// Created and developed by Jai Singh

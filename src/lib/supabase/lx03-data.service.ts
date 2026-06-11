@@ -1,8 +1,9 @@
+// Created and developed by Jai Singh
 import { toast } from 'sonner'
 import { RUST_CORE_ENABLED } from '@/lib/rust-core/config'
 import { rustLX03DataService } from '@/lib/rust-core/lx03-data.service'
 import { logger } from '@/lib/utils/logger'
-import { supabase } from './client'
+import { supabase, supabaseRead } from './client'
 import type { TablesInsert } from './database.types'
 
 export interface LX03Data {
@@ -214,7 +215,8 @@ export class LX03DataService {
     storageBins: string[]
   ): Promise<{ data: AggregatedLX03Data[]; error: Error | null }> {
     try {
-      const { data, error } = await (supabase.rpc as any)(
+      // Read replica safe — pure aggregation RPC, no writes.
+      const { data, error } = await (supabaseRead.rpc as any)(
         'get_lx03_inventory_by_locations',
         {
           location_bins: storageBins,
@@ -239,7 +241,7 @@ export class LX03DataService {
     endBin: string
   ): Promise<{ data: AggregatedLX03Data[]; error: Error | null }> {
     try {
-      const { data, error } = await (supabase.rpc as any)(
+      const { data, error } = await (supabaseRead.rpc as any)(
         'get_lx03_inventory_by_range',
         {
           start_bin: startBin,
@@ -264,7 +266,7 @@ export class LX03DataService {
     partNumbers: string[]
   ): Promise<{ data: AggregatedLX03Data[]; error: Error | null }> {
     try {
-      const { data, error } = await (supabase.rpc as any)(
+      const { data, error } = await (supabaseRead.rpc as any)(
         'get_lx03_inventory_by_parts',
         {
           part_numbers: partNumbers,
@@ -288,7 +290,7 @@ export class LX03DataService {
     limit: number = 50
   ): Promise<string[]> {
     try {
-      const { data, error } = await supabase
+      const { data, error } = await supabaseRead
         .from('rr_lx03_data')
         .select('storage_bin')
         .ilike('storage_bin', `%${query}%`)
@@ -317,7 +319,7 @@ export class LX03DataService {
     limit: number = 50
   ): Promise<string[]> {
     try {
-      const { data, error } = await supabase
+      const { data, error } = await supabaseRead
         .from('rr_lx03_data')
         .select('material')
         .ilike('material', `%${query}%`)
@@ -345,7 +347,9 @@ export class LX03DataService {
    */
   static async getWarehouses(): Promise<string[]> {
     try {
-      const { data, error } = await (supabase.rpc as any)('get_lx03_warehouses')
+      const { data, error } = await (supabaseRead.rpc as any)(
+        'get_lx03_warehouses'
+      )
 
       if (error) throw error
 
@@ -361,7 +365,7 @@ export class LX03DataService {
    */
   static async getStorageTypes(): Promise<string[]> {
     try {
-      const { data, error } = await (supabase.rpc as any)(
+      const { data, error } = await (supabaseRead.rpc as any)(
         'get_lx03_storage_types'
       )
 
@@ -384,7 +388,7 @@ export class LX03DataService {
     storageArea: string | null = null
   ): Promise<{ data: AggregatedLX03Data[]; error: Error | null }> {
     try {
-      const { data, error } = await (supabase.rpc as any)(
+      const { data, error } = await (supabaseRead.rpc as any)(
         'get_lx03_empty_bins_by_filters',
         {
           filter_warehouse: warehouse,
@@ -407,7 +411,7 @@ export class LX03DataService {
    */
   static async getAllStorageBins(): Promise<string[]> {
     try {
-      const { data, error } = await supabase
+      const { data, error } = await supabaseRead
         .from('rr_lx03_data')
         .select('storage_bin')
         .not('material', 'eq', '<<empty>>')
@@ -439,7 +443,7 @@ export class LX03DataService {
     }
 
     try {
-      let query = supabase.from('rr_lx03_data').select('*')
+      let query = supabaseRead.from('rr_lx03_data').select('*')
 
       // If there's a search query, search across all columns in entire database
       if (searchQuery && searchQuery.trim()) {
@@ -491,7 +495,9 @@ export class LX03DataService {
       logger.log('📈 LX03 Service: Fetching statistics via RPC...')
 
       // Use RPC function to get accurate statistics from ALL records
-      const { data, error } = await (supabase.rpc as any)('get_lx03_statistics')
+      const { data, error } = await (supabaseRead.rpc as any)(
+        'get_lx03_statistics'
+      )
 
       if (error) {
         logger.error('❌ Statistics RPC error:', error)
@@ -1374,4 +1380,5 @@ export class LX03DataService {
     }
   }
 }
-// Developer and Creator: Jai Singh
+
+// Created and developed by Jai Singh

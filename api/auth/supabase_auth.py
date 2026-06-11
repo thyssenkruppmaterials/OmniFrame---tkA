@@ -1,6 +1,7 @@
+# Created and developed by Jai Singh
 """
 Supabase JWT authentication and authorization middleware for FastAPI.
-Integrates with existing OmniFrame Logistics authentication system.
+Integrates with existing OneBox AI Logistics authentication system.
 
 SECURITY: JWT validation is performed by the rust-core-service which implements
 proper JWKS-based RS256 signature verification. This replaces the previous
@@ -305,10 +306,33 @@ async def get_current_user(
         cache_status = "cache hit" if result.cached else "cache miss"
         logger.debug(f"Authentication successful ({cache_status}) for user: {result.user_id}")
         
+        org_id = result.organization_id
+        
+        # Fallback: if organization_id is missing (e.g. stale Redis cache),
+        # resolve it directly from user_profiles via Supabase.
+        if not org_id and result.user_id:
+            try:
+                from supabase import create_client
+                service_client = create_client(
+                    settings.supabase_url,
+                    settings.supabase_service_role_key
+                )
+                profile_result = service_client.table("user_profiles").select(
+                    "organization_id"
+                ).eq("id", result.user_id).single().execute()
+                
+                if profile_result.data and profile_result.data.get("organization_id"):
+                    org_id = profile_result.data["organization_id"]
+                    logger.info(
+                        f"Resolved organization_id via direct DB fallback for user {result.user_id}"
+                    )
+            except Exception as e:
+                logger.warning(f"Failed to resolve organization_id fallback: {e}")
+        
         return AuthenticatedUser(
             id=result.user_id,
             email=result.email,
-            organization_id=result.organization_id,
+            organization_id=org_id,
             role=result.role or "authenticated",
             full_name=result.full_name or result.email,
             permissions=result.permissions or [],
@@ -500,7 +524,7 @@ def require_any_permission(required_permissions: list[str]):
 # ==============================================================================
 # ADMIN ROLE VERIFICATION
 # ==============================================================================
-# SECURITY FIX (January 27, 2026): Replaced insecure email domain check
+# SECURITY FIX (January 27, 2026): Replaced insecure email domain check (@j.ai)
 # with proper role-based authorization checking against the roles table.
 # ==============================================================================
 
@@ -576,7 +600,7 @@ def require_admin_role():
     """
     Dependency factory for admin role verification.
     
-    SECURITY: This replaces the previous email domain check with
+    SECURITY: This replaces the previous email domain check (@j.ai) with
     proper role-based authorization checking the roles table and permissions.
     
     Usage:
@@ -618,3 +642,5 @@ def require_admin_role():
 # Type alias for cleaner endpoint signatures
 # Usage: async def endpoint(current_user: RequireAdmin): ...
 RequireAdmin = Annotated[AuthenticatedUser, Depends(require_admin_role())]
+
+# Created and developed by Jai Singh

@@ -1,9 +1,9 @@
+// Created and developed by Jai Singh
 import { useEffect } from 'react'
 import { z } from 'zod'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { useShiftProductivitySettings } from '@/hooks/use-shift-productivity-settings'
-import { Button } from '@/components/ui/button'
 import {
   Form,
   FormControl,
@@ -21,8 +21,12 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import { Skeleton } from '@/components/ui/skeleton'
-import { Switch } from '@/components/ui/switch'
 import ContentSection from '../components/content-section'
+import {
+  SettingsErrorState,
+  SettingsSaveBar,
+  SettingsToggleRow,
+} from '../components/settings-primitives'
 
 const generalSettingsSchema = z.object({
   trackingEnabled: z.boolean().default(true),
@@ -40,10 +44,13 @@ export function GeneralSettings() {
     generalFormValues,
     updateGeneralSettings,
     isUpdatingGeneral,
+    error,
+    refetch,
+    organizationId,
   } = useShiftProductivitySettings()
 
   const form = useForm<GeneralSettingsValues>({
-    resolver: zodResolver(generalSettingsSchema),
+    resolver: zodResolver(generalSettingsSchema) as never,
     defaultValues: generalFormValues,
   })
 
@@ -74,29 +81,47 @@ export function GeneralSettings() {
     )
   }
 
+  if (error || !organizationId) {
+    return (
+      <ContentSection
+        title='Tracking & Operations'
+        desc='Configure shift tracking preferences, schedule defaults, and reporting timezone.'
+      >
+        <SettingsErrorState
+          title={
+            !organizationId
+              ? 'Organization required'
+              : 'Unable to load settings'
+          }
+          description={
+            !organizationId
+              ? 'Shift Productivity settings require an organization before they can be saved.'
+              : error instanceof Error
+                ? error.message
+                : 'General settings failed to load.'
+          }
+          onRetry={organizationId ? () => void refetch() : undefined}
+        />
+      </ContentSection>
+    )
+  }
+
   return (
     <ContentSection
-      title='General Settings'
-      desc='Configure basic productivity tracking preferences and shift management.'
+      title='Tracking & Operations'
+      desc='Configure shift tracking preferences, schedule defaults, and reporting timezone.'
     >
       <Form {...form}>
-        <form onSubmit={form.handleSubmit(onSubmit)} className='space-y-8'>
+        <form onSubmit={form.handleSubmit(onSubmit)} className='space-y-6'>
           <FormField
             control={form.control}
             name='trackingEnabled'
             render={({ field }) => (
-              <FormItem className='flex flex-row items-center justify-between rounded-lg border p-4'>
-                <div className='space-y-0.5'>
-                  <FormLabel className='text-base'>
-                    Enable Productivity Tracking
-                  </FormLabel>
-                  <FormDescription>
-                    Track productivity metrics across all shifts and team
-                    members.
-                  </FormDescription>
-                </div>
+              <FormItem>
                 <FormControl>
-                  <Switch
+                  <SettingsToggleRow
+                    title='Enable Productivity Tracking'
+                    description='Track productivity metrics across all shifts and team members. When disabled, dashboards show an explicit tracking-off state.'
                     checked={field.value}
                     onCheckedChange={field.onChange}
                   />
@@ -111,10 +136,7 @@ export function GeneralSettings() {
             render={({ field }) => (
               <FormItem>
                 <FormLabel>Default Shift Duration (hours)</FormLabel>
-                <Select
-                  onValueChange={field.onChange}
-                  defaultValue={field.value}
-                >
+                <Select onValueChange={field.onChange} value={field.value}>
                   <FormControl>
                     <SelectTrigger>
                       <SelectValue placeholder='Select shift duration' />
@@ -138,16 +160,11 @@ export function GeneralSettings() {
             control={form.control}
             name='breakTracking'
             render={({ field }) => (
-              <FormItem className='flex flex-row items-center justify-between rounded-lg border p-4'>
-                <div className='space-y-0.5'>
-                  <FormLabel className='text-base'>Track Break Time</FormLabel>
-                  <FormDescription>
-                    Monitor and deduct break time from productivity
-                    calculations.
-                  </FormDescription>
-                </div>
+              <FormItem>
                 <FormControl>
-                  <Switch
+                  <SettingsToggleRow
+                    title='Track Break Time'
+                    description='Use scheduled breaks as part of productivity and idle-time interpretation.'
                     checked={field.value}
                     onCheckedChange={field.onChange}
                   />
@@ -160,18 +177,11 @@ export function GeneralSettings() {
             control={form.control}
             name='autoClockOut'
             render={({ field }) => (
-              <FormItem className='flex flex-row items-center justify-between rounded-lg border p-4'>
-                <div className='space-y-0.5'>
-                  <FormLabel className='text-base'>
-                    Automatic Clock Out
-                  </FormLabel>
-                  <FormDescription>
-                    Automatically clock out workers at the end of their
-                    scheduled shift.
-                  </FormDescription>
-                </div>
+              <FormItem>
                 <FormControl>
-                  <Switch
+                  <SettingsToggleRow
+                    title='Automatic Clock Out'
+                    description='Stores the preference for a time-clock automation worker. No worker runs until backend automation is enabled.'
                     checked={field.value}
                     onCheckedChange={field.onChange}
                   />
@@ -186,10 +196,7 @@ export function GeneralSettings() {
             render={({ field }) => (
               <FormItem>
                 <FormLabel>Timezone</FormLabel>
-                <Select
-                  onValueChange={field.onChange}
-                  defaultValue={field.value}
-                >
+                <Select onValueChange={field.onChange} value={field.value}>
                   <FormControl>
                     <SelectTrigger>
                       <SelectValue placeholder='Select timezone' />
@@ -218,11 +225,16 @@ export function GeneralSettings() {
             )}
           />
 
-          <Button type='submit' disabled={isUpdatingGeneral}>
-            {isUpdatingGeneral ? 'Saving...' : 'Save Settings'}
-          </Button>
+          <SettingsSaveBar
+            isDirty={form.formState.isDirty}
+            isSaving={isUpdatingGeneral}
+            submitLabel='Save tracking settings'
+            savingLabel='Saving tracking settings...'
+          />
         </form>
       </Form>
     </ContentSection>
   )
 }
+
+// Created and developed by Jai Singh

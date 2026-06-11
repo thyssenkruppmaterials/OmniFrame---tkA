@@ -1,3 +1,4 @@
+// Created and developed by Jai Singh
 /**
  * Customer Portal Feature
  *
@@ -30,3 +31,5 @@ export {
 
 // Types
 export * from './types'
+
+// Created and developed by Jai Singh

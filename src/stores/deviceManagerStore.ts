@@ -1,3 +1,4 @@
+// Created and developed by Jai Singh
 import { create } from 'zustand'
 
 interface DeviceManagerState {
@@ -74,3 +75,5 @@ export const useDeviceManagerStore = create<DeviceManagerState>((set) => ({
   setMapMode: (mode) => set({ mapMode: mode }),
   setLiveRefreshEnabled: (enabled) => set({ liveRefreshEnabled: enabled }),
 }))
+
+// Created and developed by Jai Singh

@@ -1,3 +1,4 @@
+# Created and developed by Jai Singh
 """Role management, tab permissions, and navigation permissions endpoints."""
 
 import logging
@@ -330,4 +331,4 @@ async def clear_navigation_permissions(
         logger.error(f"Failed to clear navigation permissions: {str(e)}")
         raise sanitized_error(500, public_message="Failed to clear navigation permissions.", exc=e, context="clear_navigation_permissions")
 
-# Developer and Creator: Jai Singh
+# Created and developed by Jai Singh

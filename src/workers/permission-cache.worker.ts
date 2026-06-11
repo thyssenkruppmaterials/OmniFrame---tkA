@@ -1,3 +1,4 @@
+// Created and developed by Jai Singh
 // Permission Cache Web Worker for Background Processing
 // Handles permission caching, preloading, and background refresh operations
 
@@ -494,3 +495,5 @@ self.addEventListener('beforeunload', () => {
 
 // Export types for main thread usage
 export type { WorkerMessage, WorkerResponse, CacheEntry }
+
+// Created and developed by Jai Singh

@@ -1,3 +1,4 @@
+// Created and developed by Jai Singh
 // React import for the hook
 import React from 'react'
 import { logger } from '@/lib/utils/logger'
@@ -729,3 +730,5 @@ export function useRBACPerformance() {
     preloadPermissions: RBACPerformanceUtils.preloadPermissions,
   }
 }
+
+// Created and developed by Jai Singh

@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# Created and developed by Jai Singh
 """
 Supabase Connection Check CLI (MANUAL OPERATION -- NOT A PYTEST TEST)
 
@@ -73,9 +74,11 @@ async def test_connection():
 
 def main():
     """Run connection tests"""
-    print("🧪 OmniFrame Logistics FastAPI - Connection Test")
+    print("🧪 OneBox AI Logistics FastAPI - Connection Test")
     print("=" * 50)
     asyncio.run(test_connection())
 
 if __name__ == "__main__":
     main()
+
+# Created and developed by Jai Singh

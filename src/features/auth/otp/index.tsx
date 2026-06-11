@@ -1,3 +1,4 @@
+// Created and developed by Jai Singh
 import { Link } from '@tanstack/react-router'
 import {
   Card,
@@ -42,3 +43,5 @@ export default function Otp() {
     </AuthLayout>
   )
 }
+
+// Created and developed by Jai Singh

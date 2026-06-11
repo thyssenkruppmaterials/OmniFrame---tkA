@@ -1,3 +1,4 @@
+// Created and developed by Jai Singh
 /**
  * PTZ Controls Component
  *
@@ -285,3 +286,5 @@ export function PTZControls({
     </div>
   )
 }
+
+// Created and developed by Jai Singh

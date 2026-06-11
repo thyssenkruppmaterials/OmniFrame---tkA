@@ -1,5 +1,6 @@
+# Created and developed by Jai Singh
 """
-Frontend static file serving for the OmniFrame SPA.
+Frontend static file serving for the OneBox AI SPA.
 
 Configures routes to serve the React SPA (index.html) and its associated
 static assets, PWA files, and images with appropriate cache headers.
@@ -124,3 +125,5 @@ def configure_frontend_routes(app: FastAPI, dist_dir: Path) -> None:
         )
 
     logger.info("Frontend: SPA routes configured (root + catch-all)")
+
+# Created and developed by Jai Singh

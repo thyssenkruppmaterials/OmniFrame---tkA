@@ -1,4 +1,5 @@
-import { useState, useEffect, useCallback } from 'react'
+// Created and developed by Jai Singh
+import { useState, useEffect, useCallback, useRef } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
 import { useUnifiedAuth } from '@/lib/auth/unified-auth-provider'
@@ -124,9 +125,25 @@ export function usePutawayOperations({
     return putawayLogService.filterPutawayOperations(rawData, searchQuery)
   }, [rawData, searchQuery])()
 
+  // v1.7.4 — debounced invalidation. Previously every Realtime event
+  // (scanner burst → 20 INSERTs in 200ms is normal) kicked off N query
+  // refetches, each of which triggered a toast. Mirror the pattern
+  // already proven in `use-outbound-to-data.ts`: coalesce all events
+  // that land within a 500ms window into a single invalidation round.
+  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+
   // Real-time subscription effect
   useEffect(() => {
     if (!enableRealtime || !user) return
+
+    // v1.7.4 — bail out gracefully if the signed-in user's profile
+    // hasn't hydrated yet. We need organization_id for the server-side
+    // filter below; without it the channel would fan out across every
+    // org's rf_putaway_operations inserts (exactly what the filter
+    // prevents). The `profile` change re-runs this effect once
+    // hydration completes.
+    const orgId = profile?.organization_id
+    if (!orgId) return
 
     logger.log('🔄 Setting up real-time subscription for putaway operations')
 
@@ -138,19 +155,56 @@ export function usePutawayOperations({
           event: '*',
           schema: 'public',
           table: 'rf_putaway_operations',
+          // v1.7.4 — org-scope the stream server-side. A single scanner
+          // in org B should not cascade-invalidate caches in org A's
+          // tabs (which it was doing, and it was one of the biggest
+          // real-time fan-outs in the product at 50+ concurrent
+          // inventory management users).
+          filter: `organization_id=eq.${orgId}`,
         },
         (payload) => {
           logger.log('📡 Putaway operations real-time update:', payload)
 
-          // Invalidate and refetch queries on any change
-          queryClient.invalidateQueries({
-            queryKey: [PUTAWAY_OPERATIONS_QUERY_KEY],
-          })
-          queryClient.invalidateQueries({
-            queryKey: [PUTAWAY_STATISTICS_QUERY_KEY],
-          })
+          // Debounced invalidation — coalesces bursts into one refetch.
+          if (debounceRef.current) clearTimeout(debounceRef.current)
+          debounceRef.current = setTimeout(() => {
+            queryClient.invalidateQueries({
+              queryKey: [PUTAWAY_OPERATIONS_QUERY_KEY],
+            })
+            queryClient.invalidateQueries({
+              queryKey: [PUTAWAY_STATISTICS_QUERY_KEY],
+            })
+          }, 500)
 
-          // Show toast notifications for changes
+          // v1.7.4 — toast only for events caused by OTHER users. With
+          // 50 viewers and ~10 writes/min, the old unconditional toast
+          // produced 500 toasts/min per tab in aggregate — enough that
+          // operators complained about the popover never clearing.
+          // `confirmed_by` (scanner flow) or `created_by` (manual
+          // entry) on the new/old row tell us who moved this row.
+          // A future "verbose updates" preference can re-enable the
+          // self-event toast path without touching this code.
+          const newRow = payload.new as {
+            confirmed_by?: string | null
+            created_by?: string | null
+          } | null
+          const oldRow = payload.old as {
+            confirmed_by?: string | null
+            created_by?: string | null
+          } | null
+          const actorId =
+            newRow?.confirmed_by ??
+            newRow?.created_by ??
+            oldRow?.confirmed_by ??
+            oldRow?.created_by ??
+            null
+          if (actorId && actorId === user.id) {
+            // Current user initiated this change; the UI path that
+            // triggered it already showed a success toast.
+            return
+          }
+
+          // Show toast notifications for changes made by other users.
           if (payload.eventType === 'INSERT') {
             toast.success('New putaway operation added')
           } else if (payload.eventType === 'UPDATE') {
@@ -164,9 +218,13 @@ export function usePutawayOperations({
 
     return () => {
       logger.log('🔄 Cleaning up putaway operations real-time subscription')
+      if (debounceRef.current) {
+        clearTimeout(debounceRef.current)
+        debounceRef.current = null
+      }
       supabase.removeChannel(channel)
     }
-  }, [enableRealtime, user, queryClient])
+  }, [enableRealtime, user, profile?.organization_id, queryClient])
 
   // Mutation for creating putaway operations
   const createMutation = useMutation({
@@ -404,3 +462,5 @@ export function usePutawayOperations({
     isUsingRust: putawayLogService.isUsingRust(),
   }
 }
+
+// Created and developed by Jai Singh

@@ -1,3 +1,4 @@
+// Created and developed by Jai Singh
 import { Row } from '@tanstack/react-table'
 import {
   MoreHorizontal,
@@ -213,3 +214,5 @@ export function DataTableRowActions<TData>({
     </DropdownMenu>
   )
 }
+
+// Created and developed by Jai Singh
